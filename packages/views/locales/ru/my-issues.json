@@ -20,6 +20,8 @@
     "filter_status": "Статус",
     "filter_priority": "Приоритет",
     "issue_count_one": "{{count}} задача",
+    "issue_count_few": "{{count}} задачи",
+    "issue_count_many": "{{count}} задач",
     "issue_count_other": "{{count}} задач",
     "reset_filters": "Сбросить все фильтры",
     "display_settings": "Настройки отображения",

@@ -41,7 +41,7 @@ function flattenKeys(obj: unknown, prefix = ""): string[] {
 }
 
 function normalizePlural(key: string): string {
-  return key.replace(/_(one|other)$/, "_count");
+  return key.replace(/_(one|few|many|other)$/, "_count");
 }
 
 function keySet(bundle: Record<string, unknown>): Set<string> {
@@ -106,6 +106,37 @@ describe("dead plural-key guard", () => {
           .filter((key) => key.endsWith("_one"))
           .map((key) => `${ns}:${key}`),
       );
+      expect(offenders).toEqual([]);
+    });
+  }
+});
+
+// Missing plural-form guard: the web client ships only the active locale's
+// bundle (apps/web/app/layout.tsx), so there is no EN fallback in the browser.
+// A plural group that lacks a CLDR category the locale needs (ru: few/many)
+// renders the raw key, e.g. `last_active.days_ago` for count = 5.
+describe("required plural-form guard", () => {
+  for (const locale of translatedLocales) {
+    // Only locales with a `few` category (ru and other Slavic plurals) use
+    // few/many for everyday counts; fr reports `many` just for millions.
+    const categories = new Intl.PluralRules(locale).resolvedOptions()
+      .pluralCategories;
+    if (!categories.includes("few")) continue;
+    const required = categories.filter((c) => c === "few" || c === "many");
+
+    const bundle = RESOURCES[locale as keyof typeof RESOURCES];
+    it(`${locale} plural groups carry ${required.join("/")}`, () => {
+      const offenders = Object.keys(bundle).flatMap((ns) => {
+        const keys = new Set(flattenKeys(bundle[ns]));
+        const bases = [...keys]
+          .filter((key) => /_(one|other)$/.test(key))
+          .map((key) => key.replace(/_(one|other)$/, ""));
+        return [...new Set(bases)].flatMap((base) =>
+          required
+            .filter((form) => !keys.has(`${base}_${form}`))
+            .map((form) => `${ns}:${base}_${form}`),
+        );
+      });
       expect(offenders).toEqual([]);
     });
   }
