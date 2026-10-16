@@ -26,7 +26,6 @@ interface UsageWindow {
 interface Subscription {
   id: string;
   provider: string;
-  owner: string;
   title: string;
   quota_row: string | null;
   windows: string[];
@@ -168,17 +167,11 @@ export function SubscriptionsPage() {
               return (
                 <section key={sub.id} className="flex flex-col gap-3 rounded-lg border p-4">
                   <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h2 className="text-body font-medium">{sub.title}</h2>
-                        <Badge variant="outline" className="font-mono">
-                          {sub.id}
-                        </Badge>
-                      </div>
-                      <p className="text-caption text-muted-foreground">
-                        {t(($) => $.subscriptions.owner, { owner: sub.owner })}
-                        {sub.quota_row ? ` · ${sub.quota_row}` : ""}
-                      </p>
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                      <h2 className="text-body font-medium">{sub.title}</h2>
+                      <Badge variant="outline" className="font-mono">
+                        {sub.id}
+                      </Badge>
                     </div>
                     {state?.can_edit && sub.windows.length && !isEditing ? (
                       <Button size="sm" variant="ghost" onClick={() => startEdit(sub)}>

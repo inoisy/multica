@@ -1082,7 +1082,6 @@
     "login_required": "Sign in to Multica",
     "stale": "Quota data is older than 15 minutes — figures may be out of date.",
     "readonly": "Only the workspace owner changes limits.",
-    "owner": "Owner: {{owner}}",
     "edit": "Limits",
     "limit_reached": "limit",
     "of_cap": "of {{cap}}%",
