@@ -12,7 +12,8 @@
     "runtimes": "运行时",
     "skills": "Skills",
     "settings": "设置",
-    "conveyor": "Conveyor"
+    "conveyor": "Conveyor",
+    "subscriptions": "Subscriptions"
   },
   "tab": {
     "issue": "任务",

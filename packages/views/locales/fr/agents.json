@@ -1096,5 +1096,32 @@
       "created": "waits for its stage",
       "queued": "queued"
     }
+  },
+  "subscriptions": {
+    "title": "Subscriptions",
+    "description": "Model subscriptions: usage windows, limits for agents, reserve for people",
+    "refresh": "Refresh",
+    "login_required": "Sign in to Multica",
+    "stale": "Quota data is older than 15 minutes — figures may be out of date.",
+    "readonly": "Only the workspace owner changes limits.",
+    "owner": "Owner: {{owner}}",
+    "edit": "Limits",
+    "limit_reached": "limit",
+    "of_cap": "of {{cap}}%",
+    "reset": "resets {{time}} MSK",
+    "no_usage": "No usage data from the quota dashboard.",
+    "agents_up_to": "Agents up to: {{limits}}",
+    "provider_limit": "Agents up to the provider limit",
+    "reserve": "reserve for people {{reserve}}%",
+    "reserve_label": "Reserve",
+    "field_percent": "{{name}}, %",
+    "edit_hint": "Effective limit of a window is the smaller of its limit and 100 − reserve. Applies from the next run.",
+    "save": "Save",
+    "cancel": "Cancel",
+    "saved": "Saved",
+    "bad_percent": "Limits and reserve are whole percents from 0 to 100",
+    "credential": "Credential:",
+    "changed": "changed {{time}} by {{who}}",
+    "events_title": "Change log"
   }
 }

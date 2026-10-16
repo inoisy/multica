@@ -146,6 +146,7 @@ vi.mock("@multica/core/paths", async (importOriginal) => ({
     squads: () => "/acme/squads",
     usage: () => "/acme/usage",
     conveyor: () => "/acme/conveyor",
+    subscriptions: () => "/acme/subscriptions",
     runtimes: () => "/acme/runtimes",
     skills: () => "/acme/skills",
     settings: () => "/acme/settings",
