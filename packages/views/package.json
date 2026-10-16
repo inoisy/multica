@@ -37,6 +37,7 @@
     "./billing": "./billing/index.ts",
     "./dashboard": "./dashboard/index.ts",
     "./conveyor": "./conveyor/index.ts",
+    "./subscriptions": "./subscriptions/index.ts",
     "./squads": "./squads/index.ts",
     "./squads/components": "./squads/components/index.ts",
     "./workspace/workspace-avatar": "./workspace/workspace-avatar.tsx",
