@@ -9,10 +9,10 @@ import type {
   AgentRuntime,
   MemberWithUser,
 } from "@multica/core/types";
-import { api } from "@multica/core/api";
 import { isRuntimeUsableForUser } from "@multica/core/runtimes";
 import { useWorkspaceId } from "@multica/core/hooks";
 import { useWorkspaceSlug } from "@multica/core/paths";
+import { ControlError, controlRequest } from "../../conveyor/control-api";
 import { workspaceKeys } from "@multica/core/workspace";
 import { Badge } from "@multica/ui/components/ui/badge";
 import { Input } from "@multica/ui/components/ui/input";
@@ -40,8 +40,6 @@ import { ThinkingSettingField } from "./inspector/thinking-prop-row";
  * а не в Multica: сторож переключает профиль при лимите провайдера. Пульт
  * отвечает в том же origin и принимает ту же сессию, что и API Multica.
  */
-const CONTROL_API = "/control/api";
-
 interface FallbackProfile {
   runtime_id: string;
   model: string;
@@ -102,53 +100,6 @@ function gradeOf(profile: FallbackProfile, grades: Grades): number {
   if (!base) return 0;
   const bonus = grades.level_bonus?.[profile.thinking_level] ?? 0;
   return Math.max(1, Math.min(5, base + bonus));
-}
-
-class ControlError extends Error {
-  constructor(
-    readonly status: number,
-    message: string,
-  ) {
-    super(message);
-  }
-}
-
-function controlHeaders(): Record<string, string> {
-  const token = api.getToken?.();
-  if (token) return { Authorization: `Bearer ${token}` };
-  const cookies = new Map(
-    document.cookie
-      .split(";")
-      .map((part) => part.trim().split("=") as [string, string])
-      .filter(([key]) => key),
-  );
-  const csrf = cookies.get("multica_csrf_session") ?? cookies.get("multica_csrf");
-  return csrf ? { "X-CSRF-Token": decodeURIComponent(csrf) } : {};
-}
-
-async function controlRequest<T>(
-  path: string,
-  body?: unknown,
-  workspaceSlug?: string | null,
-): Promise<T> {
-  const headers = controlHeaders();
-  if (body !== undefined) {
-    headers["Content-Type"] = "application/json";
-    headers["X-Control-Request"] = "1";
-  }
-  const query = workspaceSlug ? `?ws=${encodeURIComponent(workspaceSlug)}` : "";
-  const response = await fetch(`${CONTROL_API}/${path}${query}`, {
-    method: body === undefined ? "GET" : "POST",
-    credentials: "same-origin",
-    cache: "no-store",
-    headers,
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-  const data = (await response.json().catch(() => ({}))) as { error?: string };
-  if (!response.ok) {
-    throw new ControlError(response.status, data.error ?? response.statusText);
-  }
-  return data as T;
 }
 
 function toDraft(chain: FallbackProfileView[]): FallbackProfile[] {
