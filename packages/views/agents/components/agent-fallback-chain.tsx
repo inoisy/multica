@@ -12,6 +12,7 @@ import type {
 import { api } from "@multica/core/api";
 import { isRuntimeUsableForUser } from "@multica/core/runtimes";
 import { useWorkspaceId } from "@multica/core/hooks";
+import { useWorkspaceSlug } from "@multica/core/paths";
 import { workspaceKeys } from "@multica/core/workspace";
 import { Badge } from "@multica/ui/components/ui/badge";
 import { Input } from "@multica/ui/components/ui/input";
@@ -85,6 +86,7 @@ interface FallbackView {
   restore_hours: number;
   restore_minutes: number;
   waiting_until: string | null;
+  pending_apply: boolean;
   tier: string | null;
   can_manage_tiers: boolean;
   grade_names: Record<string, string>;
@@ -124,13 +126,18 @@ function controlHeaders(): Record<string, string> {
   return csrf ? { "X-CSRF-Token": decodeURIComponent(csrf) } : {};
 }
 
-async function controlRequest<T>(path: string, body?: unknown): Promise<T> {
+async function controlRequest<T>(
+  path: string,
+  body?: unknown,
+  workspaceSlug?: string | null,
+): Promise<T> {
   const headers = controlHeaders();
   if (body !== undefined) {
     headers["Content-Type"] = "application/json";
     headers["X-Control-Request"] = "1";
   }
-  const response = await fetch(`${CONTROL_API}/${path}`, {
+  const query = workspaceSlug ? `?ws=${encodeURIComponent(workspaceSlug)}` : "";
+  const response = await fetch(`${CONTROL_API}/${path}${query}`, {
     method: body === undefined ? "GET" : "POST",
     credentials: "same-origin",
     cache: "no-store",
@@ -175,11 +182,14 @@ export function AgentFallbackChain({
 }) {
   const { t } = useT("agents");
   const wsId = useWorkspaceId();
+  // Пульт обслуживает несколько workspace: свой берёт из параметра.
+  const wsSlug = useWorkspaceSlug();
   const queryClient = useQueryClient();
-  const queryKey = ["control", "fallback", agent.id] as const;
+  const queryKey = ["control", "fallback", wsSlug, agent.id] as const;
   const query = useQuery({
     queryKey,
-    queryFn: () => controlRequest<FallbackView>(`agents/${agent.id}/fallback`),
+    queryFn: () =>
+      controlRequest<FallbackView>(`agents/${agent.id}/fallback`, undefined, wsSlug),
     retry: false,
     refetchInterval: 30_000,
   });
@@ -228,7 +238,7 @@ export function AgentFallbackChain({
   const run = async (path: string, body: unknown) => {
     setBusy(true);
     try {
-      const result = await controlRequest<{ message?: string }>(path, body);
+      const result = await controlRequest<{ message?: string }>(path, body, wsSlug);
       toast.success(result.message ?? t(($) => $.fallback.saved));
       setDraft(null);
       setTierDraft(undefined);
@@ -355,6 +365,12 @@ export function AgentFallbackChain({
       {view && !view.can_edit ? (
         <p className="px-0.5 text-caption text-muted-foreground">
           {t(($) => $.fallback.readonly)}
+        </p>
+      ) : null}
+
+      {view?.pending_apply ? (
+        <p className="rounded-md border border-surface-border px-3 py-2 text-caption">
+          {t(($) => $.fallback.pending)}
         </p>
       ) : null}
 
