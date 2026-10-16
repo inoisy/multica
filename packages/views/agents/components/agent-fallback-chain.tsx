@@ -14,6 +14,7 @@ import { isRuntimeUsableForUser } from "@multica/core/runtimes";
 import { useWorkspaceId } from "@multica/core/hooks";
 import { workspaceKeys } from "@multica/core/workspace";
 import { Badge } from "@multica/ui/components/ui/badge";
+import { Input } from "@multica/ui/components/ui/input";
 import { Button } from "@multica/ui/components/ui/button";
 import { Textarea } from "@multica/ui/components/ui/textarea";
 import {
@@ -54,6 +55,22 @@ interface FallbackProfileView extends FallbackProfile {
   missing: boolean;
   available: boolean | null;
   cooldown_until: string | null;
+  grade: number;
+}
+
+interface FallbackTier {
+  id: string;
+  name: string;
+  floor: number;
+  description: string;
+  builtin: boolean;
+  chain: FallbackProfile[];
+}
+
+interface Grades {
+  models?: Record<string, number>;
+  runtimes?: Record<string, number>;
+  level_bonus?: Record<string, number>;
 }
 
 interface FallbackView {
@@ -67,7 +84,22 @@ interface FallbackView {
   since: string | null;
   restore_hours: number;
   restore_minutes: number;
+  waiting_until: string | null;
+  tier: string | null;
+  can_manage_tiers: boolean;
+  grade_names: Record<string, string>;
+  grades: Grades;
+  tiers: FallbackTier[];
   chain: FallbackProfileView[];
+}
+
+/** Та же формула, что `control_state.grade`: модель, иначе runtime, плюс поправка за рассуждение. */
+function gradeOf(profile: FallbackProfile, grades: Grades): number {
+  const base =
+    grades.models?.[profile.model] || grades.runtimes?.[profile.runtime_id] || 0;
+  if (!base) return 0;
+  const bonus = grades.level_bonus?.[profile.thinking_level] ?? 0;
+  return Math.max(1, Math.min(5, base + bonus));
 }
 
 class ControlError extends Error {
@@ -153,13 +185,27 @@ export function AgentFallbackChain({
   });
   const view = query.data;
   const [draft, setDraft] = useState<FallbackProfile[] | null>(null);
+  // undefined — уровень не меняли; null — «без уровня».
+  const [tierDraft, setTierDraft] = useState<string | null | undefined>(undefined);
+  const [tierForm, setTierForm] = useState<{ name: string; floor: number } | null>(null);
   const [busy, setBusy] = useState(false);
 
-  // Чужой агент или пульт недоступен — не мешаем экрану.
-  useEffect(() => setDraft(null), [agent.id]);
+  useEffect(() => {
+    setDraft(null);
+    setTierDraft(undefined);
+    setTierForm(null);
+  }, [agent.id]);
 
   const profiles = draft ?? (view ? toDraft(view.chain) : []);
-  const dirty = draft !== null;
+  const dirty = draft !== null || tierDraft !== undefined;
+  const tierId = tierDraft === undefined ? (view?.tier ?? null) : tierDraft;
+  const tier = view?.tiers.find((item) => item.id === tierId) ?? null;
+  const grades = view?.grades ?? {};
+  const gradeName = (grade: number) =>
+    grade ? (view?.grade_names[String(grade)] ?? String(grade)) : t(($) => $.fallback.grade_unknown);
+  const weak = tier
+    ? profiles.flatMap((p, i) => (gradeOf(p, grades) < tier.floor ? [i] : []))
+    : [];
   const canEdit = view?.can_edit ?? false;
 
   const runtimeById = useMemo(
@@ -185,6 +231,8 @@ export function AgentFallbackChain({
       const result = await controlRequest<{ message?: string }>(path, body);
       toast.success(result.message ?? t(($) => $.fallback.saved));
       setDraft(null);
+      setTierDraft(undefined);
+      setTierForm(null);
       await refresh();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error));
@@ -225,6 +273,35 @@ export function AgentFallbackChain({
 
   const modeValue =
     view?.mode === "manual" && view.selected != null ? String(view.selected) : "auto";
+  const chooseTier = (value: string) => {
+    const next = view?.tiers.find((item) => item.id === value) ?? null;
+    setTierDraft(next ? next.id : null);
+    // Уровень приносит свою стартовую цепочку; аргументы выведет пульт под этого агента.
+    if (next) edit(next.chain.map((p) => ({ ...p, custom_args: null })));
+  };
+  const tierItems = [
+    { value: "none", label: t(($) => $.fallback.tier_none) },
+    ...(view?.tiers ?? []).map((item) => ({
+      value: item.id,
+      label: t(($) => $.fallback.tier_option, {
+        name: item.name,
+        floor: gradeName(item.floor),
+      }),
+    })),
+  ];
+  const minGrade = profiles.length
+    ? Math.min(...profiles.map((p) => gradeOf(p, grades)))
+    : 0;
+  const floorItems = [1, 2, 3, 4, 5].map((n) => ({
+    value: String(n),
+    label: `${n} · ${gradeName(n)}`,
+  }));
+  const saveChain = () =>
+    run(`agents/${agent.id}/fallback`, {
+      chain: profiles,
+      ...(tierId ? { tier: tierId } : {}),
+    });
+
   const modeItems = [
     { value: "auto", label: t(($) => $.fallback.mode_auto) },
     ...(view?.chain ?? []).map((p, i) => ({
@@ -251,14 +328,17 @@ export function AgentFallbackChain({
               size="sm"
               variant="ghost"
               disabled={busy}
-              onClick={() => setDraft(null)}
+              onClick={() => {
+                setDraft(null);
+                setTierDraft(undefined);
+              }}
             >
               {t(($) => $.fallback.cancel)}
             </Button>
             <Button
               size="sm"
-              disabled={busy}
-              onClick={() => run(`agents/${agent.id}/fallback`, { chain: profiles })}
+              disabled={busy || weak.length > 0 || profiles.length === 0}
+              onClick={saveChain}
             >
               {t(($) => $.fallback.save)}
             </Button>
@@ -276,6 +356,50 @@ export function AgentFallbackChain({
         <p className="px-0.5 text-caption text-muted-foreground">
           {t(($) => $.fallback.readonly)}
         </p>
+      ) : null}
+
+      {view?.waiting_until ? (
+        <p className="rounded-md border border-surface-border px-3 py-2 text-caption">
+          {t(($) => $.fallback.waiting, { time: formatTime(view.waiting_until) })}
+        </p>
+      ) : null}
+
+      {view ? (
+        <SettingsCard>
+          <SettingsRow
+            label={t(($) => $.fallback.tier_label)}
+            description={tier ? tier.description || t(($) => $.fallback.tier_hint) : t(($) => $.fallback.tier_hint)}
+            size="select-wide"
+          >
+            <Select
+              items={tierItems}
+              value={tierId ?? "none"}
+              disabled={!canEdit || busy}
+              onValueChange={(value) => value && chooseTier(value)}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {tierItems.map((item) => (
+                  <SelectItem key={item.value} value={item.value}>
+                    {item.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </SettingsRow>
+          {weak.length > 0 ? (
+            <SettingsRow label={t(($) => $.fallback.below_floor_title)}>
+              <p className="text-caption text-destructive">
+                {t(($) => $.fallback.below_floor, {
+                  list: weak.map((i) => i + 1).join(", "),
+                  floor: gradeName(tier?.floor ?? 0),
+                })}
+              </p>
+            </SettingsRow>
+          ) : null}
+        </SettingsCard>
       ) : null}
 
       {view && profiles.length > 0 && !dirty ? (
@@ -344,6 +468,11 @@ export function AgentFallbackChain({
                     ? t(($) => $.fallback.primary)
                     : t(($) => $.fallback.backup, { n: index })}
                   {active ? <Badge>{t(($) => $.fallback.active)}</Badge> : null}
+                  <Badge variant={weak.includes(index) ? "destructive" : "outline"}>
+                    {weak.includes(index)
+                      ? t(($) => $.fallback.grade_below, { grade: gradeName(gradeOf(profile, grades)) })
+                      : gradeName(gradeOf(profile, grades))}
+                  </Badge>
                   {info?.available === false ? (
                     <Badge variant="destructive">{t(($) => $.fallback.quota_limit)}</Badge>
                   ) : info?.available === true ? (
@@ -500,7 +629,88 @@ export function AgentFallbackChain({
               {t(($) => $.fallback.disable)}
             </Button>
           ) : null}
+          {view?.can_manage_tiers && profiles.length > 0 && !tierForm ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={busy || minGrade === 0}
+              onClick={() => setTierForm({ name: "", floor: minGrade })}
+            >
+              {t(($) => $.fallback.tier_create)}
+            </Button>
+          ) : null}
+          {view?.can_manage_tiers && tier && !tier.builtin && !dirty ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={busy}
+              onClick={() => run(`fallback-tiers/${tier.id}/delete`, {})}
+            >
+              {t(($) => $.fallback.tier_delete, { name: tier.name })}
+            </Button>
+          ) : null}
         </div>
+      ) : null}
+
+      {tierForm ? (
+        <SettingsCard>
+          <SettingsRow label={t(($) => $.fallback.tier_name)} size="select-wide">
+            <Input
+              autoFocus
+              value={tierForm.name}
+              maxLength={60}
+              onChange={(event) => setTierForm({ ...tierForm, name: event.target.value })}
+            />
+          </SettingsRow>
+          <SettingsRow
+            label={t(($) => $.fallback.tier_floor)}
+            description={t(($) => $.fallback.tier_floor_hint, { grade: gradeName(minGrade) })}
+            size="select-wide"
+          >
+            <Select
+              items={floorItems.filter((item) => Number(item.value) <= minGrade)}
+              value={String(tierForm.floor)}
+              onValueChange={(value) => value && setTierForm({ ...tierForm, floor: Number(value) })}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {floorItems
+                  .filter((item) => Number(item.value) <= minGrade)
+                  .map((item) => (
+                    <SelectItem key={item.value} value={item.value}>
+                      {item.label}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+          </SettingsRow>
+          <SettingsRow label="">
+            <div className="flex gap-2">
+              <Button size="sm" variant="ghost" disabled={busy} onClick={() => setTierForm(null)}>
+                {t(($) => $.fallback.cancel)}
+              </Button>
+              <Button
+                size="sm"
+                disabled={busy || tierForm.name.trim() === ""}
+                onClick={() =>
+                  run("fallback-tiers", {
+                    name: tierForm.name.trim(),
+                    floor: tierForm.floor,
+                    chain: profiles.map(({ runtime_id, model, thinking_level }) => ({
+                      runtime_id,
+                      model,
+                      thinking_level,
+                    })),
+                  })
+                }
+              >
+                {t(($) => $.fallback.tier_save)}
+              </Button>
+            </div>
+          </SettingsRow>
+        </SettingsCard>
       ) : null}
     </SettingsSection>
   );
