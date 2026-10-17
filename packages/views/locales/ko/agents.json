@@ -1014,7 +1014,8 @@
     "load_failed": "Conveyor control is unavailable: {{error}}",
     "move_up": "Move up",
     "move_down": "Move down",
-    "remove": "Remove model"
+    "remove": "Remove model",
+    "subscriptions_label": "Subscriptions"
   },
   "conveyor": {
     "title": "Conveyor",
@@ -1099,6 +1100,35 @@
     "bad_percent": "Limits and reserve are whole percents from 0 to 100",
     "credential": "Credential:",
     "changed": "changed {{time}} by {{who}}",
-    "events_title": "Change log"
+    "events_title": "Change log",
+    "runtimes_label": "Runtime:",
+    "agents_label": "agents:",
+    "agent_now": "now",
+    "add_row": "Add row",
+    "edit_row": "Edit {{key}}",
+    "delete_row": "Delete {{key}}",
+    "delete_confirm": "Delete {{key}}? Applies from the next run.",
+    "table_runtimes": "Runtime",
+    "table_runtimes_hint": "Which subscriptions stand behind a runtime chosen in an agent's chain, and the spending order. Command — the wrapper the daemon starts.",
+    "table_items": "Subscriptions",
+    "table_items_hint": "Provider accounts. Credential — only the path to a file on the server; secrets never get here.",
+    "table_windows": "Quota windows",
+    "table_windows_hint": "How a window is recognised in the quota dashboard: label beginnings, comma-separated.",
+    "col_runtime": "Runtime",
+    "col_command": "Command",
+    "col_subscriptions": "Subscriptions, in order",
+    "col_order": "Spending",
+    "order_first": "first eligible",
+    "order_balanced": "evenly by week",
+    "col_id": "Id",
+    "col_title": "Title",
+    "col_provider": "Provider",
+    "col_quota_row": "Dashboard row",
+    "col_windows": "Windows",
+    "col_auth": "Credential type",
+    "col_credential": "Credential path",
+    "col_cli": "ai command",
+    "col_key": "Key",
+    "col_match": "Recognised by"
   }
 }

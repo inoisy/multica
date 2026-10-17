@@ -11,13 +11,14 @@ import type {
 } from "@multica/core/types";
 import { isRuntimeUsableForUser } from "@multica/core/runtimes";
 import { useWorkspaceId } from "@multica/core/hooks";
-import { useWorkspaceSlug } from "@multica/core/paths";
+import { useWorkspacePaths, useWorkspaceSlug } from "@multica/core/paths";
 import { ControlError, controlRequest } from "../../conveyor/control-api";
 import { workspaceKeys } from "@multica/core/workspace";
 import { Badge } from "@multica/ui/components/ui/badge";
 import { Input } from "@multica/ui/components/ui/input";
 import { Button } from "@multica/ui/components/ui/button";
 import { Textarea } from "@multica/ui/components/ui/textarea";
+import { cn } from "@multica/ui/lib/utils";
 import {
   Select,
   SelectContent,
@@ -31,6 +32,7 @@ import {
   SettingsSection,
 } from "../../settings/components/settings-layout";
 import { useT } from "../../i18n";
+import { AppLink } from "../../navigation";
 import { ModelPicker } from "./inspector/model-picker";
 import { RuntimePicker } from "./inspector/runtime-picker";
 import { ThinkingSettingField } from "./inspector/thinking-prop-row";
@@ -55,6 +57,15 @@ interface FallbackProfileView extends FallbackProfile {
   available: boolean | null;
   cooldown_until: string | null;
   grade: number;
+  /** Подписки за runtime профиля — из таблицы runtime пульта, с загрузкой окон. */
+  subscriptions?: ProfileSubscription[];
+}
+
+interface ProfileSubscription {
+  id: string;
+  title: string;
+  available: boolean | null;
+  windows: { key: string; title: string; used: number | null; cap: number | null; reset: string | null; blocked: boolean }[];
 }
 
 interface FallbackTier {
@@ -135,6 +146,7 @@ export function AgentFallbackChain({
   const wsId = useWorkspaceId();
   // Пульт обслуживает несколько workspace: свой берёт из параметра.
   const wsSlug = useWorkspaceSlug();
+  const paths = useWorkspacePaths();
   const queryClient = useQueryClient();
   const queryKey = ["control", "fallback", wsSlug, agent.id] as const;
   const query = useQuery({
@@ -509,6 +521,30 @@ export function AgentFallbackChain({
                 }
               />
             </SettingsRow>
+            {info?.subscriptions?.length ? (
+              <SettingsRow label={t(($) => $.fallback.subscriptions_label)} size="select-wide">
+                <ul className="space-y-0.5 text-caption">
+                  {info.subscriptions.map((sub) => (
+                    <li key={sub.id} className="flex flex-wrap gap-x-2">
+                      <AppLink href={paths.subscriptions()} className="font-medium hover:underline">
+                        {sub.title}
+                      </AppLink>
+                      <span className={cn("text-muted-foreground", sub.available === false && "text-destructive")}>
+                        {sub.windows
+                          .filter((w) => w.used !== null)
+                          .map(
+                            (w) =>
+                              `${w.title} ${Math.round(w.used ?? 0)}%` +
+                              (w.cap !== null && w.cap < 100 ? ` ${t(($) => $.subscriptions.of_cap, { cap: w.cap })}` : ""),
+                          )
+                          .join(" · ") || t(($) => $.subscriptions.no_usage)}
+                        {sub.available === false ? ` — ${t(($) => $.subscriptions.limit_reached)}` : ""}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </SettingsRow>
+            ) : null}
             <SettingsRow label={t(($) => $.fallback.model)} size="select-wide">
               <ModelPicker
                 variant="field"

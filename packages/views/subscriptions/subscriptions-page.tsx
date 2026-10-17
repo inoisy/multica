@@ -13,6 +13,7 @@ import { CollectionPageHeader } from "../layout/collection-page";
 import { PAGE_GUTTER } from "../layout/page-header";
 import { useT } from "../i18n";
 import { ControlError, controlRequest } from "../conveyor/control-api";
+import { EditableTable } from "./subscription-tables";
 
 interface UsageWindow {
   key: string | null;
@@ -33,11 +34,20 @@ interface Subscription {
   reserve: number;
   effective: Record<string, number>;
   credential: string | null;
+  auth: string | null;
+  cli: string | null;
   changed_at: string | null;
   changed_by: string | null;
   usage: UsageWindow[];
   error: string | null;
+  available: boolean | null;
+  /** Runtime, за которыми стоит подписка (таблица runtime). */
+  runtimes: string[];
+  /** Агенты workspace, у которых такой runtime в цепочке; active — работает на нём сейчас. */
+  agents: { id: string; name: string; active: boolean }[];
 }
+
+type TableRow = Record<string, unknown>;
 
 interface SubscriptionsState {
   subscriptions: Subscription[];
@@ -45,6 +55,10 @@ interface SubscriptionsState {
   can_edit: boolean;
   events: { at: string; kind: string; text: string }[];
   window_names: Record<string, string>;
+  runtimes: TableRow[];
+  windows: TableRow[];
+  auths: string[];
+  orders: string[];
 }
 
 function formatTime(value: string | null | undefined) {
@@ -103,6 +117,21 @@ export function SubscriptionsPage() {
       ...Object.fromEntries(sub.windows.map((key) => [key, String(sub.caps[key] ?? 100)])),
       reserve: String(sub.reserve),
     });
+  };
+
+  const saveRow = async (table: string, key: string, row: TableRow | null) => {
+    setBusy(true);
+    try {
+      const result = await controlRequest<{ message?: string }>("subscriptions/tables", { table, key, row }, wsSlug);
+      toast.success(result.message ?? t(($) => $.subscriptions.saved));
+      await queryClient.invalidateQueries({ queryKey });
+      return true;
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error));
+      return false;
+    } finally {
+      setBusy(false);
+    }
   };
 
   const save = async (sub: Subscription) => {
@@ -258,6 +287,25 @@ export function SubscriptionsPage() {
                     </p>
                   )}
 
+                  {sub.runtimes.length ? (
+                    <p className="text-caption">
+                      <span className="text-muted-foreground">{t(($) => $.subscriptions.runtimes_label)}</span>{" "}
+                      {sub.runtimes.join(", ")}
+                      {sub.agents.length ? (
+                        <>
+                          <span className="text-muted-foreground"> · {t(($) => $.subscriptions.agents_label)}</span>{" "}
+                          {sub.agents.map((agent, index) => (
+                            <span key={agent.id}>
+                              {index ? ", " : ""}
+                              <span className={agent.active ? "font-medium" : undefined}>{agent.name}</span>
+                              {agent.active ? ` (${t(($) => $.subscriptions.agent_now)})` : ""}
+                            </span>
+                          ))}
+                        </>
+                      ) : null}
+                    </p>
+                  ) : null}
+
                   <p className="text-caption text-muted-foreground">
                     {sub.credential ? (
                       <>
@@ -272,6 +320,75 @@ export function SubscriptionsPage() {
               );
             })}
           </div>
+
+          {state ? (
+            <>
+              <EditableTable
+                title={t(($) => $.subscriptions.table_runtimes)}
+                description={t(($) => $.subscriptions.table_runtimes_hint)}
+                keyField="name"
+                keyLabel={t(($) => $.subscriptions.col_runtime)}
+                columns={[
+                  { field: "command", label: t(($) => $.subscriptions.col_command), kind: "text", mono: true },
+                  { field: "subscriptions", label: t(($) => $.subscriptions.col_subscriptions), kind: "list", mono: true },
+                  {
+                    field: "order",
+                    label: t(($) => $.subscriptions.col_order),
+                    kind: "select",
+                    options: state.orders.map((value) => ({
+                      value,
+                      label: value === "balanced" ? t(($) => $.subscriptions.order_balanced) : t(($) => $.subscriptions.order_first),
+                    })),
+                  },
+                ]}
+                rows={state.runtimes}
+                canEdit={state.can_edit}
+                busy={busy}
+                onSave={(key, row) => saveRow("runtimes", key, row)}
+                onDelete={(key) => saveRow("runtimes", key, null)}
+              />
+              <EditableTable
+                title={t(($) => $.subscriptions.table_items)}
+                description={t(($) => $.subscriptions.table_items_hint)}
+                keyField="id"
+                keyLabel={t(($) => $.subscriptions.col_id)}
+                columns={[
+                  { field: "title", label: t(($) => $.subscriptions.col_title), kind: "text" },
+                  { field: "provider", label: t(($) => $.subscriptions.col_provider), kind: "text" },
+                  { field: "quota_row", label: t(($) => $.subscriptions.col_quota_row), kind: "text" },
+                  { field: "windows", label: t(($) => $.subscriptions.col_windows), kind: "list", mono: true },
+                  {
+                    field: "auth",
+                    label: t(($) => $.subscriptions.col_auth),
+                    kind: "select",
+                    options: state.auths.map((value) => ({ value, label: value })),
+                  },
+                  { field: "credential", label: t(($) => $.subscriptions.col_credential), kind: "text", mono: true },
+                  { field: "cli", label: t(($) => $.subscriptions.col_cli), kind: "text", mono: true },
+                ]}
+                rows={state.subscriptions as unknown as TableRow[]}
+                canEdit={state.can_edit}
+                busy={busy}
+                onSave={(key, row) => saveRow("items", key, row)}
+                onDelete={(key) => saveRow("items", key, null)}
+              />
+              <EditableTable
+                title={t(($) => $.subscriptions.table_windows)}
+                description={t(($) => $.subscriptions.table_windows_hint)}
+                keyField="key"
+                keyLabel={t(($) => $.subscriptions.col_key)}
+                columns={[
+                  { field: "title", label: t(($) => $.subscriptions.col_title), kind: "text" },
+                  { field: "match", label: t(($) => $.subscriptions.col_match), kind: "list" },
+                ]}
+                rows={state.windows}
+                canEdit={state.can_edit}
+                busy={busy}
+                onSave={(key, row) => saveRow("windows", key, row)}
+                onDelete={(key) => saveRow("windows", key, null)}
+              />
+            </>
+          ) : null}
 
           {state?.events.length ? (
             <section className="space-y-1">
