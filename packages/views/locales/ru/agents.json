@@ -1080,7 +1080,8 @@
     "load_failed": "Пульт конвейера недоступен: {{error}}",
     "move_up": "Выше",
     "move_down": "Ниже",
-    "remove": "Убрать модель"
+    "remove": "Убрать модель",
+    "subscriptions_label": "Подписки"
   },
   "conveyor": {
     "title": "Конвейер",
@@ -1165,6 +1166,35 @@
     "bad_percent": "Лимит и резерв — целые проценты от 0 до 100",
     "credential": "Учётка:",
     "changed": "изменено {{time}}, {{who}}",
-    "events_title": "Журнал изменений"
+    "events_title": "Журнал изменений",
+    "runtimes_label": "Runtime:",
+    "agents_label": "агенты:",
+    "agent_now": "сейчас",
+    "add_row": "Добавить",
+    "edit_row": "Изменить {{key}}",
+    "delete_row": "Удалить {{key}}",
+    "delete_confirm": "Удалить {{key}}? Действует со следующего рана.",
+    "table_runtimes": "Runtime",
+    "table_runtimes_hint": "Какие подписки стоят за runtime, который выбирают в цепочке агента, и порядок трат. Команда — обёртка, которую запускает демон.",
+    "table_items": "Подписки",
+    "table_items_hint": "Учётки провайдеров. Учётка — только путь к файлу на сервере, секреты сюда не попадают.",
+    "table_windows": "Окна квот",
+    "table_windows_hint": "Как окно узнаётся в дашборде квот: начала подписи через запятую.",
+    "col_runtime": "Runtime",
+    "col_command": "Команда",
+    "col_subscriptions": "Подписки по порядку",
+    "col_order": "Траты",
+    "order_first": "первая годная",
+    "order_balanced": "равномерно по неделе",
+    "col_id": "Id",
+    "col_title": "Название",
+    "col_provider": "Провайдер",
+    "col_quota_row": "Строка дашборда",
+    "col_windows": "Окна",
+    "col_auth": "Тип учётки",
+    "col_credential": "Путь к учётке",
+    "col_cli": "Команда ai",
+    "col_key": "Ключ",
+    "col_match": "Как узнать"
   }
 }
