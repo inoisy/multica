@@ -42,6 +42,8 @@ interface Subscription {
   changed_by: string | null;
   usage: UsageWindow[];
   error: string | null;
+  /** Когда дашборд квот получил эти цифры (у Claude опрос реже, цифры бывают старше `updated`). */
+  as_of?: string | null;
   available: boolean | null;
   /** Runtime, за которыми стоит подписка (таблица runtime). */
   runtimes: string[];
@@ -57,6 +59,8 @@ interface SubscriptionsState {
   /** Карточки: по одной на аккаунт. */
   accounts?: Subscription[];
   stale: boolean;
+  /** Когда дашборд квот последний раз записал данные. */
+  updated?: string | null;
   can_edit: boolean;
   events: { at: string; kind: string; text: string }[];
   window_names: Record<string, string>;
@@ -65,6 +69,12 @@ interface SubscriptionsState {
   auths: string[];
   orders: string[];
 }
+
+/** Цифры старше этого помечаются на карточке временем, когда получены. */
+const OLD_USAGE_MS = 10 * 60_000;
+/** Сколько ждать новых данных после «Обновить»: опрос всех провайдеров идёт до минуты. */
+const REFRESH_WAIT_MS = 90_000;
+const REFRESH_POLL_MS = 3_000;
 
 function formatTime(value: string | null | undefined) {
   if (!value) return "";
@@ -105,6 +115,7 @@ export function SubscriptionsPage() {
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const windowName = (key: string) => state?.window_names[key] ?? key;
   const loadError =
@@ -122,6 +133,30 @@ export function SubscriptionsPage() {
       ...Object.fromEntries(sub.windows.map((key) => [key, String(sub.caps[key] ?? 100)])),
       reserve: String(sub.reserve),
     });
+  };
+
+  // «Обновить» заказывает у пульта внеочередной опрос квот и ждёт, пока дашборд запишет новые данные:
+  // простой refetch перечитал бы тот же снимок, который дашборд обновляет раз в 5 минут.
+  const refresh = async () => {
+    setRefreshing(true);
+    try {
+      const result = await controlRequest<{ updated?: string | null }>("subscriptions/refresh", {}, wsSlug);
+      const before = result.updated ?? state?.updated ?? null;
+      const deadline = Date.now() + REFRESH_WAIT_MS;
+      while (Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, REFRESH_POLL_MS));
+        const next = await query.refetch();
+        if (next.data?.updated && next.data.updated !== before) {
+          toast.success(t(($) => $.subscriptions.refreshed));
+          return;
+        }
+      }
+      toast.warning(t(($) => $.subscriptions.refresh_timeout));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error));
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   const saveRow = async (table: string, key: string, row: TableRow | null) => {
@@ -170,10 +205,11 @@ export function SubscriptionsPage() {
             variant="ghost"
             size="icon-sm"
             aria-label={t(($) => $.subscriptions.refresh)}
-            onClick={() => void query.refetch()}
-            disabled={query.isFetching}
+            title={refreshing ? t(($) => $.subscriptions.refreshing) : t(($) => $.subscriptions.refresh)}
+            onClick={() => void refresh()}
+            disabled={refreshing}
           >
-            <RefreshCw className={query.isFetching ? "animate-spin" : undefined} />
+            <RefreshCw className={refreshing || query.isFetching ? "animate-spin" : undefined} />
           </Button>
         }
       />
@@ -188,6 +224,13 @@ export function SubscriptionsPage() {
           {state?.stale ? (
             <p className="rounded-md border border-amber-500/40 px-3 py-2 text-caption">
               {t(($) => $.subscriptions.stale)}
+            </p>
+          ) : null}
+          {state?.updated ? (
+            <p className="text-caption text-muted-foreground">
+              {refreshing
+                ? t(($) => $.subscriptions.refreshing)
+                : t(($) => $.subscriptions.data_at, { time: formatTime(state.updated) })}
             </p>
           ) : null}
           {state && !state.can_edit ? (
@@ -217,6 +260,11 @@ export function SubscriptionsPage() {
                     ) : null}
                   </div>
 
+                  {sub.usage.length && sub.as_of && Date.now() - new Date(sub.as_of).getTime() > OLD_USAGE_MS ? (
+                    <p className="text-caption text-muted-foreground">
+                      {t(($) => $.subscriptions.usage_as_of, { time: formatTime(sub.as_of) })}
+                    </p>
+                  ) : null}
                   {sub.usage.length ? (
                     <ul className="space-y-2">
                       {sub.usage.map((w, index) => (

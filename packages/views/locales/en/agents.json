@@ -1151,6 +1151,11 @@
     "col_credential": "Credential path",
     "col_cli": "ai command",
     "col_key": "Key",
-    "col_match": "Recognised by"
+    "col_match": "Recognised by",
+    "refreshing": "Polling providers…",
+    "refreshed": "Quota data refreshed",
+    "refresh_timeout": "No new data within 90 seconds — showing the previous figures",
+    "data_at": "Quota data as of {{time}}",
+    "usage_as_of": "figures as of {{time}}"
   }
 }
