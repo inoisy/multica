@@ -973,33 +973,50 @@ func (s *IssueWakeupService) dispatch(ctx context.Context, prev db.IssueWakeup) 
 		enabled = false
 		next = pgtype.Timestamptz{}
 	}
-	// A firing the agent already knows about starts no run. One that a run of
-	// the agent waiting to start can take along keeps its inputs for that run
+	// A firing that is already answered starts no run. One that a run of the
+	// agent waiting to start can take along keeps its inputs for that run
 	// (JoinWaitingWakeups).
+	closeWithoutRun := func(outcome string, extra map[string]any) error {
+		if err = q.ConsumeWakeupReceipts(ctx, db.ConsumeWakeupReceiptsParams{Ids: ids}); err != nil {
+			return err
+		}
+		if err = q.AdvanceIssueWakeup(ctx, db.AdvanceIssueWakeupParams{ID: w.ID, Enabled: enabled, NextFireAt: next}); err != nil {
+			return err
+		}
+		if timedOut {
+			if err = markTimedOut(); err != nil {
+				return err
+			}
+		}
+		details := wakeupTriggerDetails(db.AgentTaskQueue{}, receipts)
+		details["outcome"] = outcome
+		delete(details, "task_id")
+		for k, v := range extra {
+			details[k] = v
+		}
+		if err = note(wakeupActivityTriggered, details); err != nil {
+			return err
+		}
+		return commit()
+	}
 	if !taskExists {
+		// The agent's own rule, waiting for a run whose ending the route of the
+		// issue has already decided: the route wakes whoever must act next, so
+		// this firing would only start a second run to find nothing to do.
+		coveredBy, covered, err := (&IssueConveyorService{Tasks: s.Tasks}).CoversWakeup(ctx, q, w, receipts)
+		if err != nil {
+			return err
+		}
+		if covered {
+			(&IssueConveyorService{Tasks: s.Tasks}).NoteSuperseded(ctx, q, w.IssueID, w.SourceTaskID, coveredBy, "own_wakeup", map[string]any{"wakeup_id": util.UUIDToString(w.ID)})
+			return closeWithoutRun(wakeupOutcomeSuperseded, map[string]any{"covered_by": coveredBy})
+		}
 		self, err := acknowledgedBySelf(ctx, q, w, w.AgentID, issue.ID, receipts)
 		if err != nil {
 			return err
 		}
 		if self {
-			if err = q.ConsumeWakeupReceipts(ctx, db.ConsumeWakeupReceiptsParams{Ids: ids}); err != nil {
-				return err
-			}
-			if err = q.AdvanceIssueWakeup(ctx, db.AdvanceIssueWakeupParams{ID: w.ID, Enabled: enabled, NextFireAt: next}); err != nil {
-				return err
-			}
-			if timedOut {
-				if err = markTimedOut(); err != nil {
-					return err
-				}
-			}
-			details := wakeupTriggerDetails(db.AgentTaskQueue{}, receipts)
-			details["outcome"] = wakeupOutcomeAcknowledged
-			delete(details, "task_id")
-			if err = note(wakeupActivityTriggered, details); err != nil {
-				return err
-			}
-			return commit()
+			return closeWithoutRun(wakeupOutcomeAcknowledged, nil)
 		}
 		waiting, err := hasWaitingRun(ctx, q, issue.ID, w.AgentID, w.CreatedBy)
 		if err != nil {

@@ -2349,6 +2349,14 @@ func (h *Handler) buildClaimedTaskResponse(r *http.Request, task *db.AgentTaskQu
 		}
 		return resp, nil, nil, 0, 0, h.failClaimedTaskBeforeLaunch(r.Context(), task, "Wakeup is disabled or its authorization is no longer available.", taskfailure.ReasonInvalidTaskIdentity, "wakeup_unavailable", http.StatusConflict, "wakeup unavailable")
 	}
+	// A route run whose position the route has left is withdrawn before the
+	// daemon ever sees it.
+	if reason, err := (&service.IssueConveyorService{Tasks: h.TaskService}).StaleReason(r.Context(), h.Queries, *task); err != nil {
+		return resp, nil, nil, 0, 0, h.rejectClaimSourceLoad(r.Context(), task, err, "conveyor", resp.WakeupID)
+	} else if reason != "" {
+		(&service.IssueConveyorService{Tasks: h.TaskService}).RejectStale(r.Context(), *task, reason)
+		return resp, nil, nil, 0, 0, &claimBuildFailure{outcome: "conveyor_stale", status: http.StatusConflict, message: "route step is no longer current", settled: true}
+	}
 	// Preserve PostgreSQL's microseconds: second-resolution display timestamps
 	// cannot distinguish stale claims reclaimed within the same second.
 	if task.DispatchedAt.Valid {
@@ -4119,6 +4127,10 @@ func (h *Handler) StartTask(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		slog.Warn("start task failed", "task_id", taskID, "error", err)
+		if errors.Is(err, service.ErrConveyorStale) {
+			writeError(w, http.StatusConflict, "task claim is stale: "+err.Error())
+			return
+		}
 		if errors.Is(err, pgx.ErrNoRows) {
 			status := http.StatusConflict
 			if legacy {
@@ -4563,6 +4575,9 @@ func (h *Handler) reconcileCommentsOnCompletion(ctx context.Context, task *db.Ag
 		if actorType != "member" {
 			triggers = keepReplayableAgentTriggers(triggers, slices.Contains(plannedCommentIDs, c.ID))
 		}
+		// The replay must not wake a route agent for a mention the route already
+		// answers with its own run.
+		triggers = h.dropManagedRouteTriggers(ctx, issue, c.ID, c.SourceTaskID, triggers)
 		scoped := make([]commentAgentTrigger, 0, 1)
 		for _, trigger := range triggers {
 			if uuidToString(trigger.Agent.ID) == agentID {
