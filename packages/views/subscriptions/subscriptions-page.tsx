@@ -26,6 +26,8 @@ interface UsageWindow {
 
 interface Subscription {
   id: string;
+  /** Ключи одного аккаунта (claude-main и claude-max) — карточка одна, загрузка общая. */
+  keys?: string[];
   provider: string;
   title: string;
   quota_row: string | null;
@@ -50,7 +52,10 @@ interface Subscription {
 type TableRow = Record<string, unknown>;
 
 interface SubscriptionsState {
+  /** Строки таблицы «Подписки» как есть. */
   subscriptions: Subscription[];
+  /** Карточки: по одной на аккаунт. */
+  accounts?: Subscription[];
   stale: boolean;
   can_edit: boolean;
   events: { at: string; kind: string; text: string }[];
@@ -190,7 +195,7 @@ export function SubscriptionsPage() {
           ) : null}
 
           <div className="grid gap-3 lg:grid-cols-2">
-            {(state?.subscriptions ?? []).map((sub) => {
+            {(state?.accounts ?? state?.subscriptions ?? []).map((sub) => {
               const isEditing = editing === sub.id;
               const limited = Object.keys(sub.effective).length > 0;
               return (
@@ -198,9 +203,11 @@ export function SubscriptionsPage() {
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex min-w-0 flex-wrap items-center gap-2">
                       <h2 className="text-body font-medium">{sub.title}</h2>
-                      <Badge variant="outline" className="font-mono">
-                        {sub.id}
-                      </Badge>
+                      {(sub.keys ?? [sub.id]).map((key) => (
+                        <Badge key={key} variant="outline" className="font-mono">
+                          {key}
+                        </Badge>
+                      ))}
                     </div>
                     {state?.can_edit && sub.windows.length && !isEditing ? (
                       <Button size="sm" variant="ghost" onClick={() => startEdit(sub)}>
