@@ -56,6 +56,9 @@ func conveyorHandoffNote(issue db.Issue, cv db.IssueConveyor, action db.IssueCon
 	}
 	fmt.Fprintf(&b, "Задача ведётся по маршруту: ваш шаг «%s», раунд %d. Сделайте его и сдайте результат командой:\n\n", step, action.Round.Int32)
 	fmt.Fprintf(&b, "    multica issue conveyor result %s --file result.json\n\nФормат result.json:\n\n%s\n\n", id, conveyorResultExample)
+	if step == conveyorStepDev {
+		b.WriteString("artifact.repo — репозиторий, как он записан в настройках workspace (URL; для локального репозитория — его путь или путь вашей рабочей копии).\n")
+	}
 	b.WriteString("outcome: `pass` — шаг выполнен; `changes_requested` — нужны правки предыдущего шага; `blocked` — не можете продолжить; `needs_coordinator` — нужно решение координатора.\n")
 	if step == conveyorStepQA || step == conveyorStepReview {
 		fmt.Fprintf(&b, "Проверяйте именно принятый commit")

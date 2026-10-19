@@ -63,15 +63,19 @@ func NormalizeSquadRouteTemplate(ctx context.Context, q *db.Queries, workspaceID
 	return strings.Join(parts, ","), nil
 }
 
-// StartSquadRoute runs an issue just assigned to a squad along the squad's
-// default route instead of waking its leader. It reports whether the route
-// now leads the issue: true when this call enabled it or a live route already
-// did, false when the squad has no template or the operator disabled the
-// issue's route. An error means the template could not start (the leader
-// then takes the issue, told why). invoker is the human the route's runs
-// answer to.
+// StartSquadRoute runs an issue just assigned to a squad along its route
+// instead of waking the squad's leader: the issue's own metadata.route when it
+// has one (the leader wrote who does dev on this very issue), else the squad's
+// default route. It reports whether the route now leads the issue: true when
+// this call enabled it or a live route already did, false when there is no
+// route to start or the operator disabled the issue's route. An error means
+// the route could not start (the leader then takes the issue, told why).
+// invoker is the human the route's runs answer to.
 func (s *IssueConveyorService) StartSquadRoute(ctx context.Context, issue db.Issue, squad db.Squad, invoker pgtype.UUID) (bool, error) {
-	template := strings.TrimSpace(squad.RouteTemplate)
+	template := issueRouteSpec(issue)
+	if template == "" {
+		template = strings.TrimSpace(squad.RouteTemplate)
+	}
 	if template == "" {
 		return false, nil
 	}
@@ -94,6 +98,14 @@ func (s *IssueConveyorService) StartSquadRoute(ctx context.Context, issue db.Iss
 		return false, err
 	}
 	return true, nil
+}
+
+// issueRouteSpec is the route the issue itself carries in metadata.route.
+func issueRouteSpec(issue db.Issue) string {
+	var meta map[string]any
+	_ = json.Unmarshal(issue.Metadata, &meta)
+	spec, _ := meta["route"].(string)
+	return strings.TrimSpace(spec)
 }
 
 // SquadRouteHandoffNote tells the leader why the squad's default route did
