@@ -75,6 +75,9 @@ const (
 	conveyorStepDev    = "dev"
 	conveyorStepQA     = "qa"
 	conveyorStepReview = "review"
+	// conveyorStepAccept checks the commit the route accepted on top of the
+	// base branch and merges it; a daemon runs it without a model.
+	conveyorStepAccept = "accept"
 )
 
 // Errors map to HTTP in the handler: invalid 400, forbidden 403, not found
@@ -259,6 +262,9 @@ func (s *IssueConveyorService) resolveRoute(ctx context.Context, q *db.Queries, 
 	}
 	if lastDev >= 0 && lastQA < lastDev {
 		return nil, conveyorErr(ErrConveyorInvalid, "a qa step must follow dev")
+	}
+	if err := acceptPlacementError(entries); err != nil {
+		return nil, err
 	}
 	var meta map[string]any
 	_ = json.Unmarshal(issue.Metadata, &meta)
@@ -687,4 +693,26 @@ func (s *IssueConveyorService) Events(ctx context.Context, issueID pgtype.UUID, 
 		limit = 100
 	}
 	return s.q().ListIssueConveyorEvents(ctx, db.ListIssueConveyorEventsParams{ConveyorID: cv.ID, AfterSeq: pgtype.Int8{Int64: after, Valid: true}, PageSize: limit})
+}
+
+// acceptPlacementError enforces where the accept step may stand: at most once,
+// right before close, after a review of the same route. It merges what the
+// route accepted, so nothing may change the commit after it and a review must
+// have judged that commit first.
+func acceptPlacementError(entries []ConveyorRouteEntry) error {
+	review := false
+	for i, e := range entries {
+		switch e.Step {
+		case conveyorStepReview:
+			review = true
+		case conveyorStepAccept:
+			if i != len(entries)-2 {
+				return conveyorErr(ErrConveyorInvalid, "accept is only allowed once, right before close")
+			}
+			if !review {
+				return conveyorErr(ErrConveyorInvalid, "accept needs a review step before it")
+			}
+		}
+	}
+	return nil
 }

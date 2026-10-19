@@ -176,7 +176,7 @@ func taskScopedAuthToken(task Task) (string, error) {
 }
 
 func taskMulticaEnvironment(task Task, agentName, token, configRoot, workspacesRoot, serverURL string, healthPort, slot int, tempDir string) map[string]string {
-	return map[string]string{
+	env := map[string]string{
 		"MULTICA_TOKEN":        token,
 		cli.TaskConfigRootEnv:  configRoot,
 		TaskWorkspacesRootEnv:  workspacesRoot,
@@ -191,6 +191,11 @@ func taskMulticaEnvironment(task Task, agentName, token, configRoot, workspacesR
 		"TMP":                  tempDir,
 		"TEMP":                 tempDir,
 	}
+	// The issue the run serves; the accept runtime needs it to find the route.
+	if task.IssueID != "" {
+		env["MULTICA_ISSUE_ID"] = task.IssueID
+	}
+	return env
 }
 
 // taskRunner executes a single agent task and returns the result.
