@@ -1439,5 +1439,9 @@
     "overview_close": "Fermer",
     "overview_empty": "Aucun livrable de ce type.",
     "group_comment_by": "Commentaire de {{name}}"
+  },
+  "model_profile": {
+    "label": "Model profile",
+    "assignee": "Assignee's profile"
   }
 }
