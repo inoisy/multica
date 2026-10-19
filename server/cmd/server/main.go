@@ -837,6 +837,9 @@ func main() {
 	if err := schedulerMgr.Register(scheduler.IssueConveyorJob(&service.IssueConveyorService{Tasks: taskSvc})); err != nil {
 		slog.Error("scheduler: register issue conveyor delivery", "error", err)
 	}
+	if err := schedulerMgr.Register(scheduler.StageDispatchJob(&service.StageDispatchService{Issues: h.IssueService})); err != nil {
+		slog.Error("scheduler: register stage dispatch", "error", err)
+	}
 	if err := schedulerMgr.Register(scheduler.ModelRoutingJob(taskSvc)); err != nil {
 		slog.Error("scheduler: register model routing", "error", err)
 	}
