@@ -1145,6 +1145,28 @@
     "refreshed": "Quota data refreshed",
     "refresh_timeout": "No new data within 90 seconds — showing the previous figures",
     "data_at": "Quota data as of {{time}}",
-    "usage_as_of": "figures as of {{time}}"
+    "usage_as_of": "figures as of {{time}}",
+    "login": {
+      "state": {
+        "logged_in": "ログイン済み",
+        "revoked": "ログイン無効",
+        "never": "未ログイン",
+        "check_failed": "確認に失敗",
+        "unchecked": "未確認"
+      },
+      "relogin": "再ログイン",
+      "title": "{{account}} にログイン",
+      "codex_hint": "リンクを開いてサブスクリプションのアカウントでログインし、コードを入力してください。現在の認証情報はログイン成功後にのみ置き換えられます。",
+      "claude_hint": "任意のコンピューターで `claude setup-token` を実行し、トークンを貼り付けてください。トークンはサーバーにのみ保存され、再表示されません。",
+      "key_hint": "新しいキーを貼り付けてください。プロバイダーが対応していれば、置き換える前にキーを確認します。",
+      "code": "コード：",
+      "waiting": "ログインの完了を待っています…",
+      "start": "リンクを取得",
+      "cancel_login": "ログインを取り消す",
+      "token_label": "トークン",
+      "key_label": "API キー",
+      "done": "ログインしました",
+      "failed": "ログインは完了しませんでした。現在の認証情報は変更されていません"
+    }
   }
 }

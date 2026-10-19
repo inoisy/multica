@@ -1145,6 +1145,28 @@
     "refreshed": "Quota data refreshed",
     "refresh_timeout": "No new data within 90 seconds — showing the previous figures",
     "data_at": "Quota data as of {{time}}",
-    "usage_as_of": "figures as of {{time}}"
+    "usage_as_of": "figures as of {{time}}",
+    "login": {
+      "state": {
+        "logged_in": "已登录",
+        "revoked": "登录已失效",
+        "never": "未登录",
+        "check_failed": "检查失败",
+        "unchecked": "未检查"
+      },
+      "relogin": "重新登录",
+      "title": "登录 {{account}}",
+      "codex_hint": "打开链接，登录订阅账号并输入代码。仅在登录成功后才会替换当前凭据。",
+      "claude_hint": "在任意电脑上运行 `claude setup-token` 并粘贴令牌。令牌仅保存在服务器上，之后不再显示。",
+      "key_hint": "粘贴新密钥。在提供商支持时，会先校验密钥再替换当前密钥。",
+      "code": "代码：",
+      "waiting": "等待登录完成…",
+      "start": "获取链接",
+      "cancel_login": "取消登录",
+      "token_label": "令牌",
+      "key_label": "API 密钥",
+      "done": "登录成功",
+      "failed": "登录未完成，当前凭据未更改"
+    }
   }
 }
