@@ -84,3 +84,32 @@ func (h *Handler) SetIssueStageDispatch(w http.ResponseWriter, r *http.Request) 
 	}
 	writeJSON(w, http.StatusOK, stageDispatchResponse(updated))
 }
+
+// StageDispatchEpicResponse is one epic on the conveyor board: the issue and
+// the squad its stages go to.
+type StageDispatchEpicResponse struct {
+	Issue      IssueResponse `json:"issue"`
+	SquadID    string        `json:"squad_id"`
+	DispatchBy *string       `json:"dispatch_by"`
+}
+
+// ListStageDispatch handles GET /api/stage-dispatch: the workspace's epics
+// whose stages the server dispatches, for the conveyor board.
+func (h *Handler) ListStageDispatch(w http.ResponseWriter, r *http.Request) {
+	workspaceID := workspaceIDFromURL(r, "workspaceId")
+	wsUUID, ok := parseUUIDOrBadRequest(w, workspaceID, "workspace_id")
+	if !ok {
+		return
+	}
+	issues, err := h.Queries.ListWorkspaceStageDispatch(r.Context(), wsUUID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to list stage dispatch")
+		return
+	}
+	prefix := h.getIssuePrefix(r.Context(), wsUUID)
+	out := make([]StageDispatchEpicResponse, len(issues))
+	for i, issue := range issues {
+		out[i] = StageDispatchEpicResponse{Issue: issueToResponse(issue, prefix), SquadID: uuidToString(issue.StageSquadID), DispatchBy: uuidToPtr(issue.StageDispatchBy)}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"epics": out})
+}
