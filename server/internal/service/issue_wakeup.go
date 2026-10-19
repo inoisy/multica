@@ -641,12 +641,28 @@ func (s *IssueWakeupService) authorize(ctx context.Context, q *db.Queries, ws, m
 // Tick uses the existing scheduler lease. Each config has a row lock as well,
 // so a manual retry or a second server cannot dispatch the same receipt twice.
 func (s *IssueWakeupService) Tick(ctx context.Context) error {
+	return s.tick(ctx, nil)
+}
+
+// TickWorkspaces is one Tick pass over the given workspaces' ready wakeups.
+// Tests use it: packages run concurrently against one database, and an
+// unscoped pass would dispatch — and consume the pending receipts of — rules
+// another package's test is still asserting on.
+func (s *IssueWakeupService) TickWorkspaces(ctx context.Context, workspaceIDs ...pgtype.UUID) error {
+	if len(workspaceIDs) == 0 {
+		return nil
+	}
+	return s.tick(ctx, workspaceIDs)
+}
+
+// tick dispatches ready wakeups; nil workspaceIDs means every workspace.
+func (s *IssueWakeupService) tick(ctx context.Context, workspaceIDs []pgtype.UUID) error {
 	// Receipts are operational evidence, not the run history. Match the existing
 	// event telemetry's seven-day retention; never expire unprocessed inputs.
 	cleanupCtx, cleanupCancel := context.WithTimeout(ctx, 2*time.Second)
 	_, cleanupErr := s.Tasks.Queries.DeleteExpiredWakeupReceipts(cleanupCtx, pgtype.Timestamptz{Time: time.Now().Add(-7 * 24 * time.Hour), Valid: true})
 	cleanupCancel()
-	rows, err := s.Tasks.Queries.ListReadyWakeups(ctx)
+	rows, err := s.Tasks.Queries.ListReadyWakeups(ctx, workspaceIDs)
 	if err != nil {
 		return err
 	}

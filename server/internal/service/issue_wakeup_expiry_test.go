@@ -58,7 +58,7 @@ func TestIssueWakeupTimeoutWakesOnceAndEnds(t *testing.T) {
 		t.Fatal("dispatched before the deadline")
 	}
 	f.Exec(t, "UPDATE issue_wakeup SET expires_at=now()-interval '1 second' WHERE id=$1", w.ID)
-	ready, err := f.q.ListReadyWakeups(ctx)
+	ready, err := f.q.ListReadyWakeups(ctx, []pgtype.UUID{parseTestUUID(t, f.WorkspaceID)})
 	if err != nil {
 		t.Fatal(err)
 	}

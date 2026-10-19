@@ -1681,7 +1681,12 @@ describe("IssueDetail (shared)", () => {
       expect(within(slot).getByText("Cancelled by the system")).toBeInTheDocument();
       expect(within(slot).queryByText("task cancelled by server")).not.toBeInTheDocument();
       expect(within(slot).queryByText("Failed")).not.toBeInTheDocument();
-      expect(screen.getAllByRole("button", { name: "Retry run" })).toHaveLength(1);
+      // Once in the timeline. The sidebar's execution log lists the latest
+      // runs with their own row actions, which is a separate surface.
+      const timelineRetries = screen
+        .getAllByRole("button", { name: "Retry run" })
+        .filter((button) => !button.closest(".\\@container\\/execution-log"));
+      expect(timelineRetries).toHaveLength(1);
     };
 
     it("renders the run block in the notice's thread slot and retries that run", async () => {

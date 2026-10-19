@@ -1361,6 +1361,19 @@ type RuntimeProfile struct {
 	RuntimeType    string             `json:"runtime_type"`
 }
 
+type SearchIndexChange struct {
+	EntityType  string             `json:"entity_type"`
+	EntityID    pgtype.UUID        `json:"entity_id"`
+	WorkspaceID pgtype.UUID        `json:"workspace_id"`
+	ChangeXid   pgtype.Uint64      `json:"change_xid"`
+	ChangedAt   pgtype.Timestamptz `json:"changed_at"`
+}
+
+type SearchIndexPruneMark struct {
+	Singleton        bool          `json:"singleton"`
+	PrunedThroughXid pgtype.Uint64 `json:"pruned_through_xid"`
+}
+
 type SeatCapacityOutbox struct {
 	WorkspaceID    pgtype.UUID        `json:"workspace_id"`
 	OperationToken pgtype.UUID        `json:"operation_token"`

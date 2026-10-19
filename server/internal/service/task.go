@@ -1844,6 +1844,29 @@ type PreparedChatTaskEnqueue struct {
 	runtimeOverlay   runtimeMCPOverlayData
 }
 
+// MemberMayInvokeAgent reports whether userID may trigger runs for agentID.
+//
+// CanMemberInvokeAgent keyed by id rather than by row: channel inbound has the
+// installation's agent id and no reason to load the agent itself. It asks this
+// before storing a sender's message, so a member the web chat would refuse
+// cannot reach the agent through a bot either.
+//
+// An agent that no longer exists admits nobody — that is a verdict, not a
+// failure. Every other query failure comes back as an error, so an unreachable
+// database is never read as a denial: the caller releases its dedup claim and
+// the platform's redelivery is still the message's chance. CanMemberInvokeAgent
+// is the fail-closed wrapper the scheduled triggers use instead.
+func (s *TaskService) MemberMayInvokeAgent(ctx context.Context, agentID, userID pgtype.UUID) (bool, error) {
+	agent, err := s.Queries.GetAgent(ctx, agentID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("load agent: %w", err)
+	}
+	return memberMayInvokeAgent(ctx, s.Queries, agent, userID, agent.WorkspaceID)
+}
+
 // PrepareChatTaskEnqueue performs reads and optional external integration work
 // before the caller opens a transaction. BuildTaskOverlay may perform network
 // I/O and must never run while /new holds route-rotation locks.

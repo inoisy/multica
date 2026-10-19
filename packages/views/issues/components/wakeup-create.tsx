@@ -394,10 +394,14 @@ function ConditionMenu({
   const option = (key: WakeupCondition) => {
     const Icon = items[key].icon;
     return (
-      <DropdownMenuItem key={key} onClick={() => onChange(key)} className="gap-2 py-1.5">
-        <Icon className="size-3.5 text-muted-foreground" aria-hidden="true" />
-        <span>{items[key].label}</span>
-        <span className="ml-auto pl-4 text-caption text-muted-foreground">{items[key].hint}</span>
+      <DropdownMenuItem key={key} onClick={() => onChange(key)} className="items-start gap-2 py-1.5">
+        <span className="flex h-5 shrink-0 items-center">
+          <Icon className="size-3.5 text-muted-foreground" aria-hidden="true" />
+        </span>
+        <span className="flex min-w-0 flex-col gap-0.5">
+          <span>{items[key].label}</span>
+          <span className="text-caption text-muted-foreground">{items[key].hint}</span>
+        </span>
       </DropdownMenuItem>
     );
   };
@@ -412,7 +416,7 @@ function ConditionMenu({
         </span>
         <ChevronDown className="size-3 text-muted-foreground" aria-hidden="true" />
       </DropdownMenuTrigger>
-      <DropdownMenuContent className="w-[22rem]">
+      <DropdownMenuContent className="w-72">
         {groups.map(([label, keys]) => (
           <DropdownMenuGroup key={label}>
             <DropdownMenuLabel>{label}</DropdownMenuLabel>

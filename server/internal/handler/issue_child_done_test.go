@@ -185,10 +185,12 @@ func childDoneRuns(t *testing.T, parentID string) []childDoneRunRow {
 	return runs
 }
 
-// runWakeupTick is one scheduler pass over ready wakeups.
+// runWakeupTick is one scheduler pass over this package's ready wakeups. It is
+// scoped to the test workspace: other packages' tests share the database, and
+// dispatching their rules would consume receipts they are asserting on.
 func runWakeupTick(t *testing.T) {
 	t.Helper()
-	if err := (&service.IssueWakeupService{Tasks: testHandler.TaskService}).Tick(context.Background()); err != nil {
+	if err := (&service.IssueWakeupService{Tasks: testHandler.TaskService}).TickWorkspaces(context.Background(), parseUUID(testWorkspaceID)); err != nil {
 		t.Logf("wakeup tick: %v", err)
 	}
 }

@@ -978,7 +978,11 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 					Binding: wecomBinding,
 					Senders: wecomSenders,
 					AppURL:  appURLFromEnv(),
-					Logger:  slog.Default(),
+					// Without this the replier has no way to read a reader's
+					// profile language and every notice falls back to the
+					// deployment's, which is the whole of what this is for.
+					Languages: queries,
+					Logger:    slog.Default(),
 				})
 
 				// Wecom shares the engine.ChatSession (channel_type-keyed) so
@@ -1983,6 +1987,16 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 
 			// Assignee frequency
 			r.Get("/api/assignee-frequency", h.GetAssigneeFrequency)
+
+			// Local search index sync for Web/Desktop (MUL-7754). Human clients
+			// only: agents search through /api/issues/search.
+			r.Route("/api/search-index", func(r chi.Router) {
+				r.Use(handler.RequireHumanActor)
+				r.Use(h.RequireLocalSearchIndex)
+				r.Get("/manifest", h.GetSearchIndexManifest)
+				r.Get("/snapshot", h.GetSearchIndexSnapshot)
+				r.Post("/changes", h.ListSearchIndexChanges)
+			})
 
 			// Issues
 			r.Route("/api/issues", func(r chi.Router) {
