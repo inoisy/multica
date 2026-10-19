@@ -1443,5 +1443,16 @@
   "model_profile": {
     "label": "Model profile",
     "assignee": "Assignee's profile"
+  },
+  "stage_dispatch": {
+    "label": "Étapes",
+    "off": "Non attribuées"
+  },
+  "route_step": {
+    "title": "Étape du parcours, tour {{round}}",
+    "paused": "en pause",
+    "awaiting_coordinator": "chez le coordinateur",
+    "waiting_provider": "attend le fournisseur",
+    "disabled": "désactivé"
   }
 }
