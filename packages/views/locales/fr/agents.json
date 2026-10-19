@@ -1167,6 +1167,28 @@
     "refreshed": "Quota data refreshed",
     "refresh_timeout": "No new data within 90 seconds — showing the previous figures",
     "data_at": "Quota data as of {{time}}",
-    "usage_as_of": "figures as of {{time}}"
+    "usage_as_of": "figures as of {{time}}",
+    "login": {
+      "state": {
+        "logged_in": "Connecté",
+        "revoked": "Connexion révoquée",
+        "never": "Non connecté",
+        "check_failed": "Vérification échouée",
+        "unchecked": "Non vérifié"
+      },
+      "relogin": "Se reconnecter",
+      "title": "Connexion à {{account}}",
+      "codex_hint": "Ouvrez le lien, connectez-vous au compte d'abonnement et saisissez le code. L'identifiant actuel n'est remplacé qu'après une connexion réussie.",
+      "claude_hint": "Exécutez `claude setup-token` sur n'importe quel ordinateur et collez le jeton. Il est stocké uniquement sur le serveur et n'est plus jamais affiché.",
+      "key_hint": "Collez la nouvelle clé. Lorsque le fournisseur le permet, la clé est vérifiée avant de remplacer l'actuelle.",
+      "code": "Code :",
+      "waiting": "En attente de la fin de la connexion…",
+      "start": "Obtenir le lien",
+      "cancel_login": "Annuler la connexion",
+      "token_label": "Jeton",
+      "key_label": "Clé API",
+      "done": "Connexion réussie",
+      "failed": "La connexion n'a pas abouti ; l'identifiant actuel est inchangé"
+    }
   }
 }
