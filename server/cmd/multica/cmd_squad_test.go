@@ -90,3 +90,43 @@ func TestRunSquadMemberSetRoleValidatesRequiredFlags(t *testing.T) {
 		t.Fatal("expected missing --role error")
 	}
 }
+
+func TestRunSquadUpdateSendsRouteTemplate(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("MULTICA_TOKEN", "test-token")
+	t.Setenv("MULTICA_WORKSPACE_ID", "workspace-123")
+
+	var bodies []map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPut || r.URL.Path != "/api/squads/squad-123" {
+			t.Fatalf("%s %s, want PUT /api/squads/squad-123", r.Method, r.URL.Path)
+		}
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+		bodies = append(bodies, body)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"id": "squad-123", "name": "Разработка"})
+	}))
+	defer srv.Close()
+	t.Setenv("MULTICA_SERVER_URL", srv.URL)
+
+	for _, route := range []string{"dev:Бэкенд,qa:Тестировщик,review:Техдиректор,close:Тимлид", "off"} {
+		cmd := &cobra.Command{Use: "update"}
+		for _, f := range []string{"server-url", "workspace-id", "profile", "name", "description", "instructions", "leader", "avatar-url", "route"} {
+			cmd.Flags().String(f, "", "")
+		}
+		cmd.Flags().String("output", "json", "")
+		_ = cmd.Flags().Set("route", route)
+		if err := runSquadUpdate(cmd, []string{"squad-123"}); err != nil {
+			t.Fatalf("runSquadUpdate(%q): %v", route, err)
+		}
+	}
+	if len(bodies) != 2 || bodies[0]["route_template"] != "dev:Бэкенд,qa:Тестировщик,review:Техдиректор,close:Тимлид" || bodies[1]["route_template"] != "" {
+		t.Fatalf("bodies = %#v, want the route and then an empty template", bodies)
+	}
+	if len(bodies[0]) != 1 {
+		t.Fatalf("update sent fields beyond the route: %#v", bodies[0])
+	}
+}
