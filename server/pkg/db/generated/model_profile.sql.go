@@ -563,7 +563,9 @@ func (q *Queries) ListAgentModelOptionsByWorkspace(ctx context.Context, workspac
 }
 
 const listAgentWaitingModelTasks = `-- name: ListAgentWaitingModelTasks :many
-SELECT t.id, t.issue_id, t.model_choice, t.created_at FROM agent_task_queue t
+SELECT t.id, t.issue_id, t.model_choice, t.created_at, i.number AS issue_number, i.title AS issue_title
+FROM agent_task_queue t
+LEFT JOIN issue i ON i.id = t.issue_id
 WHERE t.agent_id = $1 AND t.status = 'queued' AND t.model_choice->>'reason' = 'all_unavailable'
 ORDER BY t.created_at
 `
@@ -573,6 +575,8 @@ type ListAgentWaitingModelTasksRow struct {
 	IssueID     pgtype.UUID        `json:"issue_id"`
 	ModelChoice []byte             `json:"model_choice"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	IssueNumber pgtype.Int4        `json:"issue_number"`
+	IssueTitle  pgtype.Text        `json:"issue_title"`
 }
 
 // Unclaimed runs of the agent whose every model is unavailable now.
@@ -590,6 +594,8 @@ func (q *Queries) ListAgentWaitingModelTasks(ctx context.Context, agentID pgtype
 			&i.IssueID,
 			&i.ModelChoice,
 			&i.CreatedAt,
+			&i.IssueNumber,
+			&i.IssueTitle,
 		); err != nil {
 			return nil, err
 		}

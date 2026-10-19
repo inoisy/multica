@@ -217,6 +217,8 @@ SELECT user_id FROM member WHERE workspace_id = $1 AND role = 'owner' ORDER BY c
 
 -- name: ListAgentWaitingModelTasks :many
 -- Unclaimed runs of the agent whose every model is unavailable now.
-SELECT t.id, t.issue_id, t.model_choice, t.created_at FROM agent_task_queue t
+SELECT t.id, t.issue_id, t.model_choice, t.created_at, i.number AS issue_number, i.title AS issue_title
+FROM agent_task_queue t
+LEFT JOIN issue i ON i.id = t.issue_id
 WHERE t.agent_id = $1 AND t.status = 'queued' AND t.model_choice->>'reason' = 'all_unavailable'
 ORDER BY t.created_at;

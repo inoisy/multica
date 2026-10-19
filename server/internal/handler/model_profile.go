@@ -590,6 +590,10 @@ func (h *Handler) writeAgentModels(w http.ResponseWriter, r *http.Request, agent
 	}
 	for _, t := range waiting {
 		entry := AgentModelChoiceEntry{TaskID: util.UUIDToString(t.ID), Status: "queued", IssueID: uuidToPtr(t.IssueID), CreatedAt: timestampToString(t.CreatedAt)}
+		if t.IssueNumber.Valid {
+			entry.IssueIdentifier = service.IssueIdentifier(m.prefix, t.IssueNumber.Int32)
+			entry.IssueTitle = t.IssueTitle.String
+		}
 		var choice service.ModelChoice
 		if json.Unmarshal(t.ModelChoice, &choice) == nil {
 			entry.Choice = &choice
