@@ -3501,6 +3501,8 @@ func (s *TaskService) claimTask(ctx context.Context, agentID, runtimeID pgtype.U
 	var getAgentMs, countRunningMs, claimAgentMs, reanchorMs, updateStatusMs, dispatchMs int64
 	var claimed *db.AgentTaskQueue
 	var reclaimCheckAfter time.Time
+	var rerouteID pgtype.UUID
+	var idleNotices []idleNotice
 	defer func() {
 		s.maybeLogClaimSlow(agentID, outcome, start, getAgentMs, countRunningMs, claimAgentMs, reanchorMs, updateStatusMs, dispatchMs)
 	}()
@@ -3526,7 +3528,10 @@ func (s *TaskService) claimTask(ctx context.Context, agentID, runtimeID pgtype.U
 		// before its state transition; the claim handler then rechecks the freshly
 		// loaded Agent before returning any payload. Runtime mutation teardown is
 		// responsible for serializing and settling the remaining queued rows.
-		if runtimeID.Valid && agent.RuntimeID != runtimeID {
+		// A model-routed run may sit on any runtime of its list, so with
+		// server-side model choice on, the SQL fence (which still binds plain
+		// runs to the agent's runtime) decides instead.
+		if runtimeID.Valid && agent.RuntimeID != runtimeID && !ModelChoiceEnabled() {
 			outcome = "runtime_mismatch"
 			return nil
 		}
@@ -3584,16 +3589,37 @@ func (s *TaskService) claimTask(ctx context.Context, agentID, runtimeID pgtype.U
 			reanchorMs = time.Since(t0).Milliseconds()
 		}
 
+		// The model list decides where a model-routed run runs, at this
+		// moment: elsewhere rolls the claim back and the run is re-routed.
+		notices, err := s.claimModelChoice(ctx, qtx, &task, claimRuntimeID)
+		if errors.Is(err, errClaimNotThisRuntime) {
+			rerouteID = task.ID
+			outcome = "model_elsewhere"
+		}
+		if err != nil {
+			return err
+		}
+		idleNotices = notices
+
 		claimedTask := task
 		claimed = &claimedTask
 		return nil
 	})
+	if errors.Is(err, errClaimNotThisRuntime) {
+		if queued, gerr := s.Queries.GetAgentTask(ctx, rerouteID); gerr == nil {
+			if routed := s.RouteQueuedTask(ctx, queued); routed.RuntimeID != queued.RuntimeID {
+				s.notifyTaskAvailable(routed)
+			}
+		}
+		return nil, nil
+	}
 	if err != nil {
 		if outcome == "unknown" {
 			outcome = "error_transaction"
 		}
 		return nil, err
 	}
+	s.publishIdleNotices(idleNotices)
 	if claimed == nil {
 		return nil, nil
 	}
@@ -4903,6 +4929,22 @@ func (s *TaskService) FailTaskWithTransition(ctx context.Context, taskID pgtype.
 		}
 	}
 
+	// A model-routed run that hit a provider limit is repeated at once on the
+	// next model of its list: its runtime goes into runtime_unavailable until
+	// the reset the error names, and the repeat is routed in the same
+	// transaction (or waits, opening the agent's idle episode).
+	quotaRetry := false
+	if !wantRetry && ModelChoiceEnabled() && isQuotaReason(failureReason) {
+		if parent, perr := s.Queries.GetAgentTask(ctx, taskID); perr == nil && parent.ModelChoice != nil && quotaRetryEligible(parent) {
+			quotaRetry, wantRetry = true, true
+			retryMaxAttempts = pgtype.Int4{Int32: max(parent.MaxAttempts, parent.Attempt+1), Valid: true}
+			if agent, aerr := s.Queries.GetAgent(ctx, parent.AgentID); aerr == nil {
+				retryOverlay = s.buildRuntimeMCPOverlay(ctx, parent.OriginatorUserID, agent)
+			}
+		}
+	}
+	var idleNotices []idleNotice
+
 	var task db.AgentTaskQueue
 	var retried *db.AgentTaskQueue
 	if err := s.runInTx(ctx, func(qtx *db.Queries) error {
@@ -5011,6 +5053,11 @@ func (s *TaskService) FailTaskWithTransition(ctx context.Context, taskID pgtype.
 		// ON CONFLICT DO NOTHING, which yields the slot instead of raising and so
 		// can never abort this transaction — which also carries the parent's
 		// failed status.
+		if quotaRetry {
+			if err := markRuntimeUnavailable(ctx, qtx, t, errMsg, time.Now()); err != nil {
+				return fmt.Errorf("mark runtime unavailable: %w", err)
+			}
+		}
 		createRetry := wantRetry
 		if createRetry {
 			successor, herr := hasRunnableSuccessor(ctx, qtx, t)
@@ -5069,6 +5116,13 @@ func (s *TaskService) FailTaskWithTransition(ctx context.Context, taskID pgtype.
 						ChildTaskID: child.ID, ParentTaskID: taskID,
 					}); err != nil {
 						return fmt.Errorf("copy retry channel delivery: %w", err)
+					}
+					if quotaRetry {
+						routed, _, _, notices, rerr := s.routeTask(ctx, qtx, child, time.Now())
+						if rerr != nil {
+							return fmt.Errorf("route quota retry: %w", rerr)
+						}
+						child, idleNotices = routed, notices
 					}
 					retried = &child
 				}
@@ -5157,6 +5211,7 @@ func (s *TaskService) FailTaskWithTransition(ctx context.Context, taskID pgtype.
 	}
 
 	slog.Warn("task failed", "task_id", util.UUIDToString(task.ID), "issue_id", util.UUIDToString(task.IssueID), "error", errMsg, "failure_reason", failureReason)
+	s.publishIdleNotices(idleNotices)
 	s.captureTaskFailed(ctx, task)
 	s.deliverConveyorAfterTerminal(ctx, task)
 
@@ -7188,6 +7243,10 @@ func priorityToInt(p string) int32 {
 // waiting for the next poll.
 func (s *TaskService) NotifyTaskEnqueued(ctx context.Context, task db.AgentTaskQueue) {
 	s.captureTaskQueued(ctx, task)
+	// A run whose model comes from a list belongs on the runtime the list
+	// chooses; routing happens here, once the enqueue has committed, so every
+	// enqueue path shares it. The claim re-checks the choice anyway.
+	task = s.RouteQueuedTask(ctx, task)
 	s.notifyTaskAvailable(task)
 }
 

@@ -5,7 +5,9 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/multica-ai/multica/server/internal/testutil"
+	db "github.com/multica-ai/multica/server/pkg/db/generated"
 )
 
 // modelRig is a workspace slice with three runtimes, a strong and a mid
@@ -338,5 +340,25 @@ func TestModelProfileImportDryRunFixture(t *testing.T) {
 		if p.Action != "unchanged" {
 			t.Fatalf("second import changes %s: %s", p.Name, p.Action)
 		}
+	}
+}
+
+func TestModelOptionClaimPayloadUsesChosenRow(t *testing.T) {
+	plain := &db.AgentTaskQueue{}
+	if claimedModelOption(plain) != nil {
+		t.Fatal("a plain run has no chosen row")
+	}
+	routed := &db.AgentTaskQueue{
+		ModelChoice:   []byte(`{"source":"agent_profile","reason":"fallback_row","position":2,"chosen":{"position":2,"runtime_id":"rt","model":"opus","thinking_level":"max","custom_args":["--disallowedTools","mcp__github__delete_repo"]},"rows":[]}`),
+		ModelPosition: pgtype.Int4{Int32: 2, Valid: true},
+	}
+	got := claimedModelOption(routed)
+	if got == nil || got.Model != "opus" || got.ThinkingLevel != "max" || len(got.CustomArgs) != 2 {
+		t.Fatalf("chosen row: %+v", got)
+	}
+	// Routed but not yet claimed (no position): the agent's fields stay.
+	routed.ModelPosition = pgtype.Int4{}
+	if claimedModelOption(routed) != nil {
+		t.Fatal("an unclaimed route must not change the payload")
 	}
 }
