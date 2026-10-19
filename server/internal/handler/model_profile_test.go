@@ -223,6 +223,23 @@ func TestModelProfileAgentModelsView(t *testing.T) {
 		t.Fatalf("unavailable list: %v", list)
 	}
 
+	// A run waiting for a free model is listed with its issue.
+	waitingIssue := dbfx.Issue(t, "model waiting issue")
+	dbfx.Task(t, agent, testutil.Cols{"runtime_id": r.runtimes["codex-main"], "issue_id": waitingIssue,
+		"model_choice": testutil.Raw(`'{"source":"agent_profile","reason":"all_unavailable","rows":[]}'::jsonb`)})
+	var withWaiting struct {
+		Waiting []struct {
+			IssueIdentifier string `json:"issue_identifier"`
+			Choice          struct {
+				Reason string `json:"reason"`
+			} `json:"choice"`
+		} `json:"waiting"`
+	}
+	testutil.Call(t, testHandler.GetAgentModels, withURLParam(newRequest("GET", "/", nil), "id", agent)).Want(http.StatusOK).JSON(&withWaiting)
+	if len(withWaiting.Waiting) != 1 || withWaiting.Waiting[0].IssueIdentifier == "" || withWaiting.Waiting[0].Choice.Reason != "all_unavailable" {
+		t.Fatalf("waiting runs: %+v", withWaiting.Waiting)
+	}
+
 	// An own list on a private runtime of another member is refused.
 	member := dbfx.User(t, "model other owner", "model-other-owner@multica.ai")
 	private := dbfx.Runtime(t, "model private", testutil.Cols{"owner_id": member})
