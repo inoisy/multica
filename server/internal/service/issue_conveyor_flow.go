@@ -6,16 +6,17 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"regexp"
 	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/multica-ai/multica/server/internal/issuestatus"
 	"github.com/multica-ai/multica/server/internal/util"
 	db "github.com/multica-ai/multica/server/pkg/db/generated"
 	"github.com/multica-ai/multica/server/pkg/dbid"
 	"github.com/multica-ai/multica/server/pkg/protocol"
+	"github.com/multica-ai/multica/server/pkg/taskfailure"
 )
 
 func (s *TaskService) conveyor() *IssueConveyorService { return &IssueConveyorService{Tasks: s} }
@@ -24,12 +25,14 @@ func (s *TaskService) conveyor() *IssueConveyorService { return &IssueConveyorSe
 // run and nothing owed before it is handed to its coordinator.
 const conveyorStallAfter = 5 * time.Minute
 
-// conveyorQuotaPattern is the provider-limit wording the quota handler also
-// looks for; the failure reason is the primary signal, this is the fallback.
-var conveyorQuotaPattern = regexp.MustCompile(`(?i)usage limit|spend limit|rate.?limit|hit your .{0,20}limit|quota|too many requests|\b429\b`)
-
 func isQuotaFailure(task db.AgentTaskQueue) bool {
-	return strings.Contains(strings.ToLower(task.FailureReason.String), "quota") || conveyorQuotaPattern.MatchString(task.Error.String)
+	// A persisted reason is authoritative: test output and filesystem errors
+	// can contain provider vocabulary without being provider failures.
+	reason := taskfailure.Reason(strings.TrimSpace(task.FailureReason.String))
+	if reason == "" {
+		reason = taskfailure.Classify(task.Error.String)
+	}
+	return reason == taskfailure.ReasonAgentProviderQuotaLimit || reason == taskfailure.ReasonAgentProviderCapacityOrRateLimit
 }
 
 // conveyorVerdict is what the route decides about a run that ended.
@@ -312,8 +315,8 @@ func (s *IssueConveyorService) withdrawStaleTasks(ctx context.Context, cv db.Iss
 	}
 }
 
-// DeliverPending creates the runs the route owes for one issue, then shows the
-// step in the issue metadata. Failures stay pending for the job.
+// DeliverPending creates the runs the route owes for one issue. Failures stay
+// pending for the job, including failures to update the issue's status.
 func (s *IssueConveyorService) DeliverPending(ctx context.Context, issueID pgtype.UUID) {
 	pending, err := s.q().ListPendingIssueConveyorActions(ctx, db.ListPendingIssueConveyorActionsParams{IssueID: issueID, PageSize: 20})
 	if err != nil {
@@ -325,7 +328,6 @@ func (s *IssueConveyorService) DeliverPending(ctx context.Context, issueID pgtyp
 			slog.Warn("conveyor: deliver action failed", "action_id", util.UUIDToString(a.ID), "error", err)
 		}
 	}
-	s.syncStep(ctx, issueID)
 }
 
 // DeliverAllPending is the job body: every owed run on any issue.
@@ -335,42 +337,15 @@ func (s *IssueConveyorService) DeliverAllPending(ctx context.Context) error {
 		return err
 	}
 	var errs []error
-	synced := map[pgtype.UUID]bool{}
 	for _, a := range pending {
 		if err := s.deliver(ctx, a.ID); err != nil {
 			errs = append(errs, fmt.Errorf("action %s: %w", util.UUIDToString(a.ID), err))
-		}
-		if !synced[a.IssueID] {
-			synced[a.IssueID] = true
-			s.syncStep(ctx, a.IssueID)
 		}
 	}
 	if stallErr := s.EscalateStalled(ctx); stallErr != nil {
 		errs = append(errs, stallErr)
 	}
 	return errors.Join(errs...)
-}
-
-// syncStep shows the route position in metadata.step. The metadata is a
-// display of the route's own state, written outside the route lock so the
-// issue row is never taken while the route row is held.
-func (s *IssueConveyorService) syncStep(ctx context.Context, issueID pgtype.UUID) {
-	cv, err := s.q().GetIssueConveyor(ctx, issueID)
-	if err != nil || cv.Status == ConveyorDisabled {
-		return
-	}
-	route, err := conveyorRoute(cv)
-	if err != nil {
-		return
-	}
-	node := conveyorNodeAt(route, cv.CurIdx)
-	if node == nil {
-		return
-	}
-	value, _ := json.Marshal(node.Step)
-	if _, err = s.q().SetIssueMetadataKey(ctx, db.SetIssueMetadataKeyParams{ID: cv.IssueID, WorkspaceID: cv.WorkspaceID, Key: "step", Value: value}); err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		slog.Warn("conveyor: show step in metadata failed", "issue_id", util.UUIDToString(issueID), "error", err)
-	}
 }
 
 // deliver creates the run an action owes. The overlay is resolved before any
@@ -414,6 +389,19 @@ func (s *IssueConveyorService) deliver(ctx context.Context, actionID pgtype.UUID
 	}
 	defer tx.Rollback(ctx)
 	q := s.Tasks.Queries.WithTx(tx)
+	// Catalog -> issue -> route. Terminal writes hold task -> route and never
+	// take the issue row. Delivery only inserts a new task, so these paths
+	// cannot wait on each other in reverse order.
+	if err = q.LockIssueStatusCatalogShared(ctx, issue.WorkspaceID); err != nil {
+		return err
+	}
+	issue, err = q.LockIssueForConveyorDelivery(ctx, db.LockIssueForConveyorDeliveryParams{ID: issue.ID, WorkspaceID: issue.WorkspaceID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
 	cv, err := q.LockIssueConveyor(ctx, action.IssueID)
 	if err != nil {
 		return err
@@ -458,6 +446,16 @@ func (s *IssueConveyorService) deliver(ctx context.Context, actionID pgtype.UUID
 	if err != nil {
 		return err
 	}
+	node := conveyorNodeAt(route, cv.CurIdx)
+	if node == nil {
+		return fmt.Errorf("conveyor has no node at %d", cv.CurIdx)
+	}
+	status := conveyorIssueStatus(node.Step)
+	if status != "" {
+		if err = validateConveyorIssueStatus(ctx, q, cv.WorkspaceID, status); err != nil {
+			return wait(err.Error())
+		}
+	}
 	var squadID pgtype.UUID
 	isLeader := false
 	if issue.AssigneeType.String == "squad" && issue.AssigneeID.Valid {
@@ -487,11 +485,54 @@ func (s *IssueConveyorService) deliver(ctx context.Context, actionID pgtype.UUID
 	if _, err = q.SaveIssueConveyor(ctx, saveParams(cv)); err != nil {
 		return err
 	}
+	prevStatus := issue.Status
+	if status != "" && status != issue.Status {
+		issue, err = q.UpdateIssueStatus(ctx, db.UpdateIssueStatusParams{ID: issue.ID, WorkspaceID: issue.WorkspaceID, Status: status})
+		if err != nil {
+			return err
+		}
+	}
+	value, _ := json.Marshal(node.Step)
+	_, err = q.SetIssueMetadataKey(ctx, db.SetIssueMetadataKeyParams{ID: issue.ID, WorkspaceID: issue.WorkspaceID, Key: "step", Value: value})
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return err
+	}
+	issue, err = q.GetIssue(ctx, issue.ID)
+	if err != nil {
+		return err
+	}
 	if err = tx.Commit(ctx); err != nil {
 		return err
 	}
+	if s.Tasks.Bus != nil {
+		s.Tasks.broadcastIssueUpdated(ctx, issue, prevStatus)
+	}
 	s.Tasks.broadcastTaskEvent(ctx, protocol.EventTaskQueued, task)
 	s.Tasks.NotifyTaskEnqueued(ctx, task)
+	return nil
+}
+
+func conveyorIssueStatus(step string) string {
+	switch step {
+	case conveyorStepDev:
+		return issuestatus.InProgress
+	case conveyorStepQA, conveyorStepReview:
+		return step
+	case conveyorStepClose:
+		return issuestatus.InReview
+	default:
+		return ""
+	}
+}
+
+func validateConveyorIssueStatus(ctx context.Context, q *db.Queries, workspaceID pgtype.UUID, status string) error {
+	entry, err := issuestatus.Resolve(ctx, q, workspaceID, status)
+	if err != nil {
+		return fmt.Errorf("route status %q is unavailable: %w", status, err)
+	}
+	if entry.Category != issuestatus.CategoryStarted {
+		return fmt.Errorf("route status %q must belong to the started category", status)
+	}
 	return nil
 }
 

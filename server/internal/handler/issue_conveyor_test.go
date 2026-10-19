@@ -23,6 +23,13 @@ type conveyorHandlerRig struct {
 func newConveyorHandlerRig(t *testing.T) *conveyorHandlerRig {
 	t.Helper()
 	r := &conveyorHandlerRig{t: t, issue: dbfx.Issue(t, "routed through the API"), agents: map[string]string{}}
+	// Enable seeds custom statuses in this package's shared workspace.
+	// Remove only entries owned by this test when the fixture is torn down.
+	for _, key := range []string{"qa", "review"} {
+		if dbfx.Count(t, "SELECT count(*) FROM issue_status WHERE workspace_id=$1 AND key=$2", testWorkspaceID, key) == 0 {
+			dbfx.Cleanup(t, "DELETE FROM issue_status WHERE workspace_id=$1 AND key=$2", testWorkspaceID, key)
+		}
+	}
 	for _, name := range []string{"dev", "qa", "lead", "bystander"} {
 		r.agents[name] = dbfx.Agent(t, "conveyor "+name, testRuntimeID)
 	}

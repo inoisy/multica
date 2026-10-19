@@ -2,9 +2,13 @@
 SELECT * FROM issue_conveyor WHERE issue_id = @issue_id;
 
 -- name: LockIssueConveyor :one
--- Lock order: the terminal-status write on agent_task_queue comes first, this
--- row second. Every other writer takes this row before it inserts anything.
+-- Terminal writes take task -> route without locking the issue. Delivery takes
+-- catalog -> issue -> route and only inserts a new task, never locks an old one.
 SELECT * FROM issue_conveyor WHERE issue_id = @issue_id FOR UPDATE;
+
+-- name: LockIssueForConveyorDelivery :one
+-- Keep closure and status/metadata projection atomic with delivery of a run.
+SELECT * FROM issue WHERE id = @id AND workspace_id = @workspace_id FOR UPDATE;
 
 -- name: InsertIssueConveyor :one
 INSERT INTO issue_conveyor (

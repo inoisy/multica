@@ -8,10 +8,14 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/multica-ai/multica/server/internal/events"
+	"github.com/multica-ai/multica/server/internal/issuestatus"
 	"github.com/multica-ai/multica/server/internal/util"
 	db "github.com/multica-ai/multica/server/pkg/db/generated"
 	"github.com/multica-ai/multica/server/pkg/dbid"
+	"github.com/multica-ai/multica/server/pkg/protocol"
 )
 
 // IssueConveyorService owns the opt-in linear route of one issue. An executor
@@ -299,9 +303,13 @@ func (s *IssueConveyorService) Apply(ctx context.Context, issue db.Issue, invoke
 	defer tx.Rollback(ctx)
 	q := s.Tasks.Queries.WithTx(tx)
 
-	// The route row is locked before anything else, like in every other
-	// writer, so the lock order stays task -> route in the terminal path and
-	// route -> nothing here.
+	// Enable may add route statuses. Take the catalog before the route, as
+	// delivery does, to serialize creation and respect concurrent archiving.
+	if cmd.Action == ConveyorCmdEnable {
+		if err = q.LockIssueStatusCatalog(ctx, issue.WorkspaceID); err != nil {
+			return ConveyorView{}, err
+		}
+	}
 	cv, err := q.LockIssueConveyor(ctx, issue.ID)
 	exists := err == nil
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
@@ -339,6 +347,11 @@ func (s *IssueConveyorService) Apply(ctx context.Context, issue db.Issue, invoke
 	}
 	if err = tx.Commit(ctx); err != nil {
 		return ConveyorView{}, err
+	}
+	if cmd.Action == ConveyorCmdEnable && s.Tasks.Bus != nil {
+		s.Tasks.Bus.Publish(events.Event{Type: protocol.EventIssueStatusChanged,
+			WorkspaceID: util.UUIDToString(issue.WorkspaceID), ActorType: "member", ActorID: util.UUIDToString(invoker),
+			Payload: map[string]any{"action": "conveyor_enable"}})
 	}
 	s.withdrawStaleTasks(ctx, cv)
 	// Delivery failures are the job's to retry; the command itself has landed.
@@ -390,6 +403,9 @@ func (s *IssueConveyorService) enable(ctx context.Context, q *db.Queries, issue 
 	if err = s.requireNoLiveRun(ctx, q, issue.ID, route[0].AgentID); err != nil {
 		return cv, err
 	}
+	if err = ensureConveyorIssueStatuses(ctx, q, issue.WorkspaceID, invoker, route); err != nil {
+		return cv, err
+	}
 	raw, _ := json.Marshal(route)
 	coordinator, _ := util.ParseUUID(route[len(route)-1].AgentID)
 	if !exists {
@@ -411,6 +427,45 @@ func (s *IssueConveyorService) enable(ctx context.Context, q *db.Queries, issue 
 	}
 	_, err = s.owe(ctx, q, cv, conveyorActionRunStep, 0, "enabled", nil)
 	return cv, err
+}
+
+// Route steps use ordinary custom statuses. Existing catalog entries keep
+// their names and colors; archived or terminal keys cannot be repurposed.
+func ensureConveyorIssueStatuses(ctx context.Context, q *db.Queries, workspaceID, invoker pgtype.UUID, route []ConveyorNode) error {
+	for _, node := range route {
+		if node.Step != conveyorStepQA && node.Step != conveyorStepReview {
+			continue
+		}
+		_, err := q.GetIssueStatusEntryByKey(ctx, db.GetIssueStatusEntryByKeyParams{WorkspaceID: workspaceID, Key: node.Step})
+		if errors.Is(err, pgx.ErrNoRows) {
+			member, merr := q.GetMemberByUserAndWorkspace(ctx, db.GetMemberByUserAndWorkspaceParams{WorkspaceID: workspaceID, UserID: invoker})
+			if merr != nil && !errors.Is(merr, pgx.ErrNoRows) {
+				return merr
+			}
+			if merr != nil || (member.Role != "owner" && member.Role != "admin") {
+				return conveyorErr(ErrConveyorForbidden, "an owner or admin must create the missing route status %q", node.Step)
+			}
+			name := "QA"
+			if node.Step == conveyorStepReview {
+				name = "Review"
+			}
+			_, err = q.CreateIssueStatusEntry(ctx, db.CreateIssueStatusEntryParams{
+				WorkspaceID: workspaceID, Key: node.Step, Name: name,
+				Category: issuestatus.CategoryStarted, Color: "#f59e0b",
+			})
+			var conflict *pgconn.PgError
+			if errors.As(err, &conflict) && conflict.Code == "23505" {
+				return conveyorErr(ErrConveyorConflict, "cannot create route status %q: name %q is already in use; configure the required key in the status catalog", node.Step, name)
+			}
+		}
+		if err != nil {
+			return err
+		}
+		if err = validateConveyorIssueStatus(ctx, q, workspaceID, node.Step); err != nil {
+			return conveyorErr(ErrConveyorConflict, "%s", err)
+		}
+	}
+	return nil
 }
 
 func saveParams(cv db.IssueConveyor) db.SaveIssueConveyorParams {

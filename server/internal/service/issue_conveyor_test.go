@@ -273,6 +273,9 @@ func TestConveyorHappyPath(t *testing.T) {
 	if view.Status != ConveyorActive || view.Step != "dev" {
 		t.Fatalf("enable: status %s step %s", view.Status, view.Step)
 	}
+	if got := r.loadIssue().Status; got != "in_progress" {
+		t.Fatalf("dev issue status = %s, want in_progress", got)
+	}
 	dev := r.only("dev")
 	if !dev.ConveyorActionID.Valid || !dev.OriginatorUserID.Valid || dev.OriginatorUserID != r.owner {
 		t.Fatalf("first run is not the route's run for the person who enabled it: %+v", dev)
@@ -286,11 +289,17 @@ func TestConveyorHappyPath(t *testing.T) {
 		t.Fatalf("lead was woken after dev (%d runs)", got)
 	}
 	r.only("qa")
+	if got := r.loadIssue().Status; got != "qa" {
+		t.Fatalf("qa issue status = %s, want qa", got)
+	}
 	r.pass("qa", commit)
 	if got := len(r.tasksOf("lead")); got != 0 {
 		t.Fatalf("lead was woken after qa (%d runs)", got)
 	}
 	r.only("review")
+	if got := r.loadIssue().Status; got != "review" {
+		t.Fatalf("review issue status = %s, want review", got)
+	}
 	r.pass("review", commit)
 
 	lead := r.only("lead")
@@ -304,13 +313,49 @@ func TestConveyorHappyPath(t *testing.T) {
 	if view.Status != ConveyorCompleted || r.metadataStep() != "close" {
 		t.Fatalf("end state: status %s, metadata.step %q", view.Status, r.metadataStep())
 	}
-	if status := r.loadIssue().Status; status == "done" {
-		t.Fatal("the route closed the issue; closing is the coordinator's")
+	if status := r.loadIssue().Status; status != "in_review" {
+		t.Fatalf("final issue status = %s, want in_review", status)
 	}
 	if got := len(r.eventsOf(conveyorEventInput)); got != 3 {
 		t.Fatalf("journal has %d inputs, want 3:%s", got, r.dump())
 	}
 	r.everyInputDecided()
+}
+
+func TestConveyorFailureReasonOwnsQuotaDecision(t *testing.T) {
+	cases := []struct {
+		name, reason, message string
+		wait                  bool
+	}{
+		{"test 429", "agent_error", "tests failed: expected status 200, got 429", false},
+		{"disk quota", "agent_error", "write /tmp/x: disk quota exceeded", false},
+		{"rate limit test", "agent_error", "TestRateLimitMiddleware failed: rate limit not applied", false},
+		{"explicit unknown", taskfailure.ReasonAgentUnknown.String(), "quota", false},
+		{"unrecognized reason", "disk_quota_exceeded", "quota", false},
+		{"provider quota", taskfailure.ReasonAgentProviderQuotaLimit.String(), "provider stopped", true},
+		{"provider capacity", taskfailure.ReasonAgentProviderCapacityOrRateLimit.String(), "provider stopped", true},
+		{"legacy quota", "", "usage limit reached", true},
+		{"legacy crash", "", "agent crashed", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			r := newConveyorRig(t)
+			r.enable()
+			task := r.start(r.only("dev"))
+			r.fail(task, tc.reason, tc.message)
+			want, leads := ConveyorAwaitingCoordinator, 1
+			if tc.wait {
+				want, leads = ConveyorWaitingProvider, 0
+			}
+			if got := r.view().Status; got != want {
+				t.Fatalf("route status = %s, want %s", got, want)
+			}
+			if got := len(r.tasksOf("lead")); got != leads {
+				t.Fatalf("coordinator runs = %d, want %d", got, leads)
+			}
+			r.everyInputDecided()
+		})
+	}
 }
 
 func TestConveyorEnableValidation(t *testing.T) {
@@ -432,6 +477,9 @@ func TestConveyorEscalation(t *testing.T) {
 			view = r.mustApply(ConveyorCommand{Action: ConveyorCmdResume, FromStep: "dev", ExpectedRevision: rev})
 			if view.Round != 2 || view.Status != ConveyorActive || view.Step != "dev" {
 				t.Fatalf("resume: %+v", view)
+			}
+			if status := r.loadIssue().Status; status != "in_progress" {
+				t.Fatalf("resume issue status = %s, want in_progress", status)
 			}
 			if got := len(r.tasksOf("dev")); got < 2 {
 				t.Fatalf("resume at dev started no new dev run (%d)", got)
@@ -862,6 +910,9 @@ func TestConveyorPendingDelivery(t *testing.T) {
 	if view := r.view(); view.PendingActions != 1 || view.Step != "qa" || view.Status != ConveyorActive {
 		t.Fatalf("view while owed: %+v", view)
 	}
+	if r.loadIssue().Status != "in_progress" || r.metadataStep() != "dev" {
+		t.Fatal("undelivered qa action moved the issue projection")
+	}
 
 	r.f.Exec(t, "UPDATE agent SET runtime_id=(SELECT runtime_id FROM agent WHERE id=$2) WHERE id=$1", qa, r.agents["dev"])
 	restarted := &IssueConveyorService{Tasks: &TaskService{Queries: r.f.q, TxStarter: r.f.Pool, Bus: r.f.svc.TaskSvc.Bus}}
@@ -874,6 +925,9 @@ func TestConveyorPendingDelivery(t *testing.T) {
 	r.only("qa")
 	if len(r.pending()) != 0 {
 		t.Fatal("a delivered action is still owed")
+	}
+	if r.loadIssue().Status != "qa" || r.metadataStep() != "qa" {
+		t.Fatal("recovered delivery did not update the issue projection")
 	}
 }
 

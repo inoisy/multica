@@ -967,8 +967,8 @@ const lockIssueConveyor = `-- name: LockIssueConveyor :one
 SELECT id, workspace_id, issue_id, route, revision, cur_idx, round, cur_task_id, status, coordinator_agent_id, enabled_by, accepted_commit, waiting_reason, created_at, updated_at FROM issue_conveyor WHERE issue_id = $1 FOR UPDATE
 `
 
-// Lock order: the terminal-status write on agent_task_queue comes first, this
-// row second. Every other writer takes this row before it inserts anything.
+// Terminal writes take task -> route without locking the issue. Delivery takes
+// catalog -> issue -> route and only inserts a new task, never locks an old one.
 func (q *Queries) LockIssueConveyor(ctx context.Context, issueID pgtype.UUID) (IssueConveyor, error) {
 	row := q.db.QueryRow(ctx, lockIssueConveyor, issueID)
 	var i IssueConveyor
@@ -1017,6 +1017,54 @@ func (q *Queries) LockIssueConveyorEvent(ctx context.Context, id pgtype.UUID) (I
 		&i.Reason,
 		&i.Details,
 		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const lockIssueForConveyorDelivery = `-- name: LockIssueForConveyorDelivery :one
+SELECT id, workspace_id, title, description, status, priority, assignee_type, assignee_id, creator_type, creator_id, parent_issue_id, acceptance_criteria, context_refs, position, due_date, created_at, updated_at, number, project_id, origin_type, origin_id, first_executed_at, start_date, metadata, stage, properties, revision, last_activity_at, triage_state, duplicate_of_issue_id FROM issue WHERE id = $1 AND workspace_id = $2 FOR UPDATE
+`
+
+type LockIssueForConveyorDeliveryParams struct {
+	ID          pgtype.UUID `json:"id"`
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+}
+
+// Keep closure and status/metadata projection atomic with delivery of a run.
+func (q *Queries) LockIssueForConveyorDelivery(ctx context.Context, arg LockIssueForConveyorDeliveryParams) (Issue, error) {
+	row := q.db.QueryRow(ctx, lockIssueForConveyorDelivery, arg.ID, arg.WorkspaceID)
+	var i Issue
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.Title,
+		&i.Description,
+		&i.Status,
+		&i.Priority,
+		&i.AssigneeType,
+		&i.AssigneeID,
+		&i.CreatorType,
+		&i.CreatorID,
+		&i.ParentIssueID,
+		&i.AcceptanceCriteria,
+		&i.ContextRefs,
+		&i.Position,
+		&i.DueDate,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Number,
+		&i.ProjectID,
+		&i.OriginType,
+		&i.OriginID,
+		&i.FirstExecutedAt,
+		&i.StartDate,
+		&i.Metadata,
+		&i.Stage,
+		&i.Properties,
+		&i.Revision,
+		&i.LastActivityAt,
+		&i.TriageState,
+		&i.DuplicateOfIssueID,
 	)
 	return i, err
 }
