@@ -194,3 +194,7 @@ WHERE a.conveyor_id = @conveyor_id AND a.kind = 'action' AND a.action = 'run_ste
   AND a.idx = @idx AND a.round = @round
 ORDER BY t.created_at DESC
 LIMIT 1;
+
+-- name: ListIssueConveyorsByIssues :many
+-- The routes of a page of issues (an epic's sub-issues), one row per routed issue.
+SELECT * FROM issue_conveyor WHERE issue_id = ANY(@issue_ids::uuid[]);
