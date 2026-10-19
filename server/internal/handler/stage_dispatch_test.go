@@ -179,3 +179,30 @@ func TestClosedStageStillWakesTheEpicOwnerWithoutDispatch(t *testing.T) {
 		t.Fatal("a stage was dispatched without stage dispatch")
 	}
 }
+
+func TestListStageDispatchShowsTheWorkspaceEpics(t *testing.T) {
+	r := newStageRig(t)
+	var out struct {
+		Epics []StageDispatchEpicResponse `json:"epics"`
+	}
+	list := func() {
+		testutil.Call(t, testHandler.ListStageDispatch, squadScopeReq("", http.MethodGet, "/api/stage-dispatch", nil, nil)).Want(http.StatusOK).JSON(&out)
+	}
+	list()
+	for _, e := range out.Epics {
+		if e.Issue.ID == r.epic {
+			t.Fatal("an epic without dispatch is listed")
+		}
+	}
+	r.set(map[string]any{"squad_id": r.squad}).Want(http.StatusOK)
+	list()
+	found := false
+	for _, e := range out.Epics {
+		if e.Issue.ID == r.epic {
+			found = e.SquadID == r.squad && e.Issue.Identifier != "" && e.DispatchBy != nil
+		}
+	}
+	if !found {
+		t.Fatalf("epic with dispatch missing or incomplete: %+v", out.Epics)
+	}
+}
