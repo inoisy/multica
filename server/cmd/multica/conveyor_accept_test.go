@@ -302,11 +302,15 @@ func TestAcceptRepositoryNamesTheWorkspaceRepository(t *testing.T) {
 
 	ctx := context.Background()
 	resolve := func(p string) string {
-		got, err := filepath.EvalSymlinks(acceptRepository(ctx, p))
+		got := acceptRepository(ctx, p)
+		if !strings.HasPrefix(got, "file://") {
+			t.Fatalf("%q came back as %q, want a file:// URL", p, got)
+		}
+		real, err := filepath.EvalSymlinks(strings.TrimPrefix(got, "file://"))
 		if err != nil {
 			t.Fatal(err)
 		}
-		return got
+		return real
 	}
 	want, _ := filepath.EvalSymlinks(local)
 	if got := resolve(local); got != want {
