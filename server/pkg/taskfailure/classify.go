@@ -75,6 +75,11 @@ func isUsageLimit403(lower string) bool {
 // touching every backend; a string classifier gives us refined
 // failure_reason today and lets per-backend structured upgrades land
 // independently.
+// SubsPickRefusalWitness is the instant refusal of the host's subscription
+// picker ("подписки runtime выше лимита агентам"): no subscription behind the
+// runtime may be spent by agents now.
+const SubsPickRefusalWitness = "выше лимита агентам"
+
 func Classify(rawError string) Reason {
 	trimmed := strings.TrimSpace(rawError)
 	if trimmed == "" {
@@ -87,6 +92,12 @@ func Classify(rawError string) Reason {
 	lower := strings.ToLower(trimmed)
 
 	switch {
+	// The subscription picker refuses a run when every subscription behind
+	// the runtime is above the limit set for agents. That is the runtime's
+	// quota as far as model choice is concerned: the next model must run.
+	case strings.Contains(lower, SubsPickRefusalWitness):
+		return ReasonAgentProviderQuotaLimit
+
 	// A concurrent-request rejection can contain both "access token" and HTTP
 	// 403. Its specific semantic witness must beat the broader context and auth
 	// rules below; this classification does not itself make the reason retryable.
@@ -536,6 +547,10 @@ var legacyUsageLimit403Reasons = map[string]bool{
 // can be deleted once no daemon old enough to produce its wire shape is still
 // reporting.
 func NormalizeDaemonReason(reason, rawError string) Reason {
+	// Whatever the daemon called it, a subs-pick refusal is a quota.
+	if strings.Contains(strings.ToLower(rawError), SubsPickRefusalWitness) {
+		return ReasonAgentProviderQuotaLimit
+	}
 	if legacyConcurrentRequestLimitReasons[reason] &&
 		strings.Contains(strings.ToLower(rawError), concurrentRequestLimitWitness) {
 		return ReasonAgentProviderCapacityOrRateLimit

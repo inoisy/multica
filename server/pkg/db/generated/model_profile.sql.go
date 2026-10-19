@@ -27,6 +27,28 @@ func (q *Queries) ClearClosedIssueModelProfiles(ctx context.Context, arg ClearCl
 	return err
 }
 
+const closeModelIdleEpisode = `-- name: CloseModelIdleEpisode :one
+UPDATE model_idle_episode SET ended_at = now()
+WHERE agent_id = $1 AND ended_at IS NULL
+RETURNING id, workspace_id, agent_id, task_id, until, runtimes, started_at, ended_at
+`
+
+func (q *Queries) CloseModelIdleEpisode(ctx context.Context, agentID pgtype.UUID) (ModelIdleEpisode, error) {
+	row := q.db.QueryRow(ctx, closeModelIdleEpisode, agentID)
+	var i ModelIdleEpisode
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.AgentID,
+		&i.TaskID,
+		&i.Until,
+		&i.Runtimes,
+		&i.StartedAt,
+		&i.EndedAt,
+	)
+	return i, err
+}
+
 const countModelProfileReferences = `-- name: CountModelProfileReferences :one
 SELECT
  (SELECT count(*) FROM agent a WHERE a.workspace_id = $1 AND a.model_profile_id = $2 AND a.archived_at IS NULL)::bigint AS agents,
@@ -228,6 +250,26 @@ func (q *Queries) GetModelProfileInWorkspace(ctx context.Context, arg GetModelPr
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getOpenModelIdleEpisode = `-- name: GetOpenModelIdleEpisode :one
+SELECT id, workspace_id, agent_id, task_id, until, runtimes, started_at, ended_at FROM model_idle_episode WHERE agent_id = $1 AND ended_at IS NULL
+`
+
+func (q *Queries) GetOpenModelIdleEpisode(ctx context.Context, agentID pgtype.UUID) (ModelIdleEpisode, error) {
+	row := q.db.QueryRow(ctx, getOpenModelIdleEpisode, agentID)
+	var i ModelIdleEpisode
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.AgentID,
+		&i.TaskID,
+		&i.Until,
+		&i.Runtimes,
+		&i.StartedAt,
+		&i.EndedAt,
 	)
 	return i, err
 }
@@ -520,6 +562,51 @@ func (q *Queries) ListAgentModelOptionsByWorkspace(ctx context.Context, workspac
 	return items, nil
 }
 
+const listAgentWaitingModelTasks = `-- name: ListAgentWaitingModelTasks :many
+SELECT t.id, t.issue_id, t.model_choice, t.created_at, i.number AS issue_number, i.title AS issue_title
+FROM agent_task_queue t
+LEFT JOIN issue i ON i.id = t.issue_id
+WHERE t.agent_id = $1 AND t.status = 'queued' AND t.model_choice->>'reason' = 'all_unavailable'
+ORDER BY t.created_at
+`
+
+type ListAgentWaitingModelTasksRow struct {
+	ID          pgtype.UUID        `json:"id"`
+	IssueID     pgtype.UUID        `json:"issue_id"`
+	ModelChoice []byte             `json:"model_choice"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	IssueNumber pgtype.Int4        `json:"issue_number"`
+	IssueTitle  pgtype.Text        `json:"issue_title"`
+}
+
+// Unclaimed runs of the agent whose every model is unavailable now.
+func (q *Queries) ListAgentWaitingModelTasks(ctx context.Context, agentID pgtype.UUID) ([]ListAgentWaitingModelTasksRow, error) {
+	rows, err := q.db.Query(ctx, listAgentWaitingModelTasks, agentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListAgentWaitingModelTasksRow{}
+	for rows.Next() {
+		var i ListAgentWaitingModelTasksRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.IssueID,
+			&i.ModelChoice,
+			&i.CreatedAt,
+			&i.IssueNumber,
+			&i.IssueTitle,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAgentsByModelProfile = `-- name: ListAgentsByModelProfile :many
 SELECT id, workspace_id, name, avatar_url, runtime_mode, runtime_config, visibility, status, max_concurrent_tasks, owner_id, created_at, updated_at, description, runtime_id, instructions, archived_at, archived_by, custom_env, custom_args, mcp_config, model, thinking_level, composio_toolkit_allowlist, permission_mode, kind, system_key, disabled_runtime_skills, service_tier, conversation_starters, model_profile_id, disallowed_tools FROM agent
 WHERE workspace_id = $1 AND model_profile_id = $2 AND archived_at IS NULL
@@ -743,6 +830,128 @@ func (q *Queries) ListOpenIssuesWithModelProfile(ctx context.Context, arg ListOp
 	return items, nil
 }
 
+const listQueuedTasksForModelRouting = `-- name: ListQueuedTasksForModelRouting :many
+SELECT t.id, t.agent_id, t.issue_id, t.status, t.priority, t.dispatched_at, t.started_at, t.completed_at, t.result, t.error, t.created_at, t.context, t.runtime_id, t.session_id, t.work_dir, t.trigger_comment_id, t.chat_session_id, t.autopilot_run_id, t.attempt, t.max_attempts, t.parent_task_id, t.failure_reason, t.trigger_summary, t.force_fresh_session, t.is_leader_task, t.wait_reason, t.initiator_user_id, t.handoff_note, t.prepare_lease_expires_at, t.squad_id, t.runtime_mcp_overlay, t.escalation_for_task_id, t.fire_at, t.originator_user_id, t.runtime_connected_apps, t.coalesced_comment_ids, t.delivered_comment_ids, t.chat_input_task_id, t.chat_finalize_deferred_at, t.originator_source, t.delegated_from_task_id, t.retry_of_task_id, t.rerun_of_task_id, t.rule_version_id, t.trigger_evidence_kind, t.trigger_evidence_ref_id, t.accountable_user_id, t.session_rollout_missing, t.retired_session_id, t.quick_actions_disabled, t.regenerate_quick_actions_for, t.branch_name, t.durable_work_dir, t.channel_context_revision, t.comment_thread_id, t.cancelled_by_type, t.cancelled_by_id, t.cancelled_by_name, t.issue_snapshot, t.conveyor_action_id, t.model_position, t.model_choice FROM agent_task_queue t
+WHERE t.status = 'queued'
+  AND (
+    t.model_choice IS NOT NULL
+    OR EXISTS (SELECT 1 FROM agent a WHERE a.id = t.agent_id AND a.model_profile_id IS NOT NULL)
+    OR EXISTS (SELECT 1 FROM agent_model_option o WHERE o.agent_id = t.agent_id)
+    OR EXISTS (SELECT 1 FROM issue i WHERE i.id = t.issue_id AND i.model_profile_id IS NOT NULL)
+  )
+ORDER BY t.created_at
+LIMIT $1
+`
+
+// Unclaimed runs whose model comes from a list: already routed, or of an agent
+// on a profile or own list, or of an issue with a profile.
+func (q *Queries) ListQueuedTasksForModelRouting(ctx context.Context, pageSize int32) ([]AgentTaskQueue, error) {
+	rows, err := q.db.Query(ctx, listQueuedTasksForModelRouting, pageSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []AgentTaskQueue{}
+	for rows.Next() {
+		var i AgentTaskQueue
+		if err := rows.Scan(
+			&i.ID,
+			&i.AgentID,
+			&i.IssueID,
+			&i.Status,
+			&i.Priority,
+			&i.DispatchedAt,
+			&i.StartedAt,
+			&i.CompletedAt,
+			&i.Result,
+			&i.Error,
+			&i.CreatedAt,
+			&i.Context,
+			&i.RuntimeID,
+			&i.SessionID,
+			&i.WorkDir,
+			&i.TriggerCommentID,
+			&i.ChatSessionID,
+			&i.AutopilotRunID,
+			&i.Attempt,
+			&i.MaxAttempts,
+			&i.ParentTaskID,
+			&i.FailureReason,
+			&i.TriggerSummary,
+			&i.ForceFreshSession,
+			&i.IsLeaderTask,
+			&i.WaitReason,
+			&i.InitiatorUserID,
+			&i.HandoffNote,
+			&i.PrepareLeaseExpiresAt,
+			&i.SquadID,
+			&i.RuntimeMcpOverlay,
+			&i.EscalationForTaskID,
+			&i.FireAt,
+			&i.OriginatorUserID,
+			&i.RuntimeConnectedApps,
+			&i.CoalescedCommentIds,
+			&i.DeliveredCommentIds,
+			&i.ChatInputTaskID,
+			&i.ChatFinalizeDeferredAt,
+			&i.OriginatorSource,
+			&i.DelegatedFromTaskID,
+			&i.RetryOfTaskID,
+			&i.RerunOfTaskID,
+			&i.RuleVersionID,
+			&i.TriggerEvidenceKind,
+			&i.TriggerEvidenceRefID,
+			&i.AccountableUserID,
+			&i.SessionRolloutMissing,
+			&i.RetiredSessionID,
+			&i.QuickActionsDisabled,
+			&i.RegenerateQuickActionsFor,
+			&i.BranchName,
+			&i.DurableWorkDir,
+			&i.ChannelContextRevision,
+			&i.CommentThreadID,
+			&i.CancelledByType,
+			&i.CancelledByID,
+			&i.CancelledByName,
+			&i.IssueSnapshot,
+			&i.ConveyorActionID,
+			&i.ModelPosition,
+			&i.ModelChoice,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listWorkspaceOwnerUserIDs = `-- name: ListWorkspaceOwnerUserIDs :many
+SELECT user_id FROM member WHERE workspace_id = $1 AND role = 'owner' ORDER BY created_at, user_id
+`
+
+func (q *Queries) ListWorkspaceOwnerUserIDs(ctx context.Context, workspaceID pgtype.UUID) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, listWorkspaceOwnerUserIDs, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []pgtype.UUID{}
+	for rows.Next() {
+		var user_id pgtype.UUID
+		if err := rows.Scan(&user_id); err != nil {
+			return nil, err
+		}
+		items = append(items, user_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockModelProfilesInWorkspace = `-- name: LockModelProfilesInWorkspace :many
 SELECT id, when_exhausted_profile_id FROM model_profile
 WHERE workspace_id = $1
@@ -775,6 +984,45 @@ func (q *Queries) LockModelProfilesInWorkspace(ctx context.Context, workspaceID 
 		return nil, err
 	}
 	return items, nil
+}
+
+const openModelIdleEpisode = `-- name: OpenModelIdleEpisode :one
+INSERT INTO model_idle_episode (workspace_id, agent_id, task_id, until, runtimes)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (agent_id) WHERE ended_at IS NULL DO NOTHING
+RETURNING id, workspace_id, agent_id, task_id, until, runtimes, started_at, ended_at
+`
+
+type OpenModelIdleEpisodeParams struct {
+	WorkspaceID pgtype.UUID        `json:"workspace_id"`
+	AgentID     pgtype.UUID        `json:"agent_id"`
+	TaskID      pgtype.UUID        `json:"task_id"`
+	Until       pgtype.Timestamptz `json:"until"`
+	Runtimes    []byte             `json:"runtimes"`
+}
+
+// Opens the agent's idle episode unless one is open: zero rows means the
+// owner was already told.
+func (q *Queries) OpenModelIdleEpisode(ctx context.Context, arg OpenModelIdleEpisodeParams) (ModelIdleEpisode, error) {
+	row := q.db.QueryRow(ctx, openModelIdleEpisode,
+		arg.WorkspaceID,
+		arg.AgentID,
+		arg.TaskID,
+		arg.Until,
+		arg.Runtimes,
+	)
+	var i ModelIdleEpisode
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.AgentID,
+		&i.TaskID,
+		&i.Until,
+		&i.Runtimes,
+		&i.StartedAt,
+		&i.EndedAt,
+	)
+	return i, err
 }
 
 const reassignRuntimeModelReferences = `-- name: ReassignRuntimeModelReferences :exec
@@ -900,6 +1148,24 @@ func (q *Queries) SetAgentModelProfile(ctx context.Context, arg SetAgentModelPro
 	return i, err
 }
 
+const setClaimedTaskModelChoice = `-- name: SetClaimedTaskModelChoice :exec
+UPDATE agent_task_queue
+SET model_position = $1, model_choice = $2
+WHERE id = $3 AND status = 'dispatched'
+`
+
+type SetClaimedTaskModelChoiceParams struct {
+	ModelPosition pgtype.Int4 `json:"model_position"`
+	ModelChoice   []byte      `json:"model_choice"`
+	ID            pgtype.UUID `json:"id"`
+}
+
+// What the claim chose for the run it just dispatched.
+func (q *Queries) SetClaimedTaskModelChoice(ctx context.Context, arg SetClaimedTaskModelChoiceParams) error {
+	_, err := q.db.Exec(ctx, setClaimedTaskModelChoice, arg.ModelPosition, arg.ModelChoice, arg.ID)
+	return err
+}
+
 const setIssueModelProfile = `-- name: SetIssueModelProfile :one
 UPDATE issue SET model_profile_id = $3, updated_at = now()
 WHERE id = $1 AND workspace_id = $2
@@ -947,6 +1213,92 @@ func (q *Queries) SetIssueModelProfile(ctx context.Context, arg SetIssueModelPro
 		&i.TriageState,
 		&i.DuplicateOfIssueID,
 		&i.ModelProfileID,
+	)
+	return i, err
+}
+
+const setTaskModelRoute = `-- name: SetTaskModelRoute :one
+UPDATE agent_task_queue
+SET runtime_id = $1, model_choice = $2
+WHERE id = $3 AND status IN ('queued', 'deferred')
+RETURNING id, agent_id, issue_id, status, priority, dispatched_at, started_at, completed_at, result, error, created_at, context, runtime_id, session_id, work_dir, trigger_comment_id, chat_session_id, autopilot_run_id, attempt, max_attempts, parent_task_id, failure_reason, trigger_summary, force_fresh_session, is_leader_task, wait_reason, initiator_user_id, handoff_note, prepare_lease_expires_at, squad_id, runtime_mcp_overlay, escalation_for_task_id, fire_at, originator_user_id, runtime_connected_apps, coalesced_comment_ids, delivered_comment_ids, chat_input_task_id, chat_finalize_deferred_at, originator_source, delegated_from_task_id, retry_of_task_id, rerun_of_task_id, rule_version_id, trigger_evidence_kind, trigger_evidence_ref_id, accountable_user_id, session_rollout_missing, retired_session_id, quick_actions_disabled, regenerate_quick_actions_for, branch_name, durable_work_dir, channel_context_revision, comment_thread_id, cancelled_by_type, cancelled_by_id, cancelled_by_name, issue_snapshot, conveyor_action_id, model_position, model_choice
+`
+
+type SetTaskModelRouteParams struct {
+	RuntimeID   pgtype.UUID `json:"runtime_id"`
+	ModelChoice []byte      `json:"model_choice"`
+	ID          pgtype.UUID `json:"id"`
+}
+
+// Places a run that has not been claimed yet on the runtime its model list
+// chooses now, with the choice that put it there. A run already claimed or
+// finished is left alone.
+func (q *Queries) SetTaskModelRoute(ctx context.Context, arg SetTaskModelRouteParams) (AgentTaskQueue, error) {
+	row := q.db.QueryRow(ctx, setTaskModelRoute, arg.RuntimeID, arg.ModelChoice, arg.ID)
+	var i AgentTaskQueue
+	err := row.Scan(
+		&i.ID,
+		&i.AgentID,
+		&i.IssueID,
+		&i.Status,
+		&i.Priority,
+		&i.DispatchedAt,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.Result,
+		&i.Error,
+		&i.CreatedAt,
+		&i.Context,
+		&i.RuntimeID,
+		&i.SessionID,
+		&i.WorkDir,
+		&i.TriggerCommentID,
+		&i.ChatSessionID,
+		&i.AutopilotRunID,
+		&i.Attempt,
+		&i.MaxAttempts,
+		&i.ParentTaskID,
+		&i.FailureReason,
+		&i.TriggerSummary,
+		&i.ForceFreshSession,
+		&i.IsLeaderTask,
+		&i.WaitReason,
+		&i.InitiatorUserID,
+		&i.HandoffNote,
+		&i.PrepareLeaseExpiresAt,
+		&i.SquadID,
+		&i.RuntimeMcpOverlay,
+		&i.EscalationForTaskID,
+		&i.FireAt,
+		&i.OriginatorUserID,
+		&i.RuntimeConnectedApps,
+		&i.CoalescedCommentIds,
+		&i.DeliveredCommentIds,
+		&i.ChatInputTaskID,
+		&i.ChatFinalizeDeferredAt,
+		&i.OriginatorSource,
+		&i.DelegatedFromTaskID,
+		&i.RetryOfTaskID,
+		&i.RerunOfTaskID,
+		&i.RuleVersionID,
+		&i.TriggerEvidenceKind,
+		&i.TriggerEvidenceRefID,
+		&i.AccountableUserID,
+		&i.SessionRolloutMissing,
+		&i.RetiredSessionID,
+		&i.QuickActionsDisabled,
+		&i.RegenerateQuickActionsFor,
+		&i.BranchName,
+		&i.DurableWorkDir,
+		&i.ChannelContextRevision,
+		&i.CommentThreadID,
+		&i.CancelledByType,
+		&i.CancelledByID,
+		&i.CancelledByName,
+		&i.IssueSnapshot,
+		&i.ConveyorActionID,
+		&i.ModelPosition,
+		&i.ModelChoice,
 	)
 	return i, err
 }
