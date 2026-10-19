@@ -1,6 +1,8 @@
 import type { ZodType } from "zod";
 import type { IssueWakeup, IssueWakeupInput, IssueWakeupSummaryRow, PausedWakeup, SystemWakeup, WakeupRun, WorkspaceSystemWakeup } from "../types/issue-wakeup";
 import type { WorkspaceWakeupPage, WorkspaceWakeupFilters } from "../types/issue-wakeup";
+import type { AgentModels, CreateModelProfileInput, IssueModelProfile, ModelProfile, ModelProfileChange, ModelProfileInput, RuntimeUnavailable, UpdateAgentModelsInput } from "../types/model-profile";
+import { AgentModelsSchema, IssueModelProfileSchema, ModelProfilePreviewSchema, ModelProfileSchema, RuntimeUnavailableSchema } from "./schemas";
 import { WorkspaceWakeupPageSchema, IssueWakeupSchema, IssueWakeupSummaryRowSchema, PausedWakeupSchema, SystemWakeupSchema, WakeupRunSchema, WorkspaceSystemWakeupSchema } from "./schemas";
 import type { InboxFilters } from "../inbox/filter-store";
 import type { ArchivedInboxPage, ArchivedInboxFacets } from "../types/inbox";
@@ -1314,6 +1316,79 @@ export class ApiClient {
     const parsed = parseWithFallback<WorkspaceWakeupPage | null>(raw, WorkspaceWakeupPageSchema, null, { endpoint: "GET /api/issue-wakeups" });
     if (!parsed) throw new Error("Could not load workspace wakeups");
     return parsed;
+  }
+
+  // Model profiles and agent model lists. The server chooses a run's model
+  // from these at every claim; edits apply from the next run.
+  async listModelProfiles(): Promise<ModelProfile[]> {
+    const raw = await this.fetch<unknown>("/api/model-profiles");
+    const parsed = parseWithFallback<ModelProfile[] | null>(raw, ModelProfileSchema.array(), null, { endpoint: "GET /api/model-profiles" });
+    if (!parsed) throw new Error("Could not load model profiles");
+    return parsed;
+  }
+
+  private parseModelProfile(raw: unknown, endpoint: string): ModelProfile {
+    const parsed = parseWithFallback<ModelProfile | null>(raw, ModelProfileSchema, null, { endpoint });
+    if (!parsed) throw new Error("Could not read the model profile");
+    return parsed;
+  }
+
+  async createModelProfile(input: CreateModelProfileInput): Promise<ModelProfile> {
+    const raw = await this.fetch<unknown>("/api/model-profiles", { method: "POST", body: JSON.stringify(input) });
+    return this.parseModelProfile(raw, "POST /api/model-profiles");
+  }
+
+  async updateModelProfile(id: string, input: ModelProfileInput): Promise<ModelProfile> {
+    const raw = await this.fetch<unknown>(`/api/model-profiles/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(input) });
+    return this.parseModelProfile(raw, "PUT /api/model-profiles/:id");
+  }
+
+  async deleteModelProfile(id: string): Promise<void> {
+    await this.fetch(`/api/model-profiles/${encodeURIComponent(id)}`, { method: "DELETE" });
+  }
+
+  /** Who would get another model on their next run if the edit were saved. Saves nothing. */
+  async previewModelProfile(id: string, input: ModelProfileInput): Promise<ModelProfileChange[]> {
+    const raw = await this.fetch<unknown>(`/api/model-profiles/${encodeURIComponent(id)}/preview`, { method: "POST", body: JSON.stringify(input) });
+    const parsed = parseWithFallback<{ changes: ModelProfileChange[] } | null>(
+      raw, ModelProfilePreviewSchema, null, { endpoint: "POST /api/model-profiles/:id/preview" });
+    if (!parsed) throw new Error("Could not preview the profile edit");
+    return parsed.changes;
+  }
+
+  async getAgentModels(agentId: string): Promise<AgentModels> {
+    const raw = await this.fetch<unknown>(`/api/agents/${encodeURIComponent(agentId)}/models`);
+    const parsed = parseWithFallback<AgentModels | null>(raw, AgentModelsSchema, null, { endpoint: "GET /api/agents/:id/models" });
+    if (!parsed) throw new Error("Could not load the agent's models");
+    return parsed;
+  }
+
+  async updateAgentModels(agentId: string, input: UpdateAgentModelsInput): Promise<AgentModels> {
+    const raw = await this.fetch<unknown>(`/api/agents/${encodeURIComponent(agentId)}/models`, { method: "PUT", body: JSON.stringify(input) });
+    const parsed = parseWithFallback<AgentModels | null>(raw, AgentModelsSchema, null, { endpoint: "PUT /api/agents/:id/models" });
+    if (!parsed) throw new Error("Could not read the agent's models");
+    return parsed;
+  }
+
+  async getIssueModelProfile(issueId: string): Promise<IssueModelProfile> {
+    const raw = await this.fetch<unknown>(`/api/issues/${encodeURIComponent(issueId)}/model-profile`);
+    const parsed = parseWithFallback<IssueModelProfile | null>(raw, IssueModelProfileSchema, null, { endpoint: "GET /api/issues/:id/model-profile" });
+    if (!parsed) throw new Error("Could not load the issue's model profile");
+    return parsed;
+  }
+
+  async setIssueModelProfile(issueId: string, modelProfileId: string | null): Promise<IssueModelProfile> {
+    const raw = await this.fetch<unknown>(`/api/issues/${encodeURIComponent(issueId)}/model-profile`, {
+      method: "PUT", body: JSON.stringify({ model_profile_id: modelProfileId }),
+    });
+    const parsed = parseWithFallback<IssueModelProfile | null>(raw, IssueModelProfileSchema, null, { endpoint: "PUT /api/issues/:id/model-profile" });
+    if (!parsed) throw new Error("Could not read the issue's model profile");
+    return parsed;
+  }
+
+  async listRuntimeUnavailable(): Promise<RuntimeUnavailable[]> {
+    const raw = await this.fetch<unknown>("/api/runtime-unavailable");
+    return parseWithFallback<RuntimeUnavailable[]>(raw, RuntimeUnavailableSchema.array(), [], { endpoint: "GET /api/runtime-unavailable" });
   }
 
   async listIssueWakeups(issueId: string): Promise<IssueWakeup[]> {

@@ -20,6 +20,7 @@ import { DashboardPage } from "@multica/views/dashboard";
 import { ConveyorPage } from "@multica/views/conveyor";
 import { SubscriptionsPage } from "@multica/views/subscriptions";
 import { CustomPagesPage, CustomPageView } from "@multica/views/custom-pages";
+import { ModelProfilesPage } from "@multica/views/model-profiles";
 import { AutopilotsPage } from "@multica/views/autopilots/components";
 import { MyIssuesPage } from "@multica/views/my-issues";
 import { SkillsPage } from "@multica/views/skills";
@@ -260,6 +261,11 @@ export const appRoutes: RouteObject[] = [
             path: "pages/:id",
             element: <CustomPageRoute />,
             handle: { title: "Page" },
+          },
+          {
+            path: "profiles",
+            element: <ModelProfilesPage />,
+            handle: { title: "Profiles" },
           },
           {
             path: "settings",

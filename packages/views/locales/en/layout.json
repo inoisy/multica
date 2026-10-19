@@ -14,7 +14,8 @@
     "settings": "Settings",
     "conveyor": "Conveyor",
     "subscriptions": "Subscriptions",
-    "pages": "Pages"
+    "pages": "Pages",
+    "model_profiles": "Profiles"
   },
   "tab": {
     "issue": "Issue",

@@ -14,7 +14,8 @@
     "settings": "Настройки",
     "conveyor": "Конвейер",
     "subscriptions": "Подписки",
-    "pages": "Страницы"
+    "pages": "Страницы",
+    "model_profiles": "Профили"
   },
   "tab": {
     "issue": "Задача",

@@ -1392,5 +1392,9 @@
     "overview_close": "閉じる",
     "overview_empty": "この種類の成果物はありません。",
     "group_comment_by": "{{name}} のコメント"
+  },
+  "model_profile": {
+    "label": "Model profile",
+    "assignee": "Assignee's profile"
   }
 }
