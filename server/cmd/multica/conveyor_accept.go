@@ -435,7 +435,7 @@ func clipCommand(command string) string {
 // acceptRepository turns the repository a dev step named into the one the
 // workspace knows. Executors working in a local checkout often name the
 // directory they worked in: its origin when it has one, otherwise the main
-// repository of the worktree. Anything else (a URL, a path that is not a git
+// repository of the worktree as a file:// URL. Anything else (a URL, a path that is not a git
 // checkout) is returned as given.
 func acceptRepository(ctx context.Context, repo string) string {
 	repo = strings.TrimSpace(repo)
@@ -460,7 +460,7 @@ func acceptRepository(ctx context.Context, repo string) string {
 		return repo
 	}
 	if filepath.Base(common) == ".git" {
-		return filepath.Dir(common)
+		common = filepath.Dir(common)
 	}
-	return common
+	return "file://" + common
 }
