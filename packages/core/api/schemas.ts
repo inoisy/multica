@@ -1289,6 +1289,13 @@ export const CommentSubIssueTaskResponseSchema = z.object({
   task_id: z.string().min(1),
 }).loose();
 
+export const IssueRouteSchema = z.object({
+  step: z.string().default(""),
+  status: z.string().default(""),
+  round: z.number().default(0),
+  waiting_reason: z.string().optional(),
+}).loose();
+
 export const IssueSchema = z.object({
   id: z.string(),
   workspace_id: z.string(),
@@ -1333,6 +1340,9 @@ export const IssueSchema = z.object({
   // Older backends predate `stage`; default to null so a missing field parses
   // cleanly into the non-optional Issue.stage (number | null).
   stage: z.number().nullable().default(null),
+  // Where a routed sub-issue stands on its server route; only the sub-issue
+  // list sends it, and an unreadable value is dropped rather than failing the issue.
+  route: IssueRouteSchema.nullable().optional().catch(undefined),
   start_date: z.string().nullable(),
   due_date: z.string().nullable(),
   metadata: IssueMetadataSchema,
@@ -2259,6 +2269,7 @@ export const SquadSchema = z.object({
   name: z.string(),
   description: z.string().default(""),
   instructions: z.string().default(""),
+  route_template: z.string().default(""),
   system_key: z.string().optional(),
   system_instructions: z.string().optional(),
   avatar_url: z.string().nullable().optional().transform((v) => v ?? null),
@@ -2280,6 +2291,7 @@ export const EMPTY_SQUAD: Squad = {
   name: "",
   description: "",
   instructions: "",
+  route_template: "",
   avatar_url: null,
   leader_id: "",
   creator_id: "",
@@ -3818,3 +3830,20 @@ export const IssueModelProfileSchema = z.object({
 });
 
 export const ModelProfilePreviewSchema = z.object({ changes: z.array(ModelProfileChangeSchema).default([]) });
+
+// Stage dispatch of an epic (GET/PUT /api/issues/:id/stage-dispatch) and the
+// workspace's dispatched epics (GET /api/stage-dispatch). Older backends have
+// neither; the client turns that into "off" and an empty board.
+export const IssueStageDispatchSchema = z.object({
+  issue_id: z.string(),
+  squad_id: z.string().nullable().default(null),
+  dispatch_by: z.string().nullable().default(null),
+}).loose();
+
+export const StageDispatchListSchema = z.object({
+  epics: z.array(z.object({
+    issue: IssueSchema,
+    squad_id: z.string(),
+    dispatch_by: z.string().nullable().default(null),
+  }).loose()).default([]),
+}).loose();
