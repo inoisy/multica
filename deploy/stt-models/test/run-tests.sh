@@ -16,7 +16,7 @@ expect() { # expect 'what' command...
   if "$@"; then ok "$what"; else fail "$what"; fi
 }
 calls() { cat "$STUB_STATE/calls.log"; }
-mutating_calls() { grep -E '^(docker (build|buildx build|tag|pull|compose .* (up|run) )|systemctl (enable|disable))' "$STUB_STATE/calls.log" || true; }
+mutating_calls() { grep -E '^(docker (build |buildx build |tag |pull |compose .* (up|run) )|systemctl (enable|disable) )' "$STUB_STATE/calls.log" || true; }
 
 "$ROOT/build-package.sh" --revision HEAD --out "$WORK/pkg" --daemon-pid 2988 >/dev/null || { echo 'build-package.sh failed'; exit 1; }
 SHORT=$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["source"]["revision"][:9])' "$WORK/pkg/manifest.json")
