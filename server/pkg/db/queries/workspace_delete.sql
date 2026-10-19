@@ -698,6 +698,9 @@ deleted_profiles AS (
 deleted_runtime_unavailable AS (
     DELETE FROM runtime_unavailable WHERE runtime_unavailable.workspace_id = $1
 ),
+deleted_model_idle_episodes AS (
+    DELETE FROM model_idle_episode WHERE model_idle_episode.workspace_id = $1
+),
 deleted_model_profile_options AS (
     DELETE FROM model_profile_option WHERE model_profile_option.workspace_id = $1
 ),

@@ -80,6 +80,7 @@ var workspaceDeletionManifest = map[string]workspaceDeleteAction{
 	"model_profile_option":               workspaceDelete,
 	"agent_model_option":                 workspaceDelete,
 	"runtime_unavailable":                workspaceDelete,
+	"model_idle_episode":                 workspaceDelete,
 	"issue_view":                         workspaceDelete,
 	"issue_view_preference":              workspaceDelete,
 	"issue_dependency":                   workspaceDelete,

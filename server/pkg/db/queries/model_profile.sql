@@ -166,3 +166,57 @@ WITH moved_profile_rows AS (
  UPDATE agent_model_option SET runtime_id = sqlc.arg(new_runtime_id) WHERE agent_model_option.runtime_id = sqlc.arg(old_runtime_id)
 )
 UPDATE runtime_unavailable SET runtime_id = sqlc.arg(new_runtime_id) WHERE runtime_unavailable.runtime_id = sqlc.arg(old_runtime_id);
+
+-- name: SetTaskModelRoute :one
+-- Places a run that has not been claimed yet on the runtime its model list
+-- chooses now, with the choice that put it there. A run already claimed or
+-- finished is left alone.
+UPDATE agent_task_queue
+SET runtime_id = sqlc.arg(runtime_id), model_choice = sqlc.arg(model_choice)
+WHERE id = sqlc.arg(id) AND status IN ('queued', 'deferred')
+RETURNING *;
+
+-- name: SetClaimedTaskModelChoice :exec
+-- What the claim chose for the run it just dispatched.
+UPDATE agent_task_queue
+SET model_position = sqlc.arg(model_position), model_choice = sqlc.arg(model_choice)
+WHERE id = sqlc.arg(id) AND status = 'dispatched';
+
+-- name: ListQueuedTasksForModelRouting :many
+-- Unclaimed runs whose model comes from a list: already routed, or of an agent
+-- on a profile or own list, or of an issue with a profile.
+SELECT t.* FROM agent_task_queue t
+WHERE t.status = 'queued'
+  AND (
+    t.model_choice IS NOT NULL
+    OR EXISTS (SELECT 1 FROM agent a WHERE a.id = t.agent_id AND a.model_profile_id IS NOT NULL)
+    OR EXISTS (SELECT 1 FROM agent_model_option o WHERE o.agent_id = t.agent_id)
+    OR EXISTS (SELECT 1 FROM issue i WHERE i.id = t.issue_id AND i.model_profile_id IS NOT NULL)
+  )
+ORDER BY t.created_at
+LIMIT sqlc.arg(page_size);
+
+-- name: OpenModelIdleEpisode :one
+-- Opens the agent's idle episode unless one is open: zero rows means the
+-- owner was already told.
+INSERT INTO model_idle_episode (workspace_id, agent_id, task_id, until, runtimes)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (agent_id) WHERE ended_at IS NULL DO NOTHING
+RETURNING *;
+
+-- name: CloseModelIdleEpisode :one
+UPDATE model_idle_episode SET ended_at = now()
+WHERE agent_id = $1 AND ended_at IS NULL
+RETURNING *;
+
+-- name: GetOpenModelIdleEpisode :one
+SELECT * FROM model_idle_episode WHERE agent_id = $1 AND ended_at IS NULL;
+
+-- name: ListWorkspaceOwnerUserIDs :many
+SELECT user_id FROM member WHERE workspace_id = $1 AND role = 'owner' ORDER BY created_at, user_id;
+
+-- name: ListAgentWaitingModelTasks :many
+-- Unclaimed runs of the agent whose every model is unavailable now.
+SELECT t.id, t.issue_id, t.model_choice, t.created_at FROM agent_task_queue t
+WHERE t.agent_id = $1 AND t.status = 'queued' AND t.model_choice->>'reason' = 'all_unavailable'
+ORDER BY t.created_at;
