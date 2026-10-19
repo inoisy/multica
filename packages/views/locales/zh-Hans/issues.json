@@ -1396,5 +1396,16 @@
   "model_profile": {
     "label": "Model profile",
     "assignee": "Assignee's profile"
+  },
+  "stage_dispatch": {
+    "label": "阶段",
+    "off": "不分派"
+  },
+  "route_step": {
+    "title": "路线步骤，第 {{round}} 轮",
+    "paused": "已暂停",
+    "awaiting_coordinator": "等待协调者",
+    "waiting_provider": "等待服务商",
+    "disabled": "已关闭"
   }
 }
