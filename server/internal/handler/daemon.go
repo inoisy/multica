@@ -2021,7 +2021,7 @@ func (h *Handler) finalizeClaimDelivery(
 		if aerr != nil {
 			return fmt.Errorf("re-read agent for delivery authorization: %w", aerr)
 		}
-		if agent.RuntimeID != task.RuntimeID {
+		if agent.RuntimeID != task.RuntimeID && task.ModelChoice == nil {
 			return &service.ClaimDeliveryAuthzError{
 				Reason: "error_agent_runtime_changed",
 				Detail: "agent runtime changed before delivery",
@@ -2334,6 +2334,19 @@ func applyFreshSessionRetryWorkdir(task db.AgentTaskQueue, resp *AgentTaskRespon
 	resp.PriorSessionResumeUnavailable = true
 }
 
+// claimedModelOption is the row the claim chose for a model-routed run, nil
+// for a plain run.
+func claimedModelOption(task *db.AgentTaskQueue) *service.ModelOption {
+	if task.ModelChoice == nil || !task.ModelPosition.Valid {
+		return nil
+	}
+	var choice service.ModelChoice
+	if json.Unmarshal(task.ModelChoice, &choice) != nil {
+		return nil
+	}
+	return choice.Chosen
+}
+
 func claimResponseAgentIdentityMatches(resp AgentTaskResponse) bool {
 	return resp.AgentID != "" && resp.Agent != nil && resp.Agent.ID == resp.AgentID
 }
@@ -2438,7 +2451,9 @@ func (h *Handler) buildClaimedTaskResponse(r *http.Request, task *db.AgentTaskQu
 	// changing task state, but Agent mutations do not stay locked through HTTP
 	// response assembly. Recheck the freshly loaded Agent here so a rebind or
 	// owner change that committed after the claim cannot reach the daemon.
-	if agent.RuntimeID != task.RuntimeID {
+	// A model-routed run carries the runtime its model list chose; only a
+	// plain run is bound to the agent's own runtime.
+	if agent.RuntimeID != task.RuntimeID && task.ModelChoice == nil {
 		slog.Warn("daemon claim: agent runtime changed before delivery; refusing dispatch",
 			"task_id", uuidToString(task.ID),
 			"agent_id", uuidToString(task.AgentID),
@@ -2550,6 +2565,16 @@ func (h *Handler) buildClaimedTaskResponse(r *http.Request, task *db.AgentTaskQu
 		ServiceTier:           agent.ServiceTier.String,
 		RuntimeConfig:         runtimeConfig,
 		DisabledRuntimeSkills: disabledRuntimeSkillsFor(agent.DisabledRuntimeSkills, runtimeID, runtime.Provider),
+	}
+	// The model list chose this run's model at claim: its row's model,
+	// thinking level and arguments replace the agent's plain fields.
+	if choice := claimedModelOption(task); choice != nil {
+		resp.Agent.Model = choice.Model
+		resp.Agent.ThinkingLevel = choice.ThinkingLevel
+		resp.Agent.CustomArgs = choice.CustomArgs
+		if resp.Agent.CustomArgs == nil {
+			resp.Agent.CustomArgs = []string{}
+		}
 	}
 	// System agents carry a product-owned instruction layer that ships with
 	// this binary instead of being copied into their row at creation. That
