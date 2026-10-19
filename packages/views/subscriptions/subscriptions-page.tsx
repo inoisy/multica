@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Gauge, Pencil, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { useWorkspaceSlug } from "@multica/core/paths";
+import { loginAccountsOptions } from "@multica/core/subs-login";
 import { Badge } from "@multica/ui/components/ui/badge";
 import { Button } from "@multica/ui/components/ui/button";
 import { Input } from "@multica/ui/components/ui/input";
@@ -14,6 +15,7 @@ import { PAGE_GUTTER } from "../layout/page-header";
 import { useT } from "../i18n";
 import { ControlError, controlRequest } from "../conveyor/control-api";
 import { EditableTable } from "./subscription-tables";
+import { SubscriptionLogin } from "./subscription-login";
 
 interface UsageWindow {
   key: string | null;
@@ -112,6 +114,7 @@ export function SubscriptionsPage() {
     retry: false,
   });
   const state = query.data;
+  const logins = useQuery(loginAccountsOptions(wsSlug ?? "")).data;
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
@@ -241,6 +244,8 @@ export function SubscriptionsPage() {
             {(state?.accounts ?? state?.subscriptions ?? []).map((sub) => {
               const isEditing = editing === sub.id;
               const limited = Object.keys(sub.effective).length > 0;
+              const keys = sub.keys ?? [sub.id];
+              const loginAccount = logins?.accounts.find((account) => keys.includes(account.id));
               return (
                 <section key={sub.id} className="flex flex-col gap-3 rounded-lg border p-4">
                   <div className="flex items-start justify-between gap-3">
@@ -259,6 +264,10 @@ export function SubscriptionsPage() {
                       </Button>
                     ) : null}
                   </div>
+
+                  {loginAccount && wsSlug ? (
+                    <SubscriptionLogin account={loginAccount} canLogin={logins?.can_login === true} wsSlug={wsSlug} />
+                  ) : null}
 
                   {sub.usage.length && sub.as_of && Date.now() - new Date(sub.as_of).getTime() > OLD_USAGE_MS ? (
                     <p className="text-caption text-muted-foreground">
