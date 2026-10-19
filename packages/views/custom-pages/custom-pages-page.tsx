@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { AppWindow, ArrowDown, ArrowUp, ExternalLink, Plus, Trash2 } from "lucide-react";
+import { AppWindow, ArrowDown, ArrowUp, ChevronDown, ExternalLink, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useWorkspacePaths, useWorkspaceSlug } from "@multica/core/paths";
 import { Button } from "@multica/ui/components/ui/button";
@@ -110,15 +110,19 @@ export function CustomPagesPage() {
                 <Input placeholder="/takes/ или https://…" value={row.url} maxLength={500}
                   onChange={(e) => set(i, { url: e.target.value })} />
                 <div className="flex items-center gap-1">
-                  <select
-                    className="h-8 rounded-md border bg-background px-2 text-sm"
-                    value={row.mode}
-                    onChange={(e) => set(i, { mode: e.target.value as Draft["mode"] })}
-                    aria-label="Как открывать"
-                  >
-                    <option value="embed">Внутри Multica</option>
-                    <option value="tab">Новой вкладкой</option>
-                  </select>
+                  {/* нативная стрелка select прижата к краю — своя, с отступом (правило агентов /etc/agent-memory) */}
+                  <div className="relative">
+                    <select
+                      className="h-8 appearance-none rounded-md border bg-background pr-8 pl-2 text-sm"
+                      value={row.mode}
+                      onChange={(e) => set(i, { mode: e.target.value as Draft["mode"] })}
+                      aria-label="Как открывать"
+                    >
+                      <option value="embed">Внутри Multica</option>
+                      <option value="tab">Новой вкладкой</option>
+                    </select>
+                    <ChevronDown className="pointer-events-none absolute top-1/2 right-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                  </div>
                   <Button variant="ghost" size="icon-sm" aria-label="Выше" disabled={i === 0} onClick={() => move(i, -1)}>
                     <ArrowUp />
                   </Button>
