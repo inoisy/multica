@@ -285,3 +285,42 @@ func TestRedactHidesSecretEnvironment(t *testing.T) {
 		t.Fatal("the task credential reached the commands")
 	}
 }
+
+func TestAcceptRepositoryNamesTheWorkspaceRepository(t *testing.T) {
+	r := newAcceptRig(t)
+	root := t.TempDir()
+	// A local repository without a remote, as a workspace repository, and a
+	// worktree an executor worked in.
+	local := filepath.Join(root, "service")
+	r.git(root, "init", "--quiet", "--initial-branch=main", local)
+	r.identity(local)
+	r.write(local, "README.md", "hello\n")
+	r.git(local, "add", ".")
+	r.git(local, "commit", "--quiet", "-m", "init")
+	wt := filepath.Join(root, "wt", "t-1")
+	r.git(local, "worktree", "add", "--quiet", "-b", "t-1", wt)
+
+	ctx := context.Background()
+	resolve := func(p string) string {
+		got, err := filepath.EvalSymlinks(acceptRepository(ctx, p))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return got
+	}
+	want, _ := filepath.EvalSymlinks(local)
+	if got := resolve(local); got != want {
+		t.Fatalf("repository itself: %q, want %q", got, want)
+	}
+	if got := resolve(wt); got != want {
+		t.Fatalf("worktree: %q, want %q", got, want)
+	}
+	if got := acceptRepository(ctx, r.dev); got != r.origin {
+		t.Fatalf("checkout with origin: %q, want %q", got, r.origin)
+	}
+	for _, as := range []string{"git@github.com:o/r.git", "https://github.com/o/r.git", filepath.Join(root, "missing")} {
+		if got := acceptRepository(ctx, as); got != as {
+			t.Fatalf("%q came back as %q", as, got)
+		}
+	}
+}

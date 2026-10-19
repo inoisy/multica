@@ -98,7 +98,7 @@ func runIssueConveyorAccept(cmd *cobra.Command, args []string) error {
 	case err != nil:
 		outcome = coordinator(err.Error())
 	default:
-		repo = artifact.Artifact.Repo
+		repo = acceptRepository(ctx, artifact.Artifact.Repo)
 		workDir, _ := os.Getwd()
 		checkout, cerr := daemonRepoCheckout(ctx, repo, "", true, workDir)
 		if cerr != nil {
