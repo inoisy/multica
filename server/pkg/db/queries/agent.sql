@@ -768,6 +768,9 @@ WHERE id = (
     WHERE atq.agent_id = @agent_id
       AND atq.runtime_id = @runtime_id
       AND atq.status = 'queued'
+  -- A model-routed run whose every model is unavailable waits for the
+  -- sweep to route it again; claiming it would only be rolled back.
+  AND (atq.model_choice IS NULL OR atq.model_choice->>'reason' IS DISTINCT FROM 'all_unavailable')
       AND (atq.context->>'wakeup_id' IS NULL OR EXISTS (SELECT 1 FROM issue_wakeup w WHERE w.id=(atq.context->>'wakeup_id')::uuid AND w.disabled_at IS NULL AND w.revision=(atq.context->>'wakeup_revision')::bigint))
       AND EXISTS (
           SELECT 1
@@ -775,7 +778,9 @@ WHERE id = (
           JOIN agent_runtime r ON r.id = atq.runtime_id
           WHERE a.id = atq.agent_id
             -- A task's persisted runtime is not authority after an agent rebind.
-            AND a.runtime_id = atq.runtime_id
+            -- A model-routed run (model_choice set) is placed on a runtime of its
+        -- model list, not on the agent's own runtime.
+        AND (a.runtime_id = atq.runtime_id OR atq.model_choice IS NOT NULL)
             -- Queued private-runtime rows are claimable so the handler can
             -- settle an owner mismatch through the existing FailTask path
             -- before daemon delivery. Public runtimes remain shareable across
@@ -893,7 +898,9 @@ WHERE id = (
           FROM agent a
           JOIN agent_runtime r ON r.id = atq.runtime_id
           WHERE a.id = atq.agent_id
-            AND a.runtime_id = atq.runtime_id
+            -- A model-routed run (model_choice set) is placed on a runtime of its
+        -- model list, not on the agent's own runtime.
+        AND (a.runtime_id = atq.runtime_id OR atq.model_choice IS NOT NULL)
             AND (
                 r.visibility = 'public'
                 OR (
@@ -940,7 +947,9 @@ WHERE id IN (
           FROM agent a
           JOIN agent_runtime r ON r.id = atq.runtime_id
           WHERE a.id = atq.agent_id
-            AND a.runtime_id = atq.runtime_id
+            -- A model-routed run (model_choice set) is placed on a runtime of its
+        -- model list, not on the agent's own runtime.
+        AND (a.runtime_id = atq.runtime_id OR atq.model_choice IS NOT NULL)
             AND (
                 r.visibility = 'public'
                 OR (
@@ -2302,6 +2311,9 @@ ORDER BY priority DESC, created_at ASC;
 SELECT atq.* FROM agent_task_queue atq
 WHERE atq.runtime_id = $1
   AND atq.status = 'queued'
+  -- A model-routed run whose every model is unavailable waits for the
+  -- sweep to route it again; claiming it would only be rolled back.
+  AND (atq.model_choice IS NULL OR atq.model_choice->>'reason' IS DISTINCT FROM 'all_unavailable')
       AND (atq.context->>'wakeup_id' IS NULL OR EXISTS (SELECT 1 FROM issue_wakeup w WHERE w.id=(atq.context->>'wakeup_id')::uuid AND w.disabled_at IS NULL AND w.revision=(atq.context->>'wakeup_revision')::bigint))
   AND EXISTS (
       -- Keep this authorization fence in sync with ClaimAgentTask.
@@ -2309,7 +2321,9 @@ WHERE atq.runtime_id = $1
       FROM agent a
       JOIN agent_runtime r ON r.id = atq.runtime_id
       WHERE a.id = atq.agent_id
-        AND a.runtime_id = atq.runtime_id
+        -- A model-routed run (model_choice set) is placed on a runtime of its
+        -- model list, not on the agent's own runtime.
+        AND (a.runtime_id = atq.runtime_id OR atq.model_choice IS NOT NULL)
         AND (
             r.visibility = 'public'
             OR r.visibility = 'private'
@@ -2423,6 +2437,9 @@ RETURNING *;
 SELECT atq.* FROM agent_task_queue atq
 WHERE atq.runtime_id = ANY(@runtime_ids::uuid[])
   AND atq.status = 'queued'
+  -- A model-routed run whose every model is unavailable waits for the
+  -- sweep to route it again; claiming it would only be rolled back.
+  AND (atq.model_choice IS NULL OR atq.model_choice->>'reason' IS DISTINCT FROM 'all_unavailable')
       AND (atq.context->>'wakeup_id' IS NULL OR EXISTS (SELECT 1 FROM issue_wakeup w WHERE w.id=(atq.context->>'wakeup_id')::uuid AND w.disabled_at IS NULL AND w.revision=(atq.context->>'wakeup_revision')::bigint))
   AND EXISTS (
       -- Keep this authorization fence in sync with ClaimAgentTask.
@@ -2430,7 +2447,9 @@ WHERE atq.runtime_id = ANY(@runtime_ids::uuid[])
       FROM agent a
       JOIN agent_runtime r ON r.id = atq.runtime_id
       WHERE a.id = atq.agent_id
-        AND a.runtime_id = atq.runtime_id
+        -- A model-routed run (model_choice set) is placed on a runtime of its
+        -- model list, not on the agent's own runtime.
+        AND (a.runtime_id = atq.runtime_id OR atq.model_choice IS NOT NULL)
         AND (
             r.visibility = 'public'
             OR r.visibility = 'private'

@@ -465,6 +465,9 @@ type AgentModelsResponse struct {
 	Journal []AgentModelChoiceEntry      `json:"journal"`
 	Issues  []ModelRefWithProfile        `json:"issues"`
 	Records []RuntimeUnavailableResponse `json:"runtime_unavailable"`
+	// Waiting are the agent's unclaimed runs whose every model is
+	// unavailable: "every model on a limit until HH:MM — the run waits".
+	Waiting []AgentModelChoiceEntry `json:"waiting"`
 }
 
 // ModelRefWithProfile is an open issue of the agent with its own profile.
@@ -578,6 +581,24 @@ func (h *Handler) writeAgentModels(w http.ResponseWriter, r *http.Request, agent
 			entry.Choice = &choice
 		}
 		resp.Journal = append(resp.Journal, entry)
+	}
+	resp.Waiting = []AgentModelChoiceEntry{}
+	waiting, err := h.Queries.ListAgentWaitingModelTasks(ctx, agent.ID)
+	if err != nil {
+		writeModelProfileError(w, err)
+		return
+	}
+	for _, t := range waiting {
+		entry := AgentModelChoiceEntry{TaskID: util.UUIDToString(t.ID), Status: "queued", IssueID: uuidToPtr(t.IssueID), CreatedAt: timestampToString(t.CreatedAt)}
+		if t.IssueNumber.Valid {
+			entry.IssueIdentifier = service.IssueIdentifier(m.prefix, t.IssueNumber.Int32)
+			entry.IssueTitle = t.IssueTitle.String
+		}
+		var choice service.ModelChoice
+		if json.Unmarshal(t.ModelChoice, &choice) == nil {
+			entry.Choice = &choice
+		}
+		resp.Waiting = append(resp.Waiting, entry)
 	}
 	if len(resp.Journal) > 0 {
 		last := resp.Journal[0]
