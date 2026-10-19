@@ -1145,6 +1145,28 @@
     "refreshed": "Quota data refreshed",
     "refresh_timeout": "No new data within 90 seconds — showing the previous figures",
     "data_at": "Quota data as of {{time}}",
-    "usage_as_of": "figures as of {{time}}"
+    "usage_as_of": "figures as of {{time}}",
+    "login": {
+      "state": {
+        "logged_in": "로그인됨",
+        "revoked": "로그인 만료",
+        "never": "로그인 안 됨",
+        "check_failed": "확인 실패",
+        "unchecked": "확인 안 함"
+      },
+      "relogin": "다시 로그인",
+      "title": "{{account}} 로그인",
+      "codex_hint": "링크를 열고 구독 계정으로 로그인한 뒤 코드를 입력하세요. 로그인에 성공한 경우에만 현재 자격 증명이 교체됩니다.",
+      "claude_hint": "아무 컴퓨터에서나 `claude setup-token`을 실행하고 토큰을 붙여넣으세요. 토큰은 서버에만 저장되며 다시 표시되지 않습니다.",
+      "key_hint": "새 키를 붙여넣으세요. 제공자가 지원하면 현재 키를 교체하기 전에 확인합니다.",
+      "code": "코드:",
+      "waiting": "로그인 완료를 기다리는 중…",
+      "start": "링크 받기",
+      "cancel_login": "로그인 취소",
+      "token_label": "토큰",
+      "key_label": "API 키",
+      "done": "로그인했습니다",
+      "failed": "로그인이 완료되지 않았습니다. 현재 자격 증명은 그대로입니다"
+    }
   }
 }
