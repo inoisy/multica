@@ -1030,7 +1030,7 @@ func (q *Queries) LockIssueConveyorEvent(ctx context.Context, id pgtype.UUID) (I
 }
 
 const lockIssueForConveyorDelivery = `-- name: LockIssueForConveyorDelivery :one
-SELECT id, workspace_id, title, description, status, priority, assignee_type, assignee_id, creator_type, creator_id, parent_issue_id, acceptance_criteria, context_refs, position, due_date, created_at, updated_at, number, project_id, origin_type, origin_id, first_executed_at, start_date, metadata, stage, properties, revision, last_activity_at, triage_state, duplicate_of_issue_id, model_profile_id FROM issue WHERE id = $1 AND workspace_id = $2 FOR UPDATE
+SELECT id, workspace_id, title, description, status, priority, assignee_type, assignee_id, creator_type, creator_id, parent_issue_id, acceptance_criteria, context_refs, position, due_date, created_at, updated_at, number, project_id, origin_type, origin_id, first_executed_at, start_date, metadata, stage, properties, revision, last_activity_at, triage_state, duplicate_of_issue_id, model_profile_id, stage_squad_id, stage_dispatch_by FROM issue WHERE id = $1 AND workspace_id = $2 FOR UPDATE
 `
 
 type LockIssueForConveyorDeliveryParams struct {
@@ -1074,6 +1074,8 @@ func (q *Queries) LockIssueForConveyorDelivery(ctx context.Context, arg LockIssu
 		&i.TriageState,
 		&i.DuplicateOfIssueID,
 		&i.ModelProfileID,
+		&i.StageSquadID,
+		&i.StageDispatchBy,
 	)
 	return i, err
 }

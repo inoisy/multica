@@ -1169,7 +1169,7 @@ func (q *Queries) SetClaimedTaskModelChoice(ctx context.Context, arg SetClaimedT
 const setIssueModelProfile = `-- name: SetIssueModelProfile :one
 UPDATE issue SET model_profile_id = $3, updated_at = now()
 WHERE id = $1 AND workspace_id = $2
-RETURNING id, workspace_id, title, description, status, priority, assignee_type, assignee_id, creator_type, creator_id, parent_issue_id, acceptance_criteria, context_refs, position, due_date, created_at, updated_at, number, project_id, origin_type, origin_id, first_executed_at, start_date, metadata, stage, properties, revision, last_activity_at, triage_state, duplicate_of_issue_id, model_profile_id
+RETURNING id, workspace_id, title, description, status, priority, assignee_type, assignee_id, creator_type, creator_id, parent_issue_id, acceptance_criteria, context_refs, position, due_date, created_at, updated_at, number, project_id, origin_type, origin_id, first_executed_at, start_date, metadata, stage, properties, revision, last_activity_at, triage_state, duplicate_of_issue_id, model_profile_id, stage_squad_id, stage_dispatch_by
 `
 
 type SetIssueModelProfileParams struct {
@@ -1213,6 +1213,8 @@ func (q *Queries) SetIssueModelProfile(ctx context.Context, arg SetIssueModelPro
 		&i.TriageState,
 		&i.DuplicateOfIssueID,
 		&i.ModelProfileID,
+		&i.StageSquadID,
+		&i.StageDispatchBy,
 	)
 	return i, err
 }
