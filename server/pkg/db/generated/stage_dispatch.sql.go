@@ -39,6 +39,68 @@ func (q *Queries) ListStageDispatchParents(ctx context.Context) ([]pgtype.UUID, 
 	return items, nil
 }
 
+const listWorkspaceStageDispatch = `-- name: ListWorkspaceStageDispatch :many
+SELECT id, workspace_id, title, description, status, priority, assignee_type, assignee_id, creator_type, creator_id, parent_issue_id, acceptance_criteria, context_refs, position, due_date, created_at, updated_at, number, project_id, origin_type, origin_id, first_executed_at, start_date, metadata, stage, properties, revision, last_activity_at, triage_state, duplicate_of_issue_id, model_profile_id, stage_squad_id, stage_dispatch_by FROM issue
+WHERE workspace_id = $1 AND stage_squad_id IS NOT NULL
+ORDER BY number
+LIMIT 200
+`
+
+// Epics of a workspace whose stages the server dispatches, oldest first.
+func (q *Queries) ListWorkspaceStageDispatch(ctx context.Context, workspaceID pgtype.UUID) ([]Issue, error) {
+	rows, err := q.db.Query(ctx, listWorkspaceStageDispatch, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Issue{}
+	for rows.Next() {
+		var i Issue
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.Title,
+			&i.Description,
+			&i.Status,
+			&i.Priority,
+			&i.AssigneeType,
+			&i.AssigneeID,
+			&i.CreatorType,
+			&i.CreatorID,
+			&i.ParentIssueID,
+			&i.AcceptanceCriteria,
+			&i.ContextRefs,
+			&i.Position,
+			&i.DueDate,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Number,
+			&i.ProjectID,
+			&i.OriginType,
+			&i.OriginID,
+			&i.FirstExecutedAt,
+			&i.StartDate,
+			&i.Metadata,
+			&i.Stage,
+			&i.Properties,
+			&i.Revision,
+			&i.LastActivityAt,
+			&i.TriageState,
+			&i.DuplicateOfIssueID,
+			&i.ModelProfileID,
+			&i.StageSquadID,
+			&i.StageDispatchBy,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const setIssueStageDispatch = `-- name: SetIssueStageDispatch :one
 UPDATE issue SET stage_squad_id = $3, stage_dispatch_by = $4, updated_at = now()
 WHERE id = $1 AND workspace_id = $2

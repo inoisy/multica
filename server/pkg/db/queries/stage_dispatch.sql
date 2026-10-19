@@ -10,3 +10,10 @@ SELECT id FROM issue
 WHERE stage_squad_id IS NOT NULL
 ORDER BY id
 LIMIT 500;
+
+-- name: ListWorkspaceStageDispatch :many
+-- Epics of a workspace whose stages the server dispatches, oldest first.
+SELECT * FROM issue
+WHERE workspace_id = $1 AND stage_squad_id IS NOT NULL
+ORDER BY number
+LIMIT 200;
