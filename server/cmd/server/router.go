@@ -2144,6 +2144,9 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 				})
 			})
 
+			// Epics whose stages the server dispatches (conveyor board)
+			r.Get("/api/stage-dispatch", h.ListStageDispatch)
+
 			// Squads
 			r.Route("/api/squads", func(r chi.Router) {
 				r.Get("/", h.ListSquads)
