@@ -54,7 +54,7 @@ for pid in $expected; do
   check "daemon PID $pid жив" pid_alive "$pid"
 done
 
-free_kb=$(df -Pk /var/lib/docker 2>/dev/null | awk 'NR==2{print $4}')
+free_kb=$(df -Pk /var/lib/docker 2>/dev/null | awk 'NR==2{print $4}' || true)
 check "на диске для сборки есть место (${free_kb:-?} КБ)" bash -c '[[ -z $1 ]] || (($1 > 2000000))' _ "${free_kb:-}"
 
 if [[ -z $IMAGE_REF ]]; then
