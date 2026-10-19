@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
+	"path"
 	"regexp"
 	"strings"
 	"time"
@@ -353,8 +355,8 @@ func validateAndNormalizeWorkspaceRepos(value any) ([]byte, error) {
 		if repo.URL == "" {
 			return nil, fmt.Errorf("repos[%d]: url is required", i)
 		}
-		if !isValidGitRepoURL(repo.URL) {
-			return nil, fmt.Errorf("repos[%d]: url must be a valid http(s) or ssh git URL", i)
+		if !isValidGitRepoURL(repo.URL) && !isLocalGitRepoURL(repo.URL) {
+			return nil, fmt.Errorf("repos[%d]: url must be a valid http(s), ssh or file:///absolute/path git URL", i)
 		}
 		if _, ok := seen[repo.URL]; ok {
 			continue
@@ -1356,4 +1358,15 @@ func (h *Handler) DeleteWorkspace(w http.ResponseWriter, r *http.Request) {
 	h.notifyDaemonWorkspacesChanged(affectedUserIDs...)
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// isLocalGitRepoURL accepts file:///absolute/path: a repository that lives on
+// the daemon's host and has no remote of its own. Daemons clone and push it
+// like any other origin.
+func isLocalGitRepoURL(s string) bool {
+	u, err := url.Parse(s)
+	if err != nil || u.Scheme != "file" || u.Host != "" || u.RawQuery != "" || u.Fragment != "" {
+		return false
+	}
+	return path.IsAbs(u.Path) && path.Clean(u.Path) == u.Path && u.Path != "/" && !strings.ContainsAny(u.Path, " \t\n")
 }
