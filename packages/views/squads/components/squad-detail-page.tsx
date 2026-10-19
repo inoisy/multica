@@ -15,7 +15,7 @@ import { useNavigation } from "../../navigation";
 import { AppLink } from "../../navigation";
 import { BreadcrumbHeader } from "../../layout/breadcrumb-header";
 import { PageHeader } from "../../layout/page-header";
-import { Users, Plus, Trash2, ArrowUpRight, Crown, Loader2, Pencil, FileText, Save } from "lucide-react";
+import { Users, Plus, Trash2, ArrowUpRight, Crown, Loader2, Pencil, FileText, Save, Workflow } from "lucide-react";
 import { Button } from "@multica/ui/components/ui/button";
 import { Input } from "@multica/ui/components/ui/input";
 import { Label } from "@multica/ui/components/ui/label";
@@ -119,7 +119,7 @@ export function SquadDetailPage() {
   const [confirmArchive, setConfirmArchive] = useState(false);
 
   const updateSquadMut = useMutation({
-    mutationFn: (data: { name?: string; description?: string; instructions?: string; avatar_url?: string; leader_id?: string }) => api.updateSquad(squadId, data),
+    mutationFn: (data: { name?: string; description?: string; instructions?: string; avatar_url?: string; leader_id?: string; route_template?: string }) => api.updateSquad(squadId, data),
     onSuccess: () => {
       refetchSquad();
       refetchMembers();
@@ -248,6 +248,15 @@ export function SquadDetailPage() {
           onRemoveMember={(m) => removeMemberMut.mutate(m)}
           onUpdateRole={async (m, role) => { await updateRoleMut.mutateAsync({ member: m, role }); }}
           onSaveInstructions={async (next) => { await updateSquadMut.mutateAsync({ instructions: next }); toast.success(t(($) => $.toasts.instructions_saved)); }}
+          onSaveRoute={async (next) => {
+            try {
+              await updateSquadMut.mutateAsync({ route_template: next });
+              toast.success(t(($) => $.toasts.route_saved));
+            } catch (error) {
+              toast.error(error instanceof Error && error.message ? error.message : t(($) => $.toasts.route_save_failed));
+              throw error;
+            }
+          }}
           setLeaderPending={setLeaderMut.isPending}
         />
       </div>
@@ -936,11 +945,12 @@ function SquadDescriptionEditorBody({
 // Mirrors AgentOverviewPane: dirty-guard via AlertDialog when switching tabs
 // with unsaved Instructions.
 // ---------------------------------------------------------------------------
-type SquadDetailTab = "members" | "instructions";
+type SquadDetailTab = "members" | "instructions" | "route";
 
 const squadDetailTabs: { id: SquadDetailTab; icon: typeof FileText }[] = [
   { id: "members", icon: Users },
   { id: "instructions", icon: FileText },
+  { id: "route", icon: Workflow },
 ];
 
 function SquadOverviewPane({
@@ -957,6 +967,7 @@ function SquadOverviewPane({
   onRemoveMember,
   onUpdateRole,
   onSaveInstructions,
+  onSaveRoute,
   setLeaderPending,
 }: {
   squad: Squad;
@@ -978,6 +989,7 @@ function SquadOverviewPane({
   onRemoveMember: (m: SquadMember) => void;
   onUpdateRole: (m: SquadMember, role: string) => Promise<void>;
   onSaveInstructions: (next: string) => Promise<void>;
+  onSaveRoute: (next: string) => Promise<void>;
   setLeaderPending: boolean;
 }) {
   const { t } = useT("squads");
@@ -1046,6 +1058,11 @@ function SquadOverviewPane({
               onSave={onSaveInstructions}
               onDirtyChange={setActiveDirty}
             />
+          </div>
+        )}
+        {activeTab === "route" && (
+          <div className="flex h-full flex-col p-4 md:p-6">
+            <SquadRouteTab squad={squad} canManage={canManage} onSave={onSaveRoute} onDirtyChange={setActiveDirty} />
           </div>
         )}
       </div>
@@ -1389,6 +1406,75 @@ function SquadInstructionsTab({
             ) : (
               <Save className="h-3.5 w-3.5" />
             )}
+            {t(($) => $.instructions_tab.save_button)}
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Route tab: the squad's default route. An issue assigned to the squad runs
+// along it on the server instead of waking the leader; the server validates
+// the template and its message is shown as is.
+export function SquadRouteTab({
+  squad,
+  canManage,
+  onSave,
+  onDirtyChange,
+}: {
+  squad: Squad;
+  canManage: boolean;
+  onSave: (route: string) => Promise<void>;
+  onDirtyChange?: (dirty: boolean) => void;
+}) {
+  const { t } = useT("squads");
+  const saved = squad.route_template ?? "";
+  const [value, setValue] = useState(saved);
+  const [saving, setSaving] = useState(false);
+  const isDirty = value.trim() !== saved;
+
+  useEffect(() => {
+    setValue(saved);
+  }, [squad.id, saved]);
+
+  useEffect(() => {
+    onDirtyChange?.(canManage && isDirty);
+  }, [canManage, isDirty, onDirtyChange]);
+
+  const save = async (next: string) => {
+    setSaving(true);
+    try {
+      await onSave(next);
+    } catch {
+      // toast handled by parent
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-3">
+      <p className="text-caption text-muted-foreground">{t(($) => $.route_tab.description)}</p>
+      <Input
+        value={value}
+        readOnly={!canManage}
+        onChange={(event) => setValue(event.target.value)}
+        placeholder={canManage ? t(($) => $.route_tab.placeholder) : ""}
+        aria-label={t(($) => $.detail_tabs.route)}
+        className="font-mono"
+      />
+      <p className="text-caption text-muted-foreground">{t(($) => $.route_tab.rules)}</p>
+      {canManage && (
+        <div className="flex items-center justify-end gap-3">
+          {isDirty && <span className="text-caption text-muted-foreground">{t(($) => $.instructions_tab.unsaved_changes)}</span>}
+          {saved !== "" && (
+            <Button size="sm" variant="ghost" disabled={saving} onClick={() => void save("")}>
+              {t(($) => $.route_tab.clear_button)}
+            </Button>
+          )}
+          <Button size="sm" onClick={() => void save(value.trim())} disabled={!isDirty || saving}>
+            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
             {t(($) => $.instructions_tab.save_button)}
           </Button>
         </div>
