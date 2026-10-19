@@ -2042,6 +2042,8 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 					r.Get("/wakeups/{wakeupID}/runs", h.ListIssueWakeupRuns)
 					r.Get("/system-wakeups", h.ListIssueSystemWakeups)
 					r.Put("/system-wakeups/{rule}", h.UpdateIssueSystemWakeup)
+					r.Get("/model-profile", h.GetIssueModelProfile)
+					r.Put("/model-profile", h.SetIssueModelProfile)
 					r.Get("/conveyor", h.GetIssueConveyor)
 					r.Put("/conveyor", h.ApplyIssueConveyor)
 					r.Get("/conveyor/events", h.ListIssueConveyorEvents)
@@ -2277,6 +2279,10 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 					// internal/handler/agent_env.go.
 					r.Get("/env", h.GetAgentEnv)
 					r.Put("/env", h.UpdateAgentEnv)
+					// Model list of the agent: profile, own list, disallowed
+					// tools, and what the server chooses for its next run.
+					r.Get("/models", h.GetAgentModels)
+					r.Put("/models", h.UpdateAgentModels)
 				})
 			})
 
@@ -2323,6 +2329,21 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 				r.Get("/failures/daily", h.GetDashboardFailuresDaily)
 				r.Get("/failures/by-agent", h.GetDashboardFailuresByAgent)
 			})
+
+			// Model profiles of the workspace: agents and issues reference
+			// them; an edit reaches every referencing run from its next claim.
+			r.Route("/api/model-profiles", func(r chi.Router) {
+				r.Get("/", h.ListModelProfiles)
+				r.Post("/", h.CreateModelProfile)
+				r.Post("/import", h.ImportModelProfiles)
+				r.Route("/{id}", func(r chi.Router) {
+					r.Get("/", h.GetModelProfile)
+					r.Put("/", h.UpdateModelProfile)
+					r.Delete("/", h.DeleteModelProfile)
+					r.Post("/preview", h.PreviewModelProfile)
+				})
+			})
+			r.Get("/api/runtime-unavailable", h.ListRuntimeUnavailable)
 
 			// Runtimes
 			r.Route("/api/runtimes", func(r chi.Router) {
