@@ -605,6 +605,13 @@ func (h *Handler) DeleteRuntimeProfile(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to clean up runtime instances")
 		return
 	}
+	for _, rt := range deletedRuntimes {
+		if err := qtx.DeleteRuntimeModelReferences(r.Context(), rt.ID); err != nil {
+			slog.Error("DeleteRuntimeModelReferences failed", "error", err, "runtime_id", uuidToString(rt.ID))
+			writeError(w, http.StatusInternalServerError, "failed to clean up runtime instances")
+			return
+		}
+	}
 	if !profileMissing {
 		if err := qtx.DeleteRuntimeProfile(r.Context(), db.DeleteRuntimeProfileParams{
 			ID:          profileUUID,
