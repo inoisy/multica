@@ -58,3 +58,15 @@ func TestRunIssueStagesSetsAndClearsTheSquad(t *testing.T) {
 		t.Fatal("an unknown squad was accepted")
 	}
 }
+
+func TestChildRouteStepCell(t *testing.T) {
+	for want, child := range map[string]map[string]any{
+		"-":                      {},
+		"review":                 {"route": map[string]any{"step": "review", "status": "active"}},
+		"dev (waiting_provider)": {"route": map[string]any{"step": "dev", "status": "waiting_provider"}},
+	} {
+		if got := childRouteStep(child); got != want {
+			t.Errorf("childRouteStep(%v) = %q, want %q", child, got, want)
+		}
+	}
+}

@@ -769,6 +769,47 @@ func (q *Queries) ListIssueConveyorEvents(ctx context.Context, arg ListIssueConv
 	return items, nil
 }
 
+const listIssueConveyorsByIssues = `-- name: ListIssueConveyorsByIssues :many
+SELECT id, workspace_id, issue_id, route, revision, cur_idx, round, cur_task_id, status, coordinator_agent_id, enabled_by, accepted_commit, waiting_reason, created_at, updated_at FROM issue_conveyor WHERE issue_id = ANY($1::uuid[])
+`
+
+// The routes of a page of issues (an epic's sub-issues), one row per routed issue.
+func (q *Queries) ListIssueConveyorsByIssues(ctx context.Context, issueIds []pgtype.UUID) ([]IssueConveyor, error) {
+	rows, err := q.db.Query(ctx, listIssueConveyorsByIssues, issueIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []IssueConveyor{}
+	for rows.Next() {
+		var i IssueConveyor
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.IssueID,
+			&i.Route,
+			&i.Revision,
+			&i.CurIdx,
+			&i.Round,
+			&i.CurTaskID,
+			&i.Status,
+			&i.CoordinatorAgentID,
+			&i.EnabledBy,
+			&i.AcceptedCommit,
+			&i.WaitingReason,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPendingIssueConveyorActions = `-- name: ListPendingIssueConveyorActions :many
 SELECT id, seq, conveyor_id, workspace_id, issue_id, kind, source_task_id, revision, idx, round, action, state, task_id, covered_by, reason, details, created_at FROM issue_conveyor_event
 WHERE kind = 'action' AND state = 'pending'
