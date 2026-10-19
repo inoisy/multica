@@ -54,6 +54,8 @@ type Agent struct {
 	DisabledRuntimeSkills []byte      `json:"disabled_runtime_skills"`
 	ServiceTier           pgtype.Text `json:"service_tier"`
 	ConversationStarters  []byte      `json:"conversation_starters"`
+	ModelProfileID        pgtype.UUID `json:"model_profile_id"`
+	DisallowedTools       []byte      `json:"disallowed_tools"`
 }
 
 type AgentBuilderDraft struct {
@@ -78,6 +80,16 @@ type AgentMcpServer struct {
 	ServerID  pgtype.UUID        `json:"server_id"`
 	Enabled   bool               `json:"enabled"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+type AgentModelOption struct {
+	WorkspaceID   pgtype.UUID `json:"workspace_id"`
+	AgentID       pgtype.UUID `json:"agent_id"`
+	Position      int32       `json:"position"`
+	RuntimeID     pgtype.UUID `json:"runtime_id"`
+	Model         string      `json:"model"`
+	ThinkingLevel string      `json:"thinking_level"`
+	CustomArgs    []byte      `json:"custom_args"`
 }
 
 type AgentRuntime struct {
@@ -179,6 +191,8 @@ type AgentTaskQueue struct {
 	CancelledByName           pgtype.Text `json:"cancelled_by_name"`
 	IssueSnapshot             []byte      `json:"issue_snapshot"`
 	ConveyorActionID          pgtype.UUID `json:"conveyor_action_id"`
+	ModelPosition             pgtype.Int4 `json:"model_position"`
+	ModelChoice               []byte      `json:"model_choice"`
 }
 
 type AgentToLabel struct {
@@ -827,6 +841,7 @@ type Issue struct {
 	LastActivityAt     pgtype.Timestamptz `json:"last_activity_at"`
 	TriageState        pgtype.Text        `json:"triage_state"`
 	DuplicateOfIssueID pgtype.UUID        `json:"duplicate_of_issue_id"`
+	ModelProfileID     pgtype.UUID        `json:"model_profile_id"`
 }
 
 type IssueChildEvent struct {
@@ -1207,6 +1222,27 @@ type Member struct {
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 }
 
+type ModelProfile struct {
+	ID                     pgtype.UUID        `json:"id"`
+	WorkspaceID            pgtype.UUID        `json:"workspace_id"`
+	Name                   string             `json:"name"`
+	Description            string             `json:"description"`
+	WhenExhaustedProfileID pgtype.UUID        `json:"when_exhausted_profile_id"`
+	CreatedBy              pgtype.UUID        `json:"created_by"`
+	CreatedAt              pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
+}
+
+type ModelProfileOption struct {
+	WorkspaceID   pgtype.UUID `json:"workspace_id"`
+	ProfileID     pgtype.UUID `json:"profile_id"`
+	Position      int32       `json:"position"`
+	RuntimeID     pgtype.UUID `json:"runtime_id"`
+	Model         string      `json:"model"`
+	ThinkingLevel string      `json:"thinking_level"`
+	CustomArgs    []byte      `json:"custom_args"`
+}
+
 type NotificationPreference struct {
 	ID          pgtype.UUID        `json:"id"`
 	WorkspaceID pgtype.UUID        `json:"workspace_id"`
@@ -1398,6 +1434,16 @@ type RuntimeProfile struct {
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 	RuntimeType    string             `json:"runtime_type"`
+}
+
+type RuntimeUnavailable struct {
+	ID          pgtype.UUID        `json:"id"`
+	WorkspaceID pgtype.UUID        `json:"workspace_id"`
+	RuntimeID   pgtype.UUID        `json:"runtime_id"`
+	Until       pgtype.Timestamptz `json:"until"`
+	Reason      string             `json:"reason"`
+	TaskID      pgtype.UUID        `json:"task_id"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 }
 
 type SearchIndexChange struct {
