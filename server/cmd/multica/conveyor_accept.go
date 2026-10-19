@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -429,4 +430,37 @@ func clipCommand(command string) string {
 		return string(r[:499]) + "…"
 	}
 	return command
+}
+
+// acceptRepository turns the repository a dev step named into the one the
+// workspace knows. Executors working in a local checkout often name the
+// directory they worked in: its origin when it has one, otherwise the main
+// repository of the worktree. Anything else (a URL, a path that is not a git
+// checkout) is returned as given.
+func acceptRepository(ctx context.Context, repo string) string {
+	repo = strings.TrimSpace(repo)
+	if !filepath.IsAbs(repo) {
+		return repo
+	}
+	if info, err := os.Stat(repo); err != nil || !info.IsDir() {
+		return repo
+	}
+	git := func(args ...string) string {
+		out, err := exec.CommandContext(ctx, "git", append([]string{"-C", repo}, args...)...).Output()
+		if err != nil {
+			return ""
+		}
+		return strings.TrimSpace(string(out))
+	}
+	if origin := git("remote", "get-url", "origin"); origin != "" {
+		return origin
+	}
+	common := git("rev-parse", "--path-format=absolute", "--git-common-dir")
+	if common == "" {
+		return repo
+	}
+	if filepath.Base(common) == ".git" {
+		return filepath.Dir(common)
+	}
+	return common
 }

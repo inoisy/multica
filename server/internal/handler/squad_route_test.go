@@ -155,6 +155,35 @@ func TestSquadDefaultRouteRunsTheIssueWithoutTheLeader(t *testing.T) {
 	}
 }
 
+func TestIssueRouteWinsOverSquadTemplate(t *testing.T) {
+	r := newSquadRouteRig(t)
+	// The squad's template sends dev to the bystander; the leader wrote this
+	// issue's own route with another dev, and that one runs.
+	r.setTemplate("dev:" + r.agents["bystander"] + ",qa:" + r.agents["qa"] + ",close:" + r.agents["lead"]).Want(http.StatusOK)
+	dbfx.Exec(t, `UPDATE issue SET metadata = jsonb_build_object('route', $2::text) WHERE id = $1`, r.issue, r.spec("dev", "qa", "close"))
+	r.assignToSquad()
+
+	if status, step := r.conveyorStatus(); status != "active" || step != "dev" {
+		t.Fatalf("route after assignment: status %q step %q", status, step)
+	}
+	if r.runs("dev") != 1 || r.runs("bystander") != 0 || r.runs("lead") != 0 {
+		t.Fatalf("dev=%d bystander=%d lead=%d runs, want the issue's dev only", r.runs("dev"), r.runs("bystander"), r.runs("lead"))
+	}
+}
+
+func TestIssueRouteStartsWithoutSquadTemplate(t *testing.T) {
+	r := newSquadRouteRig(t)
+	dbfx.Exec(t, `UPDATE issue SET metadata = jsonb_build_object('route', $2::text) WHERE id = $1`, r.issue, r.spec("dev", "qa", "close"))
+	r.assignToSquad()
+
+	if status, step := r.conveyorStatus(); status != "active" || step != "dev" {
+		t.Fatalf("route after assignment: status %q step %q", status, step)
+	}
+	if r.runs("dev") != 1 || r.runs("lead") != 0 {
+		t.Fatalf("dev=%d lead=%d runs, want the issue's dev only", r.runs("dev"), r.runs("lead"))
+	}
+}
+
 func TestSquadWithoutTemplateWakesTheLeader(t *testing.T) {
 	r := newSquadRouteRig(t)
 	r.assignToSquad()
