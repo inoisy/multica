@@ -125,6 +125,7 @@ type NavKey =
   | "usage"
   | "conveyor"
   | "subscriptions"
+  | "modelProfiles"
   | "runtimes"
   | "skills"
   | "settings";
@@ -143,6 +144,7 @@ type NavLabelKey =
   | "usage"
   | "conveyor"
   | "subscriptions"
+  | "model_profiles"
   | "runtimes"
   | "skills"
   | "settings";
@@ -162,6 +164,7 @@ const workNav: { key: NavKey; labelKey: NavLabelKey }[] = [
   { key: "autopilots", labelKey: "autopilots" },
   { key: "conveyor", labelKey: "conveyor" },
   { key: "subscriptions", labelKey: "subscriptions" },
+  { key: "modelProfiles", labelKey: "model_profiles" },
 ];
 
 const aiTeamNav: { key: NavKey; labelKey: NavLabelKey }[] = [

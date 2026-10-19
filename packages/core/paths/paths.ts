@@ -31,6 +31,7 @@ function workspaceScoped(slug: string) {
     subscriptions: () => `${ws}/subscriptions`,
     pages: () => `${ws}/pages`,
     customPage: (id: string) => `${ws}/pages/${encode(id)}`,
+    modelProfiles: () => `${ws}/profiles`,
     issues: () => `${ws}/issues`,
     issueDetail: (id: string) => `${ws}/issues/${encode(id)}`,
     projects: () => `${ws}/projects`,

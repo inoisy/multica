@@ -14,7 +14,8 @@
     "settings": "설정",
     "conveyor": "Conveyor",
     "subscriptions": "Subscriptions",
-    "pages": "Pages"
+    "pages": "Pages",
+    "model_profiles": "Profiles"
   },
   "tab": {
     "issue": "태스크",
