@@ -1392,5 +1392,9 @@
     "overview_close": "关闭",
     "overview_empty": "没有这类产物。",
     "group_comment_by": "{{name}} 的评论"
+  },
+  "model_profile": {
+    "label": "Model profile",
+    "assignee": "Assignee's profile"
   }
 }

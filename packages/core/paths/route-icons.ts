@@ -31,6 +31,7 @@ export type RouteIconName =
   | "BarChart3"
   | "Workflow"
   | "Gauge"
+  | "Layers"
   | "Monitor"
   | "Server"
   | "BookOpenText"
@@ -57,6 +58,7 @@ export type NavLabelKey =
   | "usage"
   | "conveyor"
   | "subscriptions"
+  | "model_profiles"
   | "runtimes"
   | "skills"
   | "settings";
@@ -74,6 +76,7 @@ export type WorkspacePageKey =
   | "usage"
   | "conveyor"
   | "subscriptions"
+  | "modelProfiles"
   | "runtimes"
   | "skills"
   | "settings";
@@ -103,6 +106,7 @@ export const WORKSPACE_PAGES: Record<WorkspacePageKey, WorkspacePage> = {
   usage: { segment: "usage", icon: "BarChart3", navKey: "usage" },
   conveyor: { segment: "conveyor", icon: "Workflow", navKey: "conveyor" },
   subscriptions: { segment: "subscriptions", icon: "Gauge", navKey: "subscriptions" },
+  modelProfiles: { segment: "profiles", icon: "Layers", navKey: "model_profiles" },
   runtimes: { segment: "runtimes", icon: "Monitor", navKey: "runtimes" },
   skills: { segment: "skills", icon: "BookOpenText", navKey: "skills" },
   settings: { segment: "settings", icon: "Settings", navKey: "settings" },

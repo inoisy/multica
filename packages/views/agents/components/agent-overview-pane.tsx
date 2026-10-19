@@ -38,7 +38,7 @@ import { AgentMcpTab } from "./tabs/agent-mcp-tab";
 import { IntegrationsTab } from "./tabs/integrations-tab";
 import { RuntimeConfigTab } from "./tabs/runtime-config-tab";
 import { AgentDetailInspector } from "./agent-detail-inspector";
-import { AgentFallbackChain } from "./agent-fallback-chain";
+import { AgentModels } from "./agent-models";
 import { AgentAccessSettings } from "./agent-access-settings";
 import { AgentOverviewSummary } from "./agent-overview-summary";
 import { ActorIssuesPanel } from "../../common/actor-issues-panel";
@@ -491,7 +491,7 @@ export function AgentOverviewPane({
                         canEdit={canEdit}
                         onUpdate={onUpdate}
                       />
-                      <AgentFallbackChain
+                      <AgentModels
                         agent={agent}
                         runtimes={runtimes}
                         members={members}

@@ -101,6 +101,7 @@ const PAGE_KEYWORDS: Record<WorkspacePageKey, string[]> = {
   usage: ["usage", "analytics", "stats", "metrics", "统计", "分析", "用量"],
   conveyor: ["conveyor", "pipeline", "stages", "конвейер", "этапы", "эпики"],
   subscriptions: ["subscriptions", "limits", "quota", "usage", "подписки", "лимиты", "квоты", "расход"],
+  modelProfiles: ["profiles", "models", "fallback", "профили", "модели", "фоллбеки"],
   runtimes: ["runtimes", "environments", "machines", "运行时"],
   skills: ["skills", "library", "技能"],
   settings: ["settings", "config", "preferences", "设置", "配置"],
