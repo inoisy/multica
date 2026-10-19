@@ -57,6 +57,9 @@ func NormalizeSquadRouteTemplate(ctx context.Context, q *db.Queries, workspaceID
 	if lastDev >= 0 && lastQA < lastDev {
 		return "", conveyorErr(ErrConveyorInvalid, "a qa step must follow dev")
 	}
+	if err := acceptPlacementError(entries); err != nil {
+		return "", err
+	}
 	return strings.Join(parts, ","), nil
 }
 
