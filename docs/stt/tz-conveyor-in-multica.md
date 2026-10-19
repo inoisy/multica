@@ -96,6 +96,14 @@
 сейчас повторяет сторож (`INFRA` в `multica-conveyor`: `initialize failed`, `handshake timeout`, `daemon restarted`,
 `ECONNRESET`…), с тем же пределом подряд; после предела — эскалация маршрута лидеру (уже есть).
 
+Сделано (этап 3): тексты `connection reset`, `handshake timeout`, `require-vless`, `routing discovery failed`,
+`control protocol failed` классифицируются как `agent_error.provider_network` и повторяются штатно (до 3 попыток).
+Голые `ECONNRESET`/`ETIMEDOUT` не добавлены: их печатают и локальные инструменты, и MCP-серверы, а апстрим нарочно
+не повторяет такие падения. `initialize failed` и `process exited` остаются `process_failure` (без автоповтора):
+по тексту не отличить сбой от детерминированного падения CLI. Шаг маршрута у подзадач — поле `route`
+(`step`, `status`, `round`, `waiting_reason`) в `GET /api/issues/{id}/children` и колонка `STEP` в
+`multica issue children --output table`; колонка в вебе — отдельной правкой веба.
+
 ## 6. Стенд rp
 
 Загрузка справочников после пересборки — забота стенда: при старте, если справочники пустые, стенд сам вызывает

@@ -102,6 +102,12 @@ func TestClassifyRules(t *testing.T) {
 		{"connection closed with exit status wins over process failure", "claude exited with error: exit status 1\nAPI Error: Connection closed mid-response.", ReasonAgentProviderNetwork},
 		{"error sending request", "error sending request for url (https://api.example.com/v1)", ReasonAgentProviderNetwork},
 		{"unable to connect", "unable to connect to provider", ReasonAgentProviderNetwork},
+		// Transport cuts a self-hosted stand sees; retried like other cuts.
+		{"connection reset", "read tcp 10.0.0.2:443: connection reset by peer", ReasonAgentProviderNetwork},
+		{"handshake timeout", "websocket: handshake timeout", ReasonAgentProviderNetwork},
+		{"proxy wrapper refused", "require-vless: tunnel is down", ReasonAgentProviderNetwork},
+		{"routing discovery failed", "routing discovery failed: no route to the provider", ReasonAgentProviderNetwork},
+		{"control protocol failed wins over process failure", "control protocol failed: eof\nexit status 1", ReasonAgentProviderNetwork},
 		{"dial tcp", "dial tcp 1.2.3.4:443: connect: connection refused", ReasonAgentProviderNetwork},
 		{"connection refused alone", "connection refused", ReasonAgentProviderNetwork},
 		{"connectionrefused single", "ConnectionRefused", ReasonAgentProviderNetwork},
