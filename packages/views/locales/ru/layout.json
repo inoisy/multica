@@ -13,7 +13,8 @@
     "skills": "Навыки",
     "settings": "Настройки",
     "conveyor": "Конвейер",
-    "subscriptions": "Подписки"
+    "subscriptions": "Подписки",
+    "model_profiles": "Профили"
   },
   "tab": {
     "issue": "Задача",
