@@ -1439,5 +1439,9 @@
     "overview_close": "Close",
     "overview_empty": "No deliverables of this type.",
     "group_comment_by": "Comment by {{name}}"
+  },
+  "model_profile": {
+    "label": "Model profile",
+    "assignee": "Assignee's profile"
   }
 }

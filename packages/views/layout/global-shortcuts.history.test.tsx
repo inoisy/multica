@@ -26,6 +26,7 @@ vi.mock("@multica/core/paths", () => ({
     usage: () => "/w/usage",
     conveyor: () => "/w/conveyor",
     subscriptions: () => "/w/subscriptions",
+    modelProfiles: () => "/w/profiles",
     runtimes: () => "/w/runtimes",
     skills: () => "/w/skills",
     settings: () => "/w/settings",

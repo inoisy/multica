@@ -1539,5 +1539,9 @@
     "overview_close": "Закрыть",
     "overview_empty": "Нет результатов этого типа.",
     "group_comment_by": "Комментарий {{name}}"
+  },
+  "model_profile": {
+    "label": "Профиль модели",
+    "assignee": "Профиль исполнителя"
   }
 }
