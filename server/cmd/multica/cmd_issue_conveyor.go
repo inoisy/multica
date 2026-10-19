@@ -80,7 +80,7 @@ func newIssueConveyorCommand() *cobra.Command {
 	}
 	result.Flags().String("file", "", "Result JSON file, or - for stdin")
 	result.Flags().String("output", "json", "Output format: json")
-	conv.AddCommand(get, events, result)
+	conv.AddCommand(get, events, result, newIssueConveyorAcceptCommand())
 	return conv
 }
 

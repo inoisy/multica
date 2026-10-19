@@ -343,40 +343,10 @@ func runRepoRemove(cmd *cobra.Command, args []string) error {
 func runRepoCheckout(cmd *cobra.Command, args []string) error {
 	repoURL := args[0]
 
-	daemonPort := os.Getenv("MULTICA_DAEMON_PORT")
-	if daemonPort == "" {
-		return fmt.Errorf("MULTICA_DAEMON_PORT not set (this command is intended to be run by an agent inside a daemon task)")
-	}
-
-	workspaceID := os.Getenv("MULTICA_WORKSPACE_ID")
-	agentName := os.Getenv("MULTICA_AGENT_NAME")
-	taskID := os.Getenv("MULTICA_TASK_ID")
-	taskToken := os.Getenv("MULTICA_TOKEN")
-	if taskToken == "" {
-		return fmt.Errorf("MULTICA_TOKEN not set (repo checkout requires the active task credential)")
-	}
-
 	// Use current working directory as the checkout target.
 	workDir, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("get working directory: %w", err)
-	}
-
-	reqBody := map[string]any{
-		"url":           repoURL,
-		"workspace_id":  workspaceID,
-		"workdir":       workDir,
-		"ref":           repoCheckoutRef,
-		"agent_name":    agentName,
-		"task_id":       taskID,
-		"checkout_mode": strings.TrimSpace(os.Getenv("MULTICA_REPO_CHECKOUT_MODE")),
-		"retry_busy":    true,
-		"fresh":         repoCheckoutFresh,
-	}
-
-	data, err := json.Marshal(reqBody)
-	if err != nil {
-		return fmt.Errorf("encode request: %w", err)
 	}
 
 	parentCtx := cmd.Context()
@@ -385,27 +355,71 @@ func runRepoCheckout(cmd *cobra.Command, args []string) error {
 	}
 	ctx, cancel := context.WithTimeout(parentCtx, 5*time.Minute)
 	defer cancel()
+	result, err := daemonRepoCheckout(ctx, repoURL, repoCheckoutRef, repoCheckoutFresh, workDir)
+	if err != nil {
+		return err
+	}
+
+	fmt.Fprintf(os.Stdout, "%s\n", result.Path)
+	fmt.Fprintln(os.Stderr, repoCheckoutSummary(repoURL, result))
+
+	return nil
+}
+
+// daemonRepoCheckout asks the local daemon for a checkout of repoURL under
+// workDir on behalf of the active task, waiting out a busy repository.
+func daemonRepoCheckout(ctx context.Context, repoURL, ref string, fresh bool, workDir string) (repoCheckoutResult, error) {
+	daemonPort := os.Getenv("MULTICA_DAEMON_PORT")
+	if daemonPort == "" {
+		return repoCheckoutResult{}, fmt.Errorf("MULTICA_DAEMON_PORT not set (this command is intended to be run by an agent inside a daemon task)")
+	}
+
+	workspaceID := os.Getenv("MULTICA_WORKSPACE_ID")
+	agentName := os.Getenv("MULTICA_AGENT_NAME")
+	taskID := os.Getenv("MULTICA_TASK_ID")
+	taskToken := os.Getenv("MULTICA_TOKEN")
+	if taskToken == "" {
+		return repoCheckoutResult{}, fmt.Errorf("MULTICA_TOKEN not set (repo checkout requires the active task credential)")
+	}
+
+	reqBody := map[string]any{
+		"url":           repoURL,
+		"workspace_id":  workspaceID,
+		"workdir":       workDir,
+		"ref":           ref,
+		"agent_name":    agentName,
+		"task_id":       taskID,
+		"checkout_mode": strings.TrimSpace(os.Getenv("MULTICA_REPO_CHECKOUT_MODE")),
+		"retry_busy":    true,
+		"fresh":         fresh,
+	}
+
+	data, err := json.Marshal(reqBody)
+	if err != nil {
+		return repoCheckoutResult{}, fmt.Errorf("encode request: %w", err)
+	}
+
 	client := &http.Client{}
 	checkoutURL := fmt.Sprintf("http://127.0.0.1:%s/repo/checkout", daemonPort)
 	var body []byte
 	for {
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, checkoutURL, bytes.NewReader(data))
 		if err != nil {
-			return fmt.Errorf("create daemon checkout request: %w", err)
+			return repoCheckoutResult{}, fmt.Errorf("create daemon checkout request: %w", err)
 		}
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+taskToken)
 		resp, err := client.Do(req)
 		if err != nil {
-			return fmt.Errorf("connect to daemon: %w", err)
+			return repoCheckoutResult{}, fmt.Errorf("connect to daemon: %w", err)
 		}
 		body, err = io.ReadAll(resp.Body)
 		closeErr := resp.Body.Close()
 		if err != nil {
-			return fmt.Errorf("read daemon checkout response: %w", err)
+			return repoCheckoutResult{}, fmt.Errorf("read daemon checkout response: %w", err)
 		}
 		if closeErr != nil {
-			return fmt.Errorf("close daemon checkout response: %w", closeErr)
+			return repoCheckoutResult{}, fmt.Errorf("close daemon checkout response: %w", closeErr)
 		}
 		if resp.StatusCode == http.StatusServiceUnavailable && resp.Header.Get("X-Multica-Retryable") == "repo-busy" {
 			delay := repoCheckoutRetryDelay(resp.Header.Get("Retry-After"), time.Now())
@@ -413,26 +427,22 @@ func runRepoCheckout(cmd *cobra.Command, args []string) error {
 			select {
 			case <-ctx.Done():
 				timer.Stop()
-				return fmt.Errorf("connect to daemon: %w", context.Cause(ctx))
+				return repoCheckoutResult{}, fmt.Errorf("connect to daemon: %w", context.Cause(ctx))
 			case <-timer.C:
 				continue
 			}
 		}
 		if resp.StatusCode != http.StatusOK {
-			return fmt.Errorf("checkout failed: %s", string(body))
+			return repoCheckoutResult{}, fmt.Errorf("checkout failed: %s", string(body))
 		}
 		break
 	}
 
 	var result repoCheckoutResult
 	if err := json.Unmarshal(body, &result); err != nil {
-		return fmt.Errorf("parse response: %w", err)
+		return repoCheckoutResult{}, fmt.Errorf("parse response: %w", err)
 	}
-
-	fmt.Fprintf(os.Stdout, "%s\n", result.Path)
-	fmt.Fprintln(os.Stderr, repoCheckoutSummary(repoURL, result))
-
-	return nil
+	return result, nil
 }
 
 // repoCheckoutResult is the daemon's /repo/checkout response. Daemons older
