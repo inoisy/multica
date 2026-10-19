@@ -2046,6 +2046,8 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 					r.Put("/model-profile", h.SetIssueModelProfile)
 					r.Get("/conveyor", h.GetIssueConveyor)
 					r.Put("/conveyor", h.ApplyIssueConveyor)
+					r.Get("/stage-dispatch", h.GetIssueStageDispatch)
+					r.Put("/stage-dispatch", h.SetIssueStageDispatch)
 					r.Get("/conveyor/events", h.ListIssueConveyorEvents)
 					r.Post("/conveyor/results", h.SubmitIssueConveyorResult)
 					r.Get("/active-task", h.GetActiveTaskForIssue)
