@@ -432,8 +432,11 @@ var issueUsageCmd = &cobra.Command{
 var issueRerunCmd = &cobra.Command{
 	Use:   "rerun <id>",
 	Short: "Re-enqueue an issue's current agent assignment as a fresh run",
-	Args:  exactArgs(1),
-	RunE:  runIssueRerun,
+	Long: "Re-enqueue the issue's current assignment, or the run named with --task, as a fresh run.\n\n" +
+		"On an issue with an enabled route (`issue conveyor`) the route owns the retry of its step: the call " +
+		"creates exactly one successor of the run that failed and returns the live one if it already exists.",
+	Args: exactArgs(1),
+	RunE: runIssueRerun,
 }
 
 var issueCancelTaskCmd = &cobra.Command{
@@ -694,6 +697,7 @@ func init() {
 
 	// issue rerun
 	issueRerunCmd.Flags().String("output", "json", "Output format: table or json")
+	issueRerunCmd.Flags().String("task", "", "Repeat this run (full id or the short prefix from `issue runs`) instead of the issue's current assignee; on a routed issue it names the step run to retry")
 	// issue cancel-task
 	issueCancelTaskCmd.Flags().String("output", "json", "Output format: table or json")
 	issueCancelTaskCmd.Flags().String("issue", "", "Issue ID/key to scope short run ID prefix resolution")
@@ -2946,8 +2950,17 @@ func runIssueRerun(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("resolve issue: %w", err)
 	}
 
+	body := map[string]any{}
+	if input, _ := cmd.Flags().GetString("task"); input != "" {
+		taskRef, err := resolveTaskRunID(ctx, client, issueRef.ID, input)
+		if err != nil {
+			return fmt.Errorf("resolve run: %w", err)
+		}
+		body["task_id"] = taskRef.ID
+	}
+
 	var task map[string]any
-	if err := client.PostJSON(ctx, "/api/issues/"+issueRef.ID+"/rerun", map[string]any{}, &task); err != nil {
+	if err := client.PostJSON(ctx, "/api/issues/"+issueRef.ID+"/rerun", body, &task); err != nil {
 		return fmt.Errorf("rerun issue: %w", err)
 	}
 

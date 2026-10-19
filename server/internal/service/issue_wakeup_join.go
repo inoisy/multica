@@ -35,9 +35,13 @@ import (
 //     like one that started a run (takenReceipts). If the run ends without
 //     starting, or goes to an older daemon, the rule has its inputs back and
 //     starts its own run.
+//   - superseded: the agent's own rule fired for the ending of a run whose
+//     outcome the issue's route has already decided and acted on. No run
+//     starts; covered_by names the route action that answers the firing.
 const (
 	wakeupOutcomeMerged       = "merged"
 	wakeupOutcomeAcknowledged = "acknowledged"
+	wakeupOutcomeSuperseded   = "superseded"
 	maxJoinedWakeupNote       = 12000
 )
 
