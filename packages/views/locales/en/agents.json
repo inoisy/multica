@@ -1167,6 +1167,28 @@
     "refreshed": "Quota data refreshed",
     "refresh_timeout": "No new data within 90 seconds — showing the previous figures",
     "data_at": "Quota data as of {{time}}",
-    "usage_as_of": "figures as of {{time}}"
+    "usage_as_of": "figures as of {{time}}",
+    "login": {
+      "state": {
+        "logged_in": "Signed in",
+        "revoked": "Sign-in revoked",
+        "never": "Not signed in",
+        "check_failed": "Check failed",
+        "unchecked": "Not checked"
+      },
+      "relogin": "Sign in again",
+      "title": "Sign in to {{account}}",
+      "codex_hint": "Open the link, sign in to the subscription account and enter the code. The current credential is replaced only after a successful sign-in.",
+      "claude_hint": "Run `claude setup-token` on any computer and paste the token. It is stored on the server only and never shown again.",
+      "key_hint": "Paste the new key. Where the provider allows it, the key is checked before it replaces the current one.",
+      "code": "Code:",
+      "waiting": "Waiting for sign-in to finish…",
+      "start": "Get link",
+      "cancel_login": "Cancel sign-in",
+      "token_label": "Token",
+      "key_label": "API key",
+      "done": "Signed in",
+      "failed": "Sign-in did not finish; the current credential is unchanged"
+    }
   }
 }
