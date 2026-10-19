@@ -1,3 +1,4 @@
+import { useParams } from "react-router-dom";
 import { useEffect } from "react";
 import { createMemoryRouter, Outlet, useMatches } from "react-router-dom";
 import type { RouteObject } from "react-router-dom";
@@ -18,6 +19,7 @@ import { ProjectsPage } from "@multica/views/projects/components";
 import { DashboardPage } from "@multica/views/dashboard";
 import { ConveyorPage } from "@multica/views/conveyor";
 import { SubscriptionsPage } from "@multica/views/subscriptions";
+import { CustomPagesPage, CustomPageView } from "@multica/views/custom-pages";
 import { AutopilotsPage } from "@multica/views/autopilots/components";
 import { MyIssuesPage } from "@multica/views/my-issues";
 import { SkillsPage } from "@multica/views/skills";
@@ -44,6 +46,11 @@ import { DesktopRouteErrorPage } from "./components/route-error-page";
  * from i18n. The route element has to be a component (not a literal JSX
  * value) for `useT` to run.
  */
+function CustomPageRoute() {
+  const { id } = useParams<{ id: string }>();
+  return id ? <CustomPageView pageId={id} /> : null;
+}
+
 function DesktopSettingsRoute() {
   const { t } = useT("settings");
   return (
@@ -243,6 +250,16 @@ export const appRoutes: RouteObject[] = [
             path: "subscriptions",
             element: <SubscriptionsPage />,
             handle: { title: "Subscriptions" },
+          },
+          {
+            path: "pages",
+            element: <CustomPagesPage />,
+            handle: { title: "Pages" },
+          },
+          {
+            path: "pages/:id",
+            element: <CustomPageRoute />,
+            handle: { title: "Page" },
           },
           {
             path: "settings",

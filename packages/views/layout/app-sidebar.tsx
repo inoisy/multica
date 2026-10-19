@@ -19,6 +19,7 @@ import {
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Layers,
+  Settings2,
   ChevronDown,
   ChevronRight,
   LogOut,
@@ -64,7 +65,7 @@ import {
   issueViewContainerKey,
   useActiveIssueViewStore,
 } from "@multica/core/issue-views/active-view-store";
-import { useCurrentWorkspace, useWorkspacePaths, paths } from "@multica/core/paths";
+import { useCurrentWorkspace, useWorkspacePaths, useWorkspaceSlug, paths } from "@multica/core/paths";
 import { workspaceListOptions, myInvitationListOptions, workspaceKeys } from "@multica/core/workspace/queries";
 import { resolvePublicFileUrl } from "@multica/core/workspace/avatar-url";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -83,6 +84,7 @@ import { useLogout } from "../auth";
 import { ProjectIcon } from "../projects/components/project-icon";
 import { routeIconForPath } from "./route-icon-components";
 import { useT } from "../i18n";
+import { customPagesOptions } from "../custom-pages";
 import {
   useShortcut,
 } from "@multica/core/shortcuts";
@@ -176,6 +178,54 @@ const utilityNav: { key: NavKey; labelKey: NavLabelKey }[] = [
 
 const NAV_ITEM_CLASS_NAME =
   "text-muted-foreground hover:not-data-active:bg-sidebar-accent/70 data-active:bg-sidebar-accent data-active:text-sidebar-accent-foreground";
+
+/** Свои страницы workspace (пульт, `pages`): ссылки в сайдбаре; пусто и без прав правки — группы нет. */
+function CustomPagesGroup({ pathname }: { pathname: string }) {
+  const { t } = useT("layout");
+  const p = useWorkspacePaths();
+  const { data } = useQuery(customPagesOptions(useWorkspaceSlug()));
+  if (!data || (!data.pages.length && !data.can_edit)) return null;
+  const Icon = routeIconForPath(p.pages());
+  return (
+    <SidebarGroup>
+      <SidebarGroupLabel>{t(($) => $.nav.pages)}</SidebarGroupLabel>
+      <SidebarGroupContent>
+        <SidebarMenu className="gap-0.5">
+          {data.pages.map((page) => {
+            const href = p.customPage(page.id);
+            return (
+              <SidebarMenuItem key={page.id}>
+                <SidebarMenuButton
+                  isActive={isNavActive(pathname, href)}
+                  render={page.mode === "tab"
+                    ? <a href={page.url} target="_blank" rel="noopener noreferrer" />
+                    : <AppLink href={href} />}
+                  className={NAV_ITEM_CLASS_NAME}
+                  title={page.description || undefined}
+                >
+                  <Icon />
+                  <span>{page.title}</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            );
+          })}
+          {data.can_edit ? (
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                isActive={pathname === p.pages()}
+                render={<AppLink href={p.pages()} />}
+                className={NAV_ITEM_CLASS_NAME}
+              >
+                <Settings2 />
+                <span>{data.pages.length ? "Настроить" : "Добавить страницу"}</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          ) : null}
+        </SidebarMenu>
+      </SidebarGroupContent>
+    </SidebarGroup>
+  );
+}
 
 function DraftDot() {
   const hasDraft = useIssueDraftStore((s) => s.hasDraft());
@@ -887,6 +937,8 @@ export function AppSidebar({ topSlot, searchSlot, headerClassName, headerStyle }
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
+
+          <CustomPagesGroup pathname={pathname} />
 
           <SidebarGroup>
             <SidebarGroupLabel>{t(($) => $.sidebar.ai_team_group)}</SidebarGroupLabel>

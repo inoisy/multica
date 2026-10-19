@@ -38,6 +38,7 @@
     "./dashboard": "./dashboard/index.ts",
     "./conveyor": "./conveyor/index.ts",
     "./subscriptions": "./subscriptions/index.ts",
+    "./custom-pages": "./custom-pages/index.ts",
     "./squads": "./squads/index.ts",
     "./squads/components": "./squads/components/index.ts",
     "./workspace/workspace-avatar": "./workspace/workspace-avatar.tsx",
