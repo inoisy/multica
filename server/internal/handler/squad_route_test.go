@@ -206,7 +206,7 @@ func TestSquadRouteThatCannotStartGoesToTheLeaderWithTheReason(t *testing.T) {
 	}
 	var note string
 	dbfx.QueryRow(t, "SELECT COALESCE(handoff_note,'') FROM agent_task_queue WHERE issue_id=$1 AND agent_id=$2", r.issue, r.agents["lead"]).Scan(&note)
-	if !strings.Contains(note, "default route was not enabled") || !strings.Contains(note, r.agents["dev"]) {
+	if !strings.Contains(note, "default route was not enabled") || !strings.Contains(note, "is archived") {
 		t.Fatalf("leader is not told why the route did not start: %q", note)
 	}
 }
