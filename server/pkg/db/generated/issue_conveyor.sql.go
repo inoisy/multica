@@ -75,6 +75,25 @@ func (q *Queries) CancelPendingIssueConveyorActions(ctx context.Context, arg Can
 	return items, nil
 }
 
+const countIssueConveyorBacks = `-- name: CountIssueConveyorBacks :one
+SELECT count(*) FROM issue_conveyor_event
+WHERE conveyor_id = $1 AND revision = $2 AND kind = 'decision' AND action = 'back'
+`
+
+type CountIssueConveyorBacksParams struct {
+	ConveyorID pgtype.UUID `json:"conveyor_id"`
+	Revision   pgtype.Int8 `json:"revision"`
+}
+
+// How many times the route went back by itself since its revision began:
+// the rounds a node's back option has spent.
+func (q *Queries) CountIssueConveyorBacks(ctx context.Context, arg CountIssueConveyorBacksParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countIssueConveyorBacks, arg.ConveyorID, arg.Revision)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countLiveIssueRunsOfAgent = `-- name: CountLiveIssueRunsOfAgent :one
 SELECT count(*) FROM agent_task_queue
 WHERE issue_id = $1 AND agent_id = $2

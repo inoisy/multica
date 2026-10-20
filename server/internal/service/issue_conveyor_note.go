@@ -27,9 +27,10 @@ func conveyorHandoffNote(issue db.Issue, cv db.IssueConveyor, action db.IssueCon
 	}
 	id := util.UUIDToString(issue.ID)
 	var d struct {
-		Reason string `json:"why"`
-		Report string `json:"report"`
-		Detail string `json:"reason"`
+		Reason     string `json:"why"`
+		Report     string `json:"report"`
+		Detail     string `json:"reason"`
+		ReturnedBy string `json:"returned_by"`
 	}
 	_ = json.Unmarshal(action.Details, &d)
 
@@ -55,11 +56,17 @@ func conveyorHandoffNote(issue db.Issue, cv db.IssueConveyor, action db.IssueCon
 		return b.String()
 	}
 	fmt.Fprintf(&b, "Задача ведётся по маршруту: ваш шаг «%s», раунд %d. Сделайте его и сдайте результат командой:\n\n", step, action.Round.Int32)
+	if d.ReturnedBy != "" {
+		fmt.Fprintf(&b, "Работу вернул шаг «%s» — исправьте то, что он нашёл, остальное не трогайте:\n\n%s\n\n", d.ReturnedBy, d.Report)
+	}
 	fmt.Fprintf(&b, "    multica issue conveyor result %s --file result.json\n\nФормат result.json:\n\n%s\n\n", id, conveyorResultExample)
 	if step == conveyorStepDev {
 		b.WriteString("artifact.repo — репозиторий, как он записан в настройках workspace (URL; для локального репозитория — его путь или путь вашей рабочей копии).\n")
 	}
 	b.WriteString("outcome: `pass` — шаг выполнен; `changes_requested` — нужны правки предыдущего шага; `blocked` — не можете продолжить; `needs_coordinator` — нужно решение координатора.\n")
+	if node := conveyorNodeAt(route, action.Idx.Int32); node != nil && node.Back != "" {
+		fmt.Fprintf(&b, "`changes_requested` вернёт работу на шаг «%s» с вашим отчётом (всего кругов не больше %d, дальше — координатор): в report перечислите, что именно исправить.\n", node.Back, node.backRounds())
+	}
 	if step == conveyorStepQA || step == conveyorStepReview {
 		fmt.Fprintf(&b, "Проверяйте именно принятый commit")
 		if cv.AcceptedCommit.Valid {
