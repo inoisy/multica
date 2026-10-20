@@ -639,12 +639,13 @@ type conveyorSkippedPeer struct {
 
 // passedPeers are the executors at from, from+1, ... that a new round need
 // not run again. That holds only when the round being left stopped later
-// inside the same step (a run there was cut short or failed), so nothing a
-// later step judged sent the work back. Each of them must have handed in a
-// pass with a commit as its latest result, and since then no other step may
-// have handed in anything and no result may name its branch at another
-// commit. A later step that sends work back stops the route outside the
-// step, so all of its executors run again.
+// inside the same step because the run there was cut short without handing
+// in a result. A result there, a failing one above all, may blame an earlier
+// executor, and a later step that sends work back stops the route outside
+// the step: in both cases every executor of the step runs again. Each one
+// skipped must have handed in a pass with a commit as its latest result, and
+// since then no other step may have handed in anything and no result may
+// name its branch at another commit.
 func (s *IssueConveyorService) passedPeers(ctx context.Context, q *db.Queries, cv db.IssueConveyor, route []ConveyorNode, from int32) ([]conveyorSkippedPeer, error) {
 	if from >= cv.CurIdx || int(cv.CurIdx) >= len(route)-1 {
 		return nil, nil
@@ -658,6 +659,7 @@ func (s *IssueConveyorService) passedPeers(ctx context.Context, q *db.Queries, c
 	type result struct {
 		seq      int64
 		idx      int32
+		round    int32
 		outcome  string
 		artifact ConveyorArtifact
 	}
@@ -677,12 +679,17 @@ func (s *IssueConveyorService) passedPeers(ctx context.Context, q *db.Queries, c
 			case e.Kind == conveyorEventResult:
 				var d ConveyorResultInput
 				if json.Unmarshal(e.Details, &d) == nil {
-					results = append(results, result{seq: e.Seq.Int64, idx: e.Idx.Int32, outcome: e.Action.String, artifact: d.Artifact})
+					results = append(results, result{seq: e.Seq.Int64, idx: e.Idx.Int32, round: e.Round.Int32, outcome: e.Action.String, artifact: d.Artifact})
 				}
 			}
 		}
 		if len(events) < 500 {
 			break
+		}
+	}
+	for _, r := range results {
+		if r.idx == cv.CurIdx && r.round == cv.Round {
+			return nil, nil
 		}
 	}
 	var out []conveyorSkippedPeer
