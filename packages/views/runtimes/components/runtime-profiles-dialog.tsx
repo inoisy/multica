@@ -16,6 +16,7 @@ import {
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
 import { ApiError } from "@multica/core/api";
+import { paths, useWorkspaceSlug } from "@multica/core/paths";
 import type {
   RuntimeProfile,
   RuntimeProfileType,
@@ -54,6 +55,7 @@ import {
   type RuntimeCatalogSections,
 } from "./runtime-profile-catalog";
 import { useT } from "../../i18n";
+import { AppLink } from "../../navigation";
 import { customRuntimeDocsHref } from "./runtime-docs";
 
 // The dialog runs in two surfaces that swap inside one Popup:
@@ -754,6 +756,8 @@ function ProfileDetailsForm({
   onSaved: (profile: RuntimeProfile) => void;
 }) {
   const { t } = useT("runtimes");
+  // The dialog can open outside a workspace route; the link needs one.
+  const workspaceSlug = useWorkspaceSlug();
   const idPrefix = `runtime-profile-${useId().replace(/:/g, "")}`;
   const createProfile = useCreateRuntimeProfile(wsId);
   const updateProfile = useUpdateRuntimeProfile(wsId);
@@ -936,6 +940,20 @@ function ProfileDetailsForm({
           >
             {t(($) => $.profiles.form.command_name_label)}
           </Label>
+          <p className="text-caption text-muted-foreground">
+            {t(($) => $.profiles.form.subscriptions_hint)}
+            {workspaceSlug ? (
+              <>
+                {" "}
+                <AppLink
+                  href={paths.workspace(workspaceSlug).subscriptions()}
+                  className="text-foreground underline underline-offset-2"
+                >
+                  {t(($) => $.profiles.form.subscriptions_link)}
+                </AppLink>
+              </>
+            ) : null}
+          </p>
           <Input
             id={`${idPrefix}-command`}
             name="command"
