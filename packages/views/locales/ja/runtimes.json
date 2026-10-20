@@ -358,6 +358,8 @@
       "family_locked_hint": "作成後はベースランタイムを変更できません。",
       "display_name_label": "表示名",
       "display_name_placeholder": "例：マイカスタム Claude…",
+      "subscriptions_hint": "Claude と Codex のサブスクリプションは「サブスクリプション」ページで設定します。",
+      "subscriptions_link": "サブスクリプションを開く",
       "command_name_label": "コマンド",
       "command_name_placeholder": "例：agent --model composer-2.5…",
       "description_label": "説明",

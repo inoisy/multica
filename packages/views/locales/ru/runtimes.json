@@ -397,6 +397,8 @@
       "family_locked_hint": "Семейство базового протокола нельзя изменить после создания.",
       "display_name_label": "Отображаемое имя",
       "display_name_placeholder": "например, Мой пользовательский Claude…",
+      "subscriptions_hint": "Подписки Claude и Codex заводятся на странице «Подписки».",
+      "subscriptions_link": "Открыть «Подписки»",
       "command_name_label": "Команда",
       "command_name_placeholder": "например, agent --model composer-2.5…",
       "description_label": "Описание",
