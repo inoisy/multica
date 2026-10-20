@@ -87,6 +87,18 @@ WHERE id = sqlc.arg('id')::uuid
   AND archived_at IS NULL
 RETURNING *;
 
+-- name: RestoreIssueStatusEntry :one
+-- Brings a retired custom status back into use under its own key: the key
+-- stays owned by the archived row, so a new one cannot take it.
+UPDATE issue_status SET
+    archived_at = NULL,
+    updated_at = now()
+WHERE id = sqlc.arg('id')::uuid
+  AND workspace_id = sqlc.arg('workspace_id')::uuid
+  AND is_system = FALSE
+  AND archived_at IS NOT NULL
+RETURNING *;
+
 -- name: ArchiveIssueStatusEntry :one
 -- Built-ins are excluded by is_system: archiving one would delete its
 -- category's behavior definition.
