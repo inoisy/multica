@@ -49,7 +49,8 @@ func TestAcceptBackendRunsTheAcceptCommand(t *testing.T) {
 	}
 	var lines []string
 	for _, m := range msgs {
-		if m.Type != MessageLog {
+		// Text reaches the run's transcript as it arrives; log messages do not.
+		if m.Type != MessageText {
 			t.Fatalf("message type %s", m.Type)
 		}
 		lines = append(lines, m.Content)

@@ -77,7 +77,9 @@ func (b *acceptBackend) Execute(ctx context.Context, _ string, opts ExecOptions)
 			line := scanner.Text()
 			tail.add(line)
 			select {
-			case msgCh <- Message{Type: MessageLog, Level: "info", Content: line}:
+			// Text, not log: the daemon forwards text to the run's transcript as
+			// it arrives, so the check is visible while it runs.
+			case msgCh <- Message{Type: MessageText, Content: line + "\n"}:
 			case <-runCtx.Done():
 			}
 		}

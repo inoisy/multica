@@ -94,12 +94,15 @@ func runIssueConveyorAccept(cmd *cobra.Command, args []string) error {
 	artifact, err := acceptedArtifact(ctx, client, base, view.AcceptedCommit)
 	switch {
 	case view.AcceptedCommit == "":
-		outcome = coordinator("the route has no accepted commit: no earlier step handed one in")
+		// The server adds acceptance to every reviewed route; work without a
+		// commit (analysis, a plan) simply has nothing to merge.
+		outcome = nothingToAccept("no earlier step handed in a commit")
 	case err != nil:
 		outcome = coordinator(err.Error())
 	default:
 		repo = acceptRepository(ctx, artifact.Artifact.Repo)
 		workDir, _ := os.Getwd()
+		fmt.Fprintf(os.Stdout, "checking out %s…\n", repo)
 		checkout, cerr := daemonRepoCheckout(ctx, repo, "", true, workDir)
 		if cerr != nil {
 			outcome = coordinator(fmt.Sprintf("checkout of %s failed: %v", repo, cerr))
@@ -170,7 +173,11 @@ func acceptResult(o acceptOutcome, repo, commit string) map[string]any {
 	var report strings.Builder
 	switch o.Outcome {
 	case "pass":
-		fmt.Fprintf(&report, "Приёмка пройдена: %s.", o.Reason)
+		if o.Skipped {
+			fmt.Fprintf(&report, "Приёмки нет: %s. Слияния нет.", o.Reason)
+		} else {
+			fmt.Fprintf(&report, "Приёмка пройдена: %s.", o.Reason)
+		}
 	case "changes_requested":
 		fmt.Fprintf(&report, "Приёмка не пройдена: %s. Слияния нет.", o.Reason)
 	case "blocked":
