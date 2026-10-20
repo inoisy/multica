@@ -190,7 +190,8 @@
     "edit_description_title": "설명 수정",
     "description_placeholder": "이 에이전트는 무엇을 하나요?",
     "save": "저장",
-    "cancel": "취소"
+    "cancel": "취소",
+    "model_routed": "실행 모델은 아래 “모델” 섹션에서 선택됩니다."
   },
   "overview": {
     "agent_context": "에이전트",
@@ -1017,7 +1018,21 @@
     "state_limited": "on a limit until {{time}}",
     "state_offline": "runtime offline",
     "state_missing": "runtime deleted",
-    "state_not_permitted": "runtime not available to the agent"
+    "state_not_permitted": "runtime not available to the agent",
+    "mode_label": "모델 선택 방식",
+    "mode_profile": "프로필",
+    "mode_profile_hint": "여러 에이전트가 공유하는 목록",
+    "mode_chain": "자체 체인",
+    "mode_chain_hint": "이 에이전트의 대체 모델 포함 목록",
+    "mode_single": "단일 모델",
+    "mode_one_hint": "이 모델만, 대체 없음",
+    "mode_fields_hint": "프로필도 자체 모델도 없습니다. 실행은 위 필드의 런타임과 모델을 사용합니다.",
+    "switch_to_profile": "프로필 “{{name}}” 사용",
+    "profile_unused": "에이전트에 자체 모델이 있는 동안 프로필 “{{name}}”은 사용되지 않습니다.",
+    "chain_title": "자체 체인",
+    "one_title": "에이전트 모델",
+    "one_hint": "대체 없음: 런타임이 한도에 도달하거나 오프라인이면 실행은 초기화까지 기다리고 소유자에게 알림이 갑니다.",
+    "edit_single": "모델 변경"
   },
   "model_profiles": {
     "title": "Profiles",
@@ -1167,6 +1182,85 @@
       "key_label": "API 키",
       "done": "로그인했습니다",
       "failed": "로그인이 완료되지 않았습니다. 현재 자격 증명은 그대로입니다"
+    },
+    "limited_banner": "에이전트 한도 도달: {{titles}}. 에이전트는 프로필의 다음 모델로 이동합니다.",
+    "spent_by": "사용처:",
+    "spent_by_none": "런타임 없음",
+    "groups": {
+      "claude": "Claude",
+      "codex": "Codex",
+      "api": "API 키"
+    },
+    "groups_hint": {
+      "claude": "구독, claude setup-token 토큰으로 로그인",
+      "codex": "ChatGPT 구독, 링크와 코드로 로그인",
+      "api": "키별 결제, 새 키로 로그인"
+    },
+    "menu": {
+      "open": "“{{title}}” 작업",
+      "caps": "에이전트 한도…",
+      "runtime": "소비 순서: {{runtime}}…",
+      "rename": "이름 변경…",
+      "rename_title": "구독 이름",
+      "delete": "구독 삭제…",
+      "delete_confirm": "“{{title}}”을(를) 삭제할까요? 모든 런타임에서 제거되며 자격 증명 파일은 서버에 남습니다."
+    },
+    "runtime_dialog": {
+      "agents": "이 런타임을 체인에 둔 에이전트: {{names}}.",
+      "no_agents": "이 런타임을 체인에 둔 에이전트가 없습니다.",
+      "order_title": "구독 순서",
+      "empty": "이 런타임에 구독이 없습니다. 에이전트가 시작되지 않습니다.",
+      "move_up": "위로: {{name}}",
+      "move_down": "아래로: {{name}}",
+      "remove": "{{name}} 제거",
+      "add": "구독 추가",
+      "add_placeholder": "구독 선택…",
+      "spend_title": "소비 방식",
+      "first_hint": "에이전트에게 아직 여유가 있는 첫 번째 구독",
+      "balanced_hint": "사용 가능한 것 중 이번 주 사용량이 가장 적은 구독"
+    },
+    "add": {
+      "open": "구독 추가",
+      "title": "구독 추가",
+      "description": "계정이 이 페이지에 표시되며, 런타임에 포함하면 에이전트가 사용합니다.",
+      "step_kind": "1. 연결할 항목",
+      "kind_claude": "Claude",
+      "kind_claude_hint": "Pro / Max 구독",
+      "kind_codex": "Codex",
+      "kind_codex_hint": "ChatGPT 구독",
+      "kind_api": "API 키",
+      "kind_api_hint": "z.ai, MiniMax, OpenRouter",
+      "provider": "제공자",
+      "providers": {
+        "zai": "z.ai (GLM, 코딩 플랜)",
+        "minimax": "MiniMax (코딩 플랜)",
+        "openrouter": "OpenRouter (종량제)",
+        "locia": "Lotsia 모델 (cisco VPN 필요)"
+      },
+      "step_name": "2. 이름",
+      "name_placeholder": "예: Claude, 세 번째 구독",
+      "name_hint": "ID {{id}}와 자격 증명 {{path}}가 자동으로 생성됩니다.",
+      "step_login": "3. 로그인",
+      "codex_login": "추가한 뒤 카드에서 “다시 로그인”을 누르면 링크와 코드가 표시됩니다.",
+      "claude_login": "브라우저에서 이 Claude 계정에 로그인한 컴퓨터에서 claude setup-token을 실행하고 토큰을 붙여 넣으세요.",
+      "key_login": "제공자 대시보드에서 키를 만들고 여기에 붙여 넣으세요.",
+      "secret_hint": "서버의 자격 증명 파일(권한 600)에 바로 저장되며 표시되지 않습니다. 비워 두고 나중에 카드에서 로그인할 수도 있습니다.",
+      "step_runtimes": "4. 사용할 곳",
+      "placement": "소비 순서 위치: {{runtime}}",
+      "placement_last": "마지막",
+      "placement_first": "처음",
+      "unpick": "{{runtime}}에서 사용 안 함",
+      "runtimes_search": "런타임 선택 ({{provider}})…",
+      "runtimes_filter": "런타임 찾기…",
+      "runtimes_none": "이 제공자의 런타임이 없습니다",
+      "runtime_empty": "구독 없음",
+      "runtimes_hint": "이 제공자의 런타임만 표시됩니다. 선택하지 않으면 구독은 생성되지만 에이전트가 사용하지 않습니다.",
+      "step_caps": "5. 에이전트 할당량",
+      "no_windows": "제공자에 할당량 구간이 없습니다. 에이전트는 제공자 한도까지 사용합니다.",
+      "submit": "추가",
+      "submit_login": "추가하고 로그인",
+      "done": "구독 “{{title}}” 추가됨",
+      "done_codex": "구독 “{{title}}” 추가됨 — 카드에서 로그인하세요"
     }
   }
 }
