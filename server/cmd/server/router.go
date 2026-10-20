@@ -424,6 +424,7 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 	origins := allowedOrigins()
 
 	signupConfig := handler.Config{
+		InstanceAdmins:           splitAndTrim(os.Getenv("MULTICA_INSTANCE_ADMINS")),
 		AllowSignup:              os.Getenv("ALLOW_SIGNUP") != "false",
 		AllowedEmails:            splitAndTrim(os.Getenv("ALLOWED_EMAILS")),
 		AllowedEmailDomains:      splitAndTrim(os.Getenv("ALLOWED_EMAIL_DOMAINS")),
@@ -1691,6 +1692,19 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 		// workspace context.
 		r.Get("/api/attachments/{id}/download", h.DownloadAttachment)
 
+		// Instance-level subscriptions. Readable by members of any workspace;
+		// every write is gated inside the handler on MULTICA_INSTANCE_ADMINS.
+		r.Route("/api/subscriptions", func(r chi.Router) {
+			r.Get("/", h.ListSubscriptions)
+			r.Post("/", h.CreateSubscription)
+			r.Get("/{key}", h.GetSubscription)
+			r.Patch("/{key}", h.UpdateSubscription)
+			r.Delete("/{key}", h.DeleteSubscription)
+			r.Get("/{key}/usage", h.ListSubscriptionUsage)
+			r.Post("/{key}/usage", h.RecordSubscriptionUsage)
+		})
+		r.Post("/api/runtime-pools", h.CreateRuntimePool)
+
 		r.Route("/api/workspaces", func(r chi.Router) {
 			r.Get("/", h.ListWorkspaces)
 			r.Post("/", h.CreateWorkspace)
@@ -1716,6 +1730,12 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 					// are admin-gated below).
 					r.Get("/runtime-profiles", h.ListRuntimeProfiles)
 					r.Get("/runtime-profiles/{profileId}", h.GetRuntimeProfile)
+					// Subscriptions a runtime spends. Reading is member-visible
+					// (subs-run reads it with the run's task token); changing it
+					// is gated inside the handler on instance admins, not on the
+					// workspace role.
+					r.Get("/runtime-profiles/{profileId}/subscriptions", h.GetRuntimeProfileSubscriptions)
+					r.Put("/runtime-profiles/{profileId}/subscriptions", h.SetRuntimeProfileSubscriptions)
 					// The workspace MCP library — member-visible so an agent
 					// owner can see what is available to add to their agent.
 					// The payload is names and transports only; the stored

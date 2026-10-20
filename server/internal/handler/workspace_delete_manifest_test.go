@@ -131,6 +131,8 @@ var workspaceDeletionManifest = map[string]workspaceDeleteAction{
 	"skill_to_label":                     workspaceDelete,
 	"squad":                              workspaceDelete,
 	"squad_member":                       workspaceDelete,
+	"subscription":                       workspaceDeleteKeep, // Instance-level provider accounts, shared by every workspace.
+	"subscription_usage":                 workspaceDeleteKeep, // Usage of instance-level subscriptions.
 	"sys_cron_executions":                workspaceDeleteKeep,
 	"task_message":                       workspaceDelete,
 	"task_supplement":                    workspaceDelete,
