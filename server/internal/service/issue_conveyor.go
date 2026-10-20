@@ -436,19 +436,41 @@ func (s *IssueConveyorService) enable(ctx context.Context, q *db.Queries, issue 
 }
 
 // Route steps use ordinary custom statuses. Existing catalog entries keep
-// their names and colors; archived or terminal keys cannot be repurposed.
+// their names and colors; terminal keys cannot be repurposed. A route status
+// someone archived is brought back when an owner or admin enables the route:
+// the key stays owned by the archived row, so nothing else could serve it.
 func ensureConveyorIssueStatuses(ctx context.Context, q *db.Queries, workspaceID, invoker pgtype.UUID, route []ConveyorNode) error {
+	canManage := func() (bool, error) {
+		member, err := q.GetMemberByUserAndWorkspace(ctx, db.GetMemberByUserAndWorkspaceParams{WorkspaceID: workspaceID, UserID: invoker})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, nil
+		}
+		if err != nil {
+			return false, err
+		}
+		return member.Role == "owner" || member.Role == "admin", nil
+	}
 	for _, node := range route {
 		if node.Step != conveyorStepQA && node.Step != conveyorStepReview {
 			continue
 		}
-		_, err := q.GetIssueStatusEntryByKey(ctx, db.GetIssueStatusEntryByKeyParams{WorkspaceID: workspaceID, Key: node.Step})
-		if errors.Is(err, pgx.ErrNoRows) {
-			member, merr := q.GetMemberByUserAndWorkspace(ctx, db.GetMemberByUserAndWorkspaceParams{WorkspaceID: workspaceID, UserID: invoker})
-			if merr != nil && !errors.Is(merr, pgx.ErrNoRows) {
+		entry, err := q.GetIssueStatusEntryByKey(ctx, db.GetIssueStatusEntryByKeyParams{WorkspaceID: workspaceID, Key: node.Step})
+		if err == nil && entry.ArchivedAt.Valid && !entry.IsSystem && entry.Category == issuestatus.CategoryStarted {
+			ok, merr := canManage()
+			if merr != nil {
 				return merr
 			}
-			if merr != nil || (member.Role != "owner" && member.Role != "admin") {
+			if !ok {
+				return conveyorErr(ErrConveyorForbidden, "an owner or admin must restore the archived route status %q", node.Step)
+			}
+			_, err = q.RestoreIssueStatusEntry(ctx, db.RestoreIssueStatusEntryParams{ID: entry.ID, WorkspaceID: workspaceID})
+		}
+		if errors.Is(err, pgx.ErrNoRows) {
+			ok, merr := canManage()
+			if merr != nil {
+				return merr
+			}
+			if !ok {
 				return conveyorErr(ErrConveyorForbidden, "an owner or admin must create the missing route status %q", node.Step)
 			}
 			name := "QA"
