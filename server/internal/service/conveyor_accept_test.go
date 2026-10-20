@@ -86,3 +86,47 @@ func TestConveyorAcceptPassCompletesTheRoute(t *testing.T) {
 	}
 	r.everyInputDecided()
 }
+
+// onAcceptRuntime puts the accept agent on a runtime of the accept provider,
+// as the daemon registers it.
+func (r *conveyorRig) onAcceptRuntime() {
+	r.t.Helper()
+	r.f.Exec(r.t, "UPDATE agent_runtime SET provider = 'accept' WHERE id = (SELECT runtime_id FROM agent WHERE id = $1)", r.agents["accept"])
+}
+
+func steps(route []ConveyorNode) string {
+	parts := make([]string, len(route))
+	for i, n := range route {
+		parts[i] = n.Step
+	}
+	return strings.Join(parts, ",")
+}
+
+func TestConveyorAddsAcceptBeforeCloseOfAReviewedRoute(t *testing.T) {
+	r := newConveyorRig(t)
+	r.withAcceptAgent()
+	r.onAcceptRuntime()
+	view := r.enable("dev", "qa", "review", "close")
+	if got := steps(view.Route); got != "dev,qa,review,accept,close" {
+		t.Fatalf("route %s, want accept added before close", got)
+	}
+	if view.Route[3].AgentID != util.UUIDToString(r.agents["accept"]) {
+		t.Fatalf("accept runs on %s, want the accept agent", view.Route[3].AgentID)
+	}
+}
+
+func TestConveyorLeavesRoutesWithoutReviewOrAcceptAgentAsWritten(t *testing.T) {
+	r := newConveyorRig(t)
+	r.withAcceptAgent()
+	// The agent exists, but its runtime is not an accept runtime.
+	if got := steps(r.enable("dev", "qa", "review", "close").Route); got != "dev,qa,review,close" {
+		t.Fatalf("no accept runtime: route %s", got)
+	}
+
+	other := newConveyorRig(t)
+	other.withAcceptAgent()
+	other.onAcceptRuntime()
+	if got := steps(other.enable("dev", "qa", "close").Route); got != "dev,qa,close" {
+		t.Fatalf("no review: route %s", got)
+	}
+}

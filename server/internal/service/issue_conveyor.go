@@ -233,6 +233,9 @@ func (s *IssueConveyorService) resolveRoute(ctx context.Context, q *db.Queries, 
 	if err != nil {
 		return nil, err
 	}
+	if entries, err = withImplicitAccept(ctx, q, issue.WorkspaceID, agents, entries); err != nil {
+		return nil, err
+	}
 	route := make([]ConveyorNode, 0, len(entries))
 	lastDev, lastQA := -1, -1
 	hasReview := false
@@ -721,6 +724,59 @@ func (s *IssueConveyorService) Events(ctx context.Context, issueID pgtype.UUID, 
 // right before close, after a review of the same route. It merges what the
 // route accepted, so nothing may change the commit after it and a review must
 // have judged that commit first.
+// withImplicitAccept adds acceptance to a reviewed route: nobody writes
+// accept into routes, the server puts it right before close whenever the
+// route has a review and no accept of its own. It runs on a workspace agent
+// of an accept runtime (an online one first); a workspace without such an
+// agent keeps the route as written. Acceptance passes without a merge when
+// the repository has no .multica/acceptance.json, so reviewed work in a
+// repository merged by people goes on to close as before.
+func withImplicitAccept(ctx context.Context, q *db.Queries, workspaceID pgtype.UUID, agents []db.Agent, entries []ConveyorRouteEntry) ([]ConveyorRouteEntry, error) {
+	review := false
+	for _, e := range entries {
+		switch e.Step {
+		case conveyorStepAccept:
+			return entries, nil
+		case conveyorStepReview:
+			review = true
+		}
+	}
+	if !review || len(entries) < 2 || entries[len(entries)-1].Step != conveyorStepClose {
+		return entries, nil
+	}
+	runtimes, err := q.ListAgentRuntimes(ctx, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	online := map[string]bool{}
+	for _, r := range runtimes {
+		if r.Provider == conveyorStepAccept {
+			online[util.UUIDToString(r.ID)] = r.Status == "online"
+		}
+	}
+	var pick *db.Agent
+	for i := range agents {
+		a := &agents[i]
+		if a.ArchivedAt.Valid || !a.RuntimeID.Valid {
+			continue
+		}
+		isOnline, ok := online[util.UUIDToString(a.RuntimeID)]
+		if !ok {
+			continue
+		}
+		if pick == nil || (isOnline && !online[util.UUIDToString(pick.RuntimeID)]) {
+			pick = a
+		}
+	}
+	if pick == nil {
+		return entries, nil
+	}
+	out := make([]ConveyorRouteEntry, 0, len(entries)+1)
+	out = append(out, entries[:len(entries)-1]...)
+	out = append(out, ConveyorRouteEntry{Step: conveyorStepAccept, Agent: util.UUIDToString(pick.ID)}, entries[len(entries)-1])
+	return out, nil
+}
+
 func acceptPlacementError(entries []ConveyorRouteEntry) error {
 	review := false
 	for i, e := range entries {
