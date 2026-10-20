@@ -577,6 +577,11 @@ func (s *IssueConveyorService) resume(ctx context.Context, q *db.Queries, issue 
 			return cv, conveyorErr(ErrConveyorInvalid, "from_step %q is not a step of the route", step)
 		}
 	}
+	skipped, err := s.passedPeers(ctx, q, cv, route, idx)
+	if err != nil {
+		return cv, err
+	}
+	idx += int32(len(skipped))
 	node := conveyorNodeAt(route[:len(route)-1], idx)
 	if node == nil {
 		return cv, conveyorErr(ErrConveyorInvalid, "the route has no step to resume at")
@@ -611,11 +616,100 @@ func (s *IssueConveyorService) resume(ctx context.Context, q *db.Queries, issue 
 	if err != nil {
 		return cv, err
 	}
-	if err = s.recordState(ctx, q, cv, ConveyorCmdResume, map[string]any{"step": node.Step, "idx": node.Idx}); err != nil {
+	state := map[string]any{"step": node.Step, "idx": node.Idx}
+	why := "resumed"
+	if len(skipped) > 0 {
+		state["skipped"] = skipped
+		why = fmt.Sprintf("resumed after %d executor(s) of the step already passed", len(skipped))
+	}
+	if err = s.recordState(ctx, q, cv, ConveyorCmdResume, state); err != nil {
 		return cv, err
 	}
-	_, err = s.owe(ctx, q, cv, conveyorActionRunStep, idx, "resumed", nil)
+	_, err = s.owe(ctx, q, cv, conveyorActionRunStep, idx, why, nil)
 	return cv, err
+}
+
+// conveyorSkippedPeer is an executor a resumed round does not run again.
+type conveyorSkippedPeer struct {
+	Idx     int32  `json:"idx"`
+	AgentID string `json:"agent_id"`
+	Commit  string `json:"commit"`
+	Branch  string `json:"branch,omitempty"`
+}
+
+// passedPeers are the executors at from, from+1, ... that a new round need
+// not run again. That holds only when the round being left stopped later
+// inside the same step (a run there was cut short or failed), so nothing a
+// later step judged sent the work back. Each of them must have handed in a
+// pass with a commit as its latest result, and since then no other step may
+// have handed in anything and no result may name its branch at another
+// commit. A later step that sends work back stops the route outside the
+// step, so all of its executors run again.
+func (s *IssueConveyorService) passedPeers(ctx context.Context, q *db.Queries, cv db.IssueConveyor, route []ConveyorNode, from int32) ([]conveyorSkippedPeer, error) {
+	if from >= cv.CurIdx || int(cv.CurIdx) >= len(route)-1 {
+		return nil, nil
+	}
+	step := route[from].Step
+	for i := from; i <= cv.CurIdx; i++ {
+		if route[i].Step != step {
+			return nil, nil
+		}
+	}
+	type result struct {
+		seq      int64
+		idx      int32
+		outcome  string
+		artifact ConveyorArtifact
+	}
+	// The journal outlives a re-enable, whose route may differ: only results
+	// handed in since the last enable speak of this snapshot.
+	var results []result
+	for after := int64(0); ; {
+		events, err := q.ListIssueConveyorEvents(ctx, db.ListIssueConveyorEventsParams{ConveyorID: cv.ID, AfterSeq: pgtype.Int8{Int64: after, Valid: true}, PageSize: 500})
+		if err != nil {
+			return nil, err
+		}
+		for _, e := range events {
+			after = e.Seq.Int64
+			switch {
+			case e.Kind == conveyorEventState && e.Action.String == ConveyorCmdEnable:
+				results = results[:0]
+			case e.Kind == conveyorEventResult:
+				var d ConveyorResultInput
+				if json.Unmarshal(e.Details, &d) == nil {
+					results = append(results, result{seq: e.Seq.Int64, idx: e.Idx.Int32, outcome: e.Action.String, artifact: d.Artifact})
+				}
+			}
+		}
+		if len(events) < 500 {
+			break
+		}
+	}
+	var out []conveyorSkippedPeer
+	for i := from; i < cv.CurIdx; i++ {
+		var last *result
+		for j := range results {
+			if results[j].idx == i {
+				last = &results[j]
+			}
+		}
+		if last == nil || last.outcome != ConveyorOutcomePass || last.artifact.Commit == "" {
+			return out, nil
+		}
+		for _, r := range results {
+			if r.seq <= last.seq {
+				continue
+			}
+			if r.idx < from || r.idx > cv.CurIdx {
+				return out, nil
+			}
+			if r.artifact.Repo == last.artifact.Repo && r.artifact.Branch == last.artifact.Branch && r.artifact.Commit != "" && r.artifact.Commit != last.artifact.Commit {
+				return out, nil
+			}
+		}
+		out = append(out, conveyorSkippedPeer{Idx: i, AgentID: route[i].AgentID, Commit: last.artifact.Commit, Branch: last.artifact.Branch})
+	}
+	return out, nil
 }
 
 func (s *IssueConveyorService) loadRouteAgent(ctx context.Context, q *db.Queries, agentID string) (db.Agent, error) {
