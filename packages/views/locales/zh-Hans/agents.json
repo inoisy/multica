@@ -190,7 +190,8 @@
     "edit_description_title": "编辑描述",
     "description_placeholder": "这个智能体做什么？",
     "save": "保存",
-    "cancel": "取消"
+    "cancel": "取消",
+    "model_routed": "运行的模型在下方“模型”部分中选择。"
   },
   "overview": {
     "agent_context": "智能体",
@@ -1017,7 +1018,21 @@
     "state_limited": "on a limit until {{time}}",
     "state_offline": "runtime offline",
     "state_missing": "runtime deleted",
-    "state_not_permitted": "runtime not available to the agent"
+    "state_not_permitted": "runtime not available to the agent",
+    "mode_label": "模型来源",
+    "mode_profile": "配置",
+    "mode_profile_hint": "多个智能体共用的列表",
+    "mode_chain": "自有链",
+    "mode_chain_hint": "此智能体自己的带备选列表",
+    "mode_single": "单一模型",
+    "mode_one_hint": "只用此模型，无备选",
+    "mode_fields_hint": "没有配置也没有自有模型：运行使用上方字段中的运行时和模型。",
+    "switch_to_profile": "使用配置“{{name}}”",
+    "profile_unused": "智能体有自有模型时，不使用配置“{{name}}”。",
+    "chain_title": "自有链",
+    "one_title": "智能体模型",
+    "one_hint": "无备选：运行时达到上限或离线时，运行会等待重置，并通知所有者。",
+    "edit_single": "更换模型"
   },
   "model_profiles": {
     "title": "Profiles",
@@ -1167,6 +1182,85 @@
       "key_label": "API 密钥",
       "done": "登录成功",
       "failed": "登录未完成，当前凭据未更改"
+    },
+    "limited_banner": "已达智能体上限：{{titles}}。智能体将改用其配置的下一个模型。",
+    "spent_by": "使用方：",
+    "spent_by_none": "无运行时",
+    "groups": {
+      "claude": "Claude",
+      "codex": "Codex",
+      "api": "API 密钥"
+    },
+    "groups_hint": {
+      "claude": "订阅，使用 claude setup-token 生成的令牌登录",
+      "codex": "ChatGPT 订阅，通过链接和代码登录",
+      "api": "按密钥付费，使用新密钥登录"
+    },
+    "menu": {
+      "open": "“{{title}}”的操作",
+      "caps": "智能体限额…",
+      "runtime": "消耗顺序：{{runtime}}…",
+      "rename": "重命名…",
+      "rename_title": "订阅名称",
+      "delete": "删除订阅…",
+      "delete_confirm": "删除“{{title}}”？它将从所有运行时中移除，凭据文件保留在服务器上。"
+    },
+    "runtime_dialog": {
+      "agents": "链中包含此运行时的智能体：{{names}}。",
+      "no_agents": "没有智能体的链中包含此运行时。",
+      "order_title": "订阅顺序",
+      "empty": "此运行时没有订阅，智能体将无法启动。",
+      "move_up": "上移：{{name}}",
+      "move_down": "下移：{{name}}",
+      "remove": "移除 {{name}}",
+      "add": "添加订阅",
+      "add_placeholder": "选择订阅…",
+      "spend_title": "消耗方式",
+      "first_hint": "仍为智能体留有余量的第一个订阅",
+      "balanced_hint": "可用订阅中本周用量最少的一个"
+    },
+    "add": {
+      "open": "添加订阅",
+      "title": "添加订阅",
+      "description": "账户会显示在此页面；加入运行时后，智能体才会使用它。",
+      "step_kind": "1. 连接什么",
+      "kind_claude": "Claude",
+      "kind_claude_hint": "Pro / Max 订阅",
+      "kind_codex": "Codex",
+      "kind_codex_hint": "ChatGPT 订阅",
+      "kind_api": "API 密钥",
+      "kind_api_hint": "z.ai、MiniMax、OpenRouter",
+      "provider": "提供商",
+      "providers": {
+        "zai": "z.ai（GLM，编程套餐）",
+        "minimax": "MiniMax（编程套餐）",
+        "openrouter": "OpenRouter（按量付费）",
+        "locia": "Lotsia 模型（需要 cisco VPN）"
+      },
+      "step_name": "2. 名称",
+      "name_placeholder": "例如：Claude，第三个订阅",
+      "name_hint": "ID {{id}} 和凭据 {{path}} 会自动创建。",
+      "step_login": "3. 登录",
+      "codex_login": "添加后在卡片上点击“重新登录”，会显示用于登录的链接和代码。",
+      "claude_login": "在浏览器已登录此 Claude 账户的电脑上运行 claude setup-token，然后粘贴令牌。",
+      "key_login": "在提供商控制台创建密钥并粘贴到这里。",
+      "secret_hint": "直接写入服务器上的凭据文件（权限 600），不会显示。可以留空，稍后从卡片登录。",
+      "step_runtimes": "4. 在哪里使用",
+      "placement": "消耗顺序中的位置：{{runtime}}",
+      "placement_last": "最后",
+      "placement_first": "最前",
+      "unpick": "不在 {{runtime}} 中使用",
+      "runtimes_search": "选择运行时（{{provider}}）…",
+      "runtimes_filter": "查找运行时…",
+      "runtimes_none": "此提供商没有运行时",
+      "runtime_empty": "无订阅",
+      "runtimes_hint": "仅显示此提供商的运行时。若不选择，订阅会创建，但智能体不会使用。",
+      "step_caps": "5. 分配给智能体的额度",
+      "no_windows": "提供商没有配额窗口，智能体可用到提供商上限。",
+      "submit": "添加",
+      "submit_login": "添加并登录",
+      "done": "已添加订阅“{{title}}”",
+      "done_codex": "已添加订阅“{{title}}”，请从卡片登录"
     }
   }
 }
