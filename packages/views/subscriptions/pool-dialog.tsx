@@ -13,6 +13,7 @@ import { Button } from "@multica/ui/components/ui/button";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -93,6 +94,13 @@ export function PoolDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{pool?.runtime_profile.display_name ?? t(($) => $.subscriptions.pool.loading)}</DialogTitle>
+          {pool ? (
+            <DialogDescription>
+              {pool.agents.length
+                ? t(($) => $.subscriptions.pool.agents, { names: pool.agents.map((a) => a.name || a.id).join(", ") })
+                : t(($) => $.subscriptions.pool.no_agents)}
+            </DialogDescription>
+          ) : null}
         </DialogHeader>
 
         {query.error ? (

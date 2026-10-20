@@ -1238,7 +1238,9 @@
       "add_placeholder": "Choisir un abonnement…",
       "spend_title": "Comment utiliser",
       "all_workspaces": "tous les espaces de travail",
-      "off": "désactivé"
+      "off": "désactivé",
+      "agents": "Agents sur cet environnement : {{names}}",
+      "no_agents": "Aucun agent ne fonctionne sur cet environnement."
     },
     "new_pool": {
       "open": "Nouvel environnement",
@@ -1300,7 +1302,10 @@
       "submit_login": "Ajouter et se connecter",
       "done": "Abonnement « {{title}} » ajouté",
       "done_login_later": "Abonnement « {{title}} » ajouté — connectez-vous depuis sa carte",
-      "partly_failed": "L'abonnement « {{title}} » a été créé, mais toutes les étapes n'ont pas abouti : {{error}}. Terminez depuis la carte."
+      "partly_failed": "L'abonnement « {{title}} » a été créé, mais toutes les étapes n'ont pas abouti : {{error}}. Terminez depuis la carte.",
+      "model": "Modèle",
+      "model_hint": "Facultatif. Devient le modèle par défaut pour tous les niveaux.",
+      "model_placeholder": "Par exemple, glm-4.6"
     },
     "discrepancies": {
       "title": "Écarts",

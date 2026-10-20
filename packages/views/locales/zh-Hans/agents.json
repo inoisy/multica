@@ -1216,7 +1216,9 @@
       "add_placeholder": "选择订阅…",
       "spend_title": "使用方式",
       "all_workspaces": "所有工作区",
-      "off": "已关闭"
+      "off": "已关闭",
+      "agents": "此运行环境上的智能体：{{names}}",
+      "no_agents": "没有智能体在此运行环境上运行。"
     },
     "new_pool": {
       "open": "新建运行环境",
@@ -1278,7 +1280,10 @@
       "submit_login": "添加并登录",
       "done": "已添加订阅“{{title}}”",
       "done_login_later": "已添加订阅“{{title}}”，请在卡片上登录",
-      "partly_failed": "订阅“{{title}}”已创建，但部分步骤失败：{{error}}。请在卡片上完成。"
+      "partly_failed": "订阅“{{title}}”已创建，但部分步骤失败：{{error}}。请在卡片上完成。",
+      "model": "模型",
+      "model_hint": "可选。将作为所有级别的默认模型。",
+      "model_placeholder": "例如：glm-4.6"
     },
     "discrepancies": {
       "title": "不一致",

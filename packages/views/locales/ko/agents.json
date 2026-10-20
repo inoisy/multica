@@ -1216,7 +1216,9 @@
       "add_placeholder": "구독 선택…",
       "spend_title": "사용 방식",
       "all_workspaces": "모든 워크스페이스",
-      "off": "꺼짐"
+      "off": "꺼짐",
+      "agents": "이 실행 환경의 에이전트: {{names}}",
+      "no_agents": "이 실행 환경에서 동작하는 에이전트가 없습니다."
     },
     "new_pool": {
       "open": "새 실행 환경",
@@ -1278,7 +1280,10 @@
       "submit_login": "추가하고 로그인",
       "done": "구독 “{{title}}”을(를) 추가했습니다",
       "done_login_later": "구독 “{{title}}”을(를) 추가했습니다. 카드에서 로그인하세요",
-      "partly_failed": "구독 “{{title}}”은(는) 만들어졌지만 일부 단계가 실패했습니다: {{error}}. 카드에서 마무리하세요."
+      "partly_failed": "구독 “{{title}}”은(는) 만들어졌지만 일부 단계가 실패했습니다: {{error}}. 카드에서 마무리하세요.",
+      "model": "모델",
+      "model_hint": "선택 사항. 모든 등급의 기본 모델이 됩니다.",
+      "model_placeholder": "예: glm-4.6"
     },
     "discrepancies": {
       "title": "불일치",

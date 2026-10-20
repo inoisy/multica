@@ -1216,7 +1216,9 @@
       "add_placeholder": "サブスクリプションを選択…",
       "spend_title": "使い方",
       "all_workspaces": "すべてのワークスペース",
-      "off": "オフ"
+      "off": "オフ",
+      "agents": "この実行環境のエージェント：{{names}}",
+      "no_agents": "この実行環境で動いているエージェントはありません。"
     },
     "new_pool": {
       "open": "新しい実行環境",
@@ -1278,7 +1280,10 @@
       "submit_login": "追加してログイン",
       "done": "サブスクリプション「{{title}}」を追加しました",
       "done_login_later": "サブスクリプション「{{title}}」を追加しました。カードからログインしてください",
-      "partly_failed": "サブスクリプション「{{title}}」は作成されましたが、一部の手順が失敗しました：{{error}}。カードから完了してください。"
+      "partly_failed": "サブスクリプション「{{title}}」は作成されましたが、一部の手順が失敗しました：{{error}}。カードから完了してください。",
+      "model": "モデル",
+      "model_hint": "任意。すべての階層の既定モデルになります。",
+      "model_placeholder": "例：glm-4.6"
     },
     "discrepancies": {
       "title": "不整合",
