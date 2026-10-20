@@ -80,8 +80,9 @@ func TestConveyorAcceptPassCompletesTheRoute(t *testing.T) {
 	for _, step := range []string{"dev", "qa", "review", "accept"} {
 		r.pass(step, commit)
 	}
-	if view := r.view(); view.Status != ConveyorCompleted || len(r.tasksOf("lead")) != 1 {
-		t.Fatalf("after accept: status %s, lead runs %d", view.Status, len(r.tasksOf("lead")))
+	// A route that passed every step closes the issue itself: no coordinator run.
+	if view := r.view(); view.Status != ConveyorCompleted || len(r.tasksOf("lead")) != 0 || r.loadIssue().Status != "done" {
+		t.Fatalf("after accept: status %s, lead runs %d, issue %s", view.Status, len(r.tasksOf("lead")), r.loadIssue().Status)
 	}
 	for _, step := range []string{"dev", "qa", "review", "accept"} {
 		r.only(step)
