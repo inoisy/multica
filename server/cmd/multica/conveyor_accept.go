@@ -71,6 +71,8 @@ type acceptCheck struct {
 // (acceptance could not judge the work).
 type acceptOutcome struct {
 	Outcome string
+	// Skipped: a pass with nothing to merge (no commit, no acceptance file).
+	Skipped bool
 	Base    string
 	Merged  string
 	Checks  []acceptCheck
@@ -98,7 +100,8 @@ func runAcceptance(ctx context.Context, spec acceptSpec) acceptOutcome {
 	}
 	raw, err := g.run(ctx, "show", sha+":"+acceptanceFile)
 	if err != nil {
-		return coordinator(fmt.Sprintf("the commit has no %s: the repository does not say how to accept it", acceptanceFile))
+		// A repository without the file is merged by people (MR): the step passes and merges nothing.
+		return nothingToAccept(fmt.Sprintf("the repository has no %s, it is merged by people", acceptanceFile))
 	}
 	var cfg acceptConfig
 	if err := json.Unmarshal([]byte(raw), &cfg); err != nil {
@@ -183,6 +186,12 @@ func runAcceptance(ctx context.Context, spec acceptSpec) acceptOutcome {
 
 func coordinator(reason string) acceptOutcome {
 	return acceptOutcome{Outcome: "needs_coordinator", Reason: reason}
+}
+
+// nothingToAccept passes the step without a merge: there is no commit, or the
+// repository does not describe its acceptance.
+func nothingToAccept(reason string) acceptOutcome {
+	return acceptOutcome{Outcome: "pass", Skipped: true, Reason: reason}
 }
 
 // runAcceptCommand runs one command until it gives an answer. A busy exit
