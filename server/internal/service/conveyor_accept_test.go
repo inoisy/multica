@@ -72,6 +72,26 @@ func TestConveyorAcceptStepFlow(t *testing.T) {
 	}
 }
 
+// The live accept carrier is the server's hidden system agent (kind = 'system',
+// system_key = 'accept'), which agent pickers do not see. The route must still
+// start the accept step on it instead of waiting with "agent not found".
+func TestConveyorAcceptRunsOnTheHiddenSystemCarrier(t *testing.T) {
+	const commit = "abcdef1234567"
+	r := newConveyorRig(t)
+	r.withAcceptAgent()
+	r.f.Exec(t, "UPDATE agent SET kind = 'system', system_key = 'accept' WHERE id = $1", r.agents["accept"])
+	r.enable("dev", "qa", "review", "accept", "close")
+	for _, step := range []string{"dev", "qa", "review"} {
+		r.pass(step, commit)
+	}
+	task := r.start(r.only("accept"))
+	r.mustSubmit(task, r.result(ConveyorOutcomePass, commit))
+	r.complete(task)
+	if view := r.view(); view.Status != ConveyorCompleted {
+		t.Fatalf("accept on the system carrier: status %s", view.Status)
+	}
+}
+
 func TestConveyorAcceptPassCompletesTheRoute(t *testing.T) {
 	const commit = "abcdef1234567"
 	r := newConveyorRig(t)
