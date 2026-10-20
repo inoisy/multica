@@ -30,6 +30,7 @@ import (
 	"github.com/multica-ai/multica/server/internal/cli"
 	"github.com/multica-ai/multica/server/internal/daemon/execenv"
 	"github.com/multica-ai/multica/server/internal/daemon/repocache"
+	"github.com/multica-ai/multica/server/internal/daemon/subscriptions"
 	"github.com/multica-ai/multica/server/internal/selfexec"
 	"github.com/multica-ai/multica/server/internal/util"
 	"github.com/multica-ai/multica/server/pkg/agent"
@@ -404,6 +405,11 @@ type Daemon struct {
 	terminalReportNow    func() time.Time
 	terminalReportMu     sync.Mutex
 	terminalReportFlight map[string]struct{}
+
+	// subs chooses the subscription of pool runs and keeps the daemon's own
+	// usage probes (subscriptionSelector initialises it).
+	subs     *subscriptions.Selector
+	subsOnce sync.Once
 
 	mu           sync.Mutex
 	workspaces   map[string]*workspaceState
@@ -2173,6 +2179,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 	taskWakeups := make(chan taskWakeup, 256)
 	go d.taskWakeupLoop(ctx, taskWakeups)
 	go d.heartbeatLoop(ctx)
+	go d.subscriptionProbeLoop(ctx)
 	go d.gcLoop(ctx)
 	go d.autoUpdateLoop(ctx)
 	go d.tokenRenewalLoop(ctx)
@@ -4606,6 +4613,9 @@ func (d *Daemon) handleHeartbeatActions(ctx context.Context, runtimeID string, r
 		if rt := d.findRuntime(runtimeID); rt != nil {
 			go d.handleModelList(ctx, *rt, resp.PendingModelList.ID)
 		}
+	}
+	if resp.PendingSubscriptionLogin != nil {
+		go d.handleSubscriptionLogin(ctx, runtimeID, resp.PendingSubscriptionLogin)
 	}
 	if resp.PendingLocalSkills != nil {
 		if rt := d.findRuntime(runtimeID); rt != nil {
@@ -8534,6 +8544,7 @@ func (d *Daemon) runTask(ctx context.Context, task Task, provider string, slot i
 	// without polluting the system ~/.codex/skills/.
 	if env.CodexHome != "" {
 		agentEnv["CODEX_HOME"] = env.CodexHome
+		linkCodexAgentsMD(env.CodexHome, d.cfg.CodexAgentsMD, taskLog)
 	}
 	// HOME and the XDG base dirs are deliberately not touched here: provider
 	// tools such as gh, aws, kubectl, and npm continue resolving the daemon
@@ -8593,6 +8604,19 @@ func (d *Daemon) runTask(ctx context.Context, task Task, provider string, slot i
 	}
 	if err := configureCodexTaskShellEnvironment(provider, env.CodexHome, os.Environ(), agentEnv, agentCustomEnv, d.logger); err != nil {
 		return TaskResult{}, err
+	}
+	// A runtime that spends subscriptions: choose one, point the CLI at its
+	// credential (after custom_env, so an agent-level key cannot reroute the
+	// run onto another account) and measure it again once the run is over.
+	subRun, err := d.prepareSubscriptionRun(ctx, task, env.CodexHome, taskLog)
+	if err != nil {
+		return TaskResult{}, err
+	}
+	if subRun != nil {
+		for k, v := range subRun.launch.Env {
+			agentEnv[k] = v
+		}
+		defer func(sub subscriptions.Subscription) { go d.probeAfterRun(task.WorkspaceID, sub) }(subRun.sub)
 	}
 	// The overlay is authoritative once built, so nothing on the command line
 	// may re-point HERMES_HOME out of it. Both argv regions are stripped
@@ -8680,6 +8704,12 @@ func (d *Daemon) runTask(ctx context.Context, task Task, provider string, slot i
 		// Stripped above, alongside the launch prefix. A skill-less hermes task
 		// has no overlay to protect and keeps its flags untouched.
 		customArgs = hermesOverlayCustomArgs
+	}
+	if subRun != nil && subRun.launch.DropModel {
+		// An API-key provider sets its model through settings.env; the agent's
+		// own model and Claude-foreign flags must not reach its CLI.
+		model = ""
+		customArgs = subscriptions.ClaudeProviderArgs(customArgs)
 	}
 	thinkingLevel := ""
 	serviceTier := ""

@@ -112,6 +112,9 @@ type SubscriptionResponse struct {
 	Disabled       bool                        `json:"disabled"`
 	Usage          []SubscriptionUsageResponse `json:"usage"`
 	UsedBy         []SubscriptionUserResponse  `json:"used_by"`
+	Hosts          []SubscriptionHostResponse  `json:"hosts"`
+	LoginState     string                      `json:"login_state"`
+	Login          *LoginSession               `json:"login"`
 	CreatedAt      string                      `json:"created_at"`
 	UpdatedAt      string                      `json:"updated_at"`
 }
@@ -189,6 +192,8 @@ func subscriptionToResponse(s db.Subscription, usage []db.SubscriptionUsage, use
 		AccountGroup:   s.AccountGroup,
 		Usage:          []SubscriptionUsageResponse{},
 		UsedBy:         users,
+		Hosts:          []SubscriptionHostResponse{},
+		LoginState:     "unchecked",
 		CreatedAt:      timestampToString(s.CreatedAt),
 		UpdatedAt:      timestampToString(s.UpdatedAt),
 	}
@@ -202,6 +207,19 @@ func subscriptionToResponse(s db.Subscription, usage []db.SubscriptionUsage, use
 	}
 	for _, u := range usage {
 		resp.Usage = append(resp.Usage, subscriptionUsageToResponse(u))
+	}
+	return resp
+}
+
+// withHostState adds what daemon hosts report about the credential and the
+// sign-in in progress.
+func (h *Handler) withHostState(resp SubscriptionResponse, hosts map[string][]SubscriptionHostResponse) SubscriptionResponse {
+	if list := hosts[resp.ID]; len(list) > 0 {
+		resp.Hosts = list
+	}
+	resp.LoginState = loginStateFromHosts(resp.Hosts)
+	if h.SubscriptionLogins != nil {
+		resp.Login = h.SubscriptionLogins.current(resp.Key)
 	}
 	return resp
 }
@@ -515,9 +533,10 @@ func (h *Handler) ListSubscriptions(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to load subscription users")
 		return
 	}
+	hosts := h.hostStatesBySubscription(r.Context())
 	resp := make([]SubscriptionResponse, len(subs))
 	for i, s := range subs {
-		resp[i] = subscriptionToResponse(s, usage[uuidToString(s.ID)], users[s.Key])
+		resp[i] = h.withHostState(subscriptionToResponse(s, usage[uuidToString(s.ID)], users[s.Key]), hosts)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"subscriptions": resp,
@@ -546,7 +565,7 @@ func (h *Handler) GetSubscription(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to load subscription users")
 		return
 	}
-	writeJSON(w, http.StatusOK, subscriptionToResponse(sub, usage[uuidToString(sub.ID)], users[sub.Key]))
+	writeJSON(w, http.StatusOK, h.withHostState(subscriptionToResponse(sub, usage[uuidToString(sub.ID)], users[sub.Key]), h.hostStatesBySubscription(r.Context())))
 }
 
 // ListSubscriptionUsage — GET /api/subscriptions/{key}/usage?since=7d.
@@ -697,7 +716,7 @@ func (h *Handler) CreateSubscription(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	windows := []string{"5h", "week"}
+	windows := defaultWindowsForProvider(provider)
 	if req.Windows != nil {
 		windows = *req.Windows
 	}
@@ -721,6 +740,7 @@ func (h *Handler) CreateSubscription(w http.ResponseWriter, r *http.Request) {
 	if req.Settings != nil {
 		settings = *req.Settings
 	}
+	applyProviderDefaults(provider, settings)
 	if err := validateSubscriptionSettings(settings, ""); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -766,6 +786,42 @@ func deref(s *string) string {
 		return ""
 	}
 	return *s
+}
+
+// providerBaseURLs are the Anthropic-compatible endpoints of the API-key
+// providers. Models stay the admin's choice: they change faster than code.
+var providerBaseURLs = map[string]string{
+	"zai":        "https://api.z.ai/api/anthropic",
+	"minimax":    "https://api.minimax.io/anthropic",
+	"openrouter": "https://openrouter.ai/api",
+	"loodsen-ai": "https://ai.loodsen.ru/api",
+}
+
+// applyProviderDefaults fills settings.env.ANTHROPIC_BASE_URL for an API-key
+// provider when the request did not set it.
+func applyProviderDefaults(provider string, settings map[string]any) {
+	url, ok := providerBaseURLs[provider]
+	if !ok {
+		return
+	}
+	env, _ := settings["env"].(map[string]any)
+	if env == nil {
+		env = map[string]any{}
+	}
+	if _, set := env["ANTHROPIC_BASE_URL"]; !set {
+		env["ANTHROPIC_BASE_URL"] = url
+	}
+	settings["env"] = env
+}
+
+// defaultWindowsForProvider: plans with 5-hour and weekly windows, or none for
+// pay-as-you-go keys.
+func defaultWindowsForProvider(provider string) []string {
+	switch provider {
+	case "openrouter", "loodsen-ai":
+		return []string{}
+	}
+	return []string{"5h", "week"}
 }
 
 func defaultAuthForProvider(provider string) string {
@@ -905,6 +961,7 @@ func (h *Handler) UpdateSubscription(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to update subscription")
 		return
 	}
+	h.refreshSubscriptionAvailability(r.Context())
 	writeJSON(w, http.StatusOK, subscriptionToResponse(sub, nil, nil))
 }
 
@@ -934,6 +991,10 @@ func (h *Handler) DeleteSubscription(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to detach subscription from runtimes")
 		return
 	}
+	if err := qtx.DeleteSubscriptionHostStates(r.Context(), sub.ID); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to delete subscription host state")
+		return
+	}
 	if err := qtx.DeleteSubscriptionUsage(r.Context(), sub.ID); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to delete subscription usage")
 		return
@@ -947,6 +1008,7 @@ func (h *Handler) DeleteSubscription(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.publishRuntimeProfilesChanged(profiles, userID)
+	h.refreshSubscriptionAvailability(r.Context())
 	detached := make([]string, len(profiles))
 	for i, p := range profiles {
 		detached[i] = uuidToString(p.ID)
@@ -1018,6 +1080,7 @@ func (h *Handler) RecordSubscriptionUsage(w http.ResponseWriter, r *http.Request
 		}
 		out = append(out, subscriptionUsageToResponse(row))
 	}
+	h.refreshSubscriptionAvailability(r.Context())
 	writeJSON(w, http.StatusCreated, map[string]any{"key": sub.Key, "usage": out})
 }
 
@@ -1074,8 +1137,16 @@ type poolSubscriptionsResponse struct {
 	SpendOrder     string                 `json:"spend_order"`
 	Subscriptions  []SubscriptionResponse `json:"subscriptions"`
 	// Keys listed on the profile with no subscription row (deleted out of
-	// band). subs-run skips them.
+	// band); they are skipped.
 	Missing []string `json:"missing"`
+	// Agents bound to this runtime's instances.
+	Agents []PoolAgentResponse `json:"agents"`
+}
+
+// PoolAgentResponse is an agent running on a runtime of the profile.
+type PoolAgentResponse struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
 }
 
 // GetRuntimeProfileSubscriptions — GET
@@ -1110,6 +1181,12 @@ func (h *Handler) poolResponse(ctx context.Context, profile db.RuntimeProfile) p
 		SpendOrder:     profile.SpendOrder,
 		Subscriptions:  []SubscriptionResponse{},
 		Missing:        []string{},
+		Agents:         []PoolAgentResponse{},
+	}
+	if agents, err := h.Queries.ListAgentsOnRuntimeProfiles(ctx, []pgtype.UUID{profile.ID}); err == nil {
+		for _, a := range agents {
+			resp.Agents = append(resp.Agents, PoolAgentResponse{ID: uuidToString(a.ID), Name: a.Name})
+		}
 	}
 	if len(keys) == 0 {
 		return resp
@@ -1198,6 +1275,7 @@ func (h *Handler) SetRuntimeProfileSubscriptions(w http.ResponseWriter, r *http.
 		return
 	}
 	h.publishRuntimeProfilesChanged(updated, userID)
+	h.refreshSubscriptionAvailability(r.Context())
 	for _, p := range updated {
 		if p.ID == profile.ID {
 			writeJSON(w, http.StatusOK, h.poolResponse(r.Context(), p))
@@ -1217,11 +1295,9 @@ type createPoolRequest struct {
 	AllWorkspaces bool     `json:"all_workspaces"`
 }
 
-// SubscriptionRunCommand is the launch wrapper every subscription pool runs:
-// it reads the pool through GetRuntimeProfileSubscriptions and picks one
-// subscription per run. The family word in fixed_args tells it which CLI to
-// exec for calls that come without a profile id, such as `--version`.
-const SubscriptionRunCommand = "subs-run"
+// A subscription pool runs the provider CLI itself (claude / codex): the
+// daemon receives the pool at claim time, picks the subscription and points
+// the CLI at its credential, so no host wrapper is involved.
 
 func newShareKey() string {
 	b := make([]byte, 8)
@@ -1294,7 +1370,7 @@ func (h *Handler) CreateRuntimePool(w http.ResponseWriter, r *http.Request) {
 	if req.Subscriptions == nil {
 		keysJSON = []byte("[]")
 	}
-	fixedArgs, _ := json.Marshal([]string{family})
+	fixedArgs := []byte("[]")
 	shareKey := newShareKey()
 
 	tx, err := h.TxStarter.Begin(r.Context())
@@ -1311,7 +1387,7 @@ func (h *Handler) CreateRuntimePool(w http.ResponseWriter, r *http.Request) {
 			WorkspaceID:    ws,
 			DisplayName:    req.DisplayName,
 			ProtocolFamily: family,
-			CommandName:    SubscriptionRunCommand,
+			CommandName:    family,
 			Description:    ptrToText(req.Description),
 			FixedArgs:      fixedArgs,
 			Visibility:     runtimeProfileDefaultVisibility,
