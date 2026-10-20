@@ -237,23 +237,33 @@ func (s *IssueConveyorService) resolveRoute(ctx context.Context, q *db.Queries, 
 	if entries[len(entries)-1].Step != conveyorStepClose {
 		return nil, conveyorErr(ErrConveyorInvalid, "the last route node must be close:<coordinator>")
 	}
-	if fromStep = strings.ToLower(strings.TrimSpace(fromStep)); fromStep != "" {
-		start := -1
-		for i, e := range entries[:len(entries)-1] {
-			if e.Step == fromStep {
-				start = i
-				break
-			}
-		}
-		if start < 0 {
-			return nil, conveyorErr(ErrConveyorInvalid, "from_step %q is not a step of the route", fromStep)
-		}
-		entries = entries[start:]
-	}
 	// Hidden carriers (the accept agent) are route nodes too: read every kind.
 	agents, err := q.ListAllAgentsAnyKind(ctx, issue.WorkspaceID)
 	if err != nil {
 		return nil, err
+	}
+	if step, ref := splitFromStep(fromStep); step != "" {
+		want, err := fromStepAgent(agents, ref)
+		if err != nil {
+			return nil, err
+		}
+		start := -1
+		for i, e := range entries[:len(entries)-1] {
+			if e.Step != step {
+				continue
+			}
+			if want != "" {
+				if a, err := pickConveyorAgent(agents, e.Agent); err != nil || util.UUIDToString(a.ID) != want {
+					continue
+				}
+			}
+			start = i
+			break
+		}
+		if start < 0 {
+			return nil, conveyorErr(ErrConveyorInvalid, "from_step %q is not a node of the route", fromStep)
+		}
+		entries = entries[start:]
 	}
 	if entries, agents, err = withImplicitAccept(ctx, q, issue.WorkspaceID, agents, entries); err != nil {
 		return nil, err
@@ -309,6 +319,25 @@ func (s *IssueConveyorService) resolveRoute(ctx context.Context, q *db.Queries, 
 		return nil, conveyorErr(ErrConveyorInvalid, "metadata.risky is true: the route needs a review step")
 	}
 	return route, nil
+}
+
+// splitFromStep reads from_step as "<step>" or "<step>:<agent>": a step with
+// several executors (dev:Бэкенд,dev:Фронтенд) is entered at the named one.
+func splitFromStep(v string) (step, agent string) {
+	step, agent, _ = strings.Cut(strings.TrimSpace(v), ":")
+	return strings.ToLower(strings.TrimSpace(step)), strings.TrimSpace(agent)
+}
+
+// fromStepAgent resolves the agent part of from_step to an id; "" when absent.
+func fromStepAgent(agents []db.Agent, ref string) (string, error) {
+	if ref == "" {
+		return "", nil
+	}
+	a, err := pickConveyorAgent(agents, ref)
+	if err != nil {
+		return "", err
+	}
+	return util.UUIDToString(a.ID), nil
 }
 
 func pickConveyorAgent(agents []db.Agent, ref string) (db.Agent, error) {
@@ -597,21 +626,37 @@ func (s *IssueConveyorService) resume(ctx context.Context, q *db.Queries, issue 
 		return cv, err
 	}
 	idx := cv.CurIdx
-	if step := strings.ToLower(strings.TrimSpace(cmd.FromStep)); step != "" {
+	step, ref := splitFromStep(cmd.FromStep)
+	if step != "" {
+		want := ""
+		if ref != "" {
+			agents, err := q.ListAllAgentsAnyKind(ctx, issue.WorkspaceID)
+			if err != nil {
+				return cv, err
+			}
+			if want, err = fromStepAgent(agents, ref); err != nil {
+				return cv, err
+			}
+		}
 		idx = -1
 		for _, n := range route[:len(route)-1] {
-			if n.Step == step {
+			if n.Step == step && (want == "" || n.AgentID == want) {
 				idx = n.Idx
 				break
 			}
 		}
 		if idx < 0 {
-			return cv, conveyorErr(ErrConveyorInvalid, "from_step %q is not a step of the route", step)
+			return cv, conveyorErr(ErrConveyorInvalid, "from_step %q is not a node of the route", cmd.FromStep)
 		}
 	}
-	skipped, err := s.passedPeers(ctx, q, cv, route, idx)
-	if err != nil {
-		return cv, err
+	// A named executor is where the coordinator wants the round to start:
+	// peers before it are not re-run and those after it are not skipped.
+	var skipped []conveyorSkippedPeer
+	if ref == "" {
+		var err error
+		if skipped, err = s.passedPeers(ctx, q, cv, route, idx); err != nil {
+			return cv, err
+		}
 	}
 	idx += int32(len(skipped))
 	node := conveyorNodeAt(route[:len(route)-1], idx)
