@@ -597,12 +597,14 @@ func (s *IssueConveyorService) resume(ctx context.Context, q *db.Queries, issue 
 	if err != nil {
 		return cv, err
 	}
-	if !CanMemberInvokeAgent(ctx, q, agent, invoker, issue.WorkspaceID) {
+	if !isAcceptCarrier(agent) && !CanMemberInvokeAgent(ctx, q, agent, invoker, issue.WorkspaceID) {
 		return cv, conveyorErr(ErrConveyorForbidden, "you may not invoke agent %q", agent.Name)
 	}
 	cv.CurIdx, cv.Round, cv.Revision = idx, cv.Round+1, cv.Revision+1
 	cv.Status, cv.CurTaskID, cv.WaitingReason, cv.EnabledBy = ConveyorActive, pgtype.UUID{}, pgtype.Text{}, invoker
-	if node.Step != conveyorStepQA && node.Step != conveyorStepReview {
+	// Verifiers judge the commit the route accepted: resuming one keeps it
+	// (an accept run cut short must check the same commit again).
+	if node.Step != conveyorStepQA && node.Step != conveyorStepReview && node.Step != conveyorStepAccept {
 		cv.AcceptedCommit = pgtype.Text{}
 	}
 	cv, err = q.SaveIssueConveyor(ctx, saveParams(cv))
