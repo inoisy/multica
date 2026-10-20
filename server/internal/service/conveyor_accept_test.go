@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgtype"
+
 	"github.com/multica-ai/multica/server/internal/util"
 )
 
@@ -94,6 +96,16 @@ func (r *conveyorRig) onAcceptRuntime() {
 	r.f.Exec(r.t, "UPDATE agent_runtime SET provider = 'accept' WHERE id = (SELECT runtime_id FROM agent WHERE id = $1)", r.agents["accept"])
 }
 
+// agentRuntime is the runtime the rig's agent runs on.
+func (r *conveyorRig) agentRuntime(name string) pgtype.UUID {
+	r.t.Helper()
+	a, err := r.f.q.GetAgent(r.ctx, r.agents[name])
+	if err != nil {
+		r.t.Fatal(err)
+	}
+	return a.RuntimeID
+}
+
 func steps(route []ConveyorNode) string {
 	parts := make([]string, len(route))
 	for i, n := range route {
@@ -106,12 +118,37 @@ func TestConveyorAddsAcceptBeforeCloseOfAReviewedRoute(t *testing.T) {
 	r := newConveyorRig(t)
 	r.withAcceptAgent()
 	r.onAcceptRuntime()
+	r.f.Exec(t, "UPDATE agent_runtime SET status = 'online' WHERE id = (SELECT runtime_id FROM agent WHERE id = $1)", r.agents["accept"])
+	r.f.Cleanup(t, "DELETE FROM agent WHERE workspace_id = $1 AND system_key = 'accept'", r.f.WorkspaceID)
 	view := r.enable("dev", "qa", "review", "close")
 	if got := steps(view.Route); got != "dev,qa,review,accept,close" {
 		t.Fatalf("route %s, want accept added before close", got)
 	}
-	if view.Route[3].AgentID != util.UUIDToString(r.agents["accept"]) {
-		t.Fatalf("accept runs on %s, want the accept agent", view.Route[3].AgentID)
+	carrier, err := r.f.q.GetAgent(r.ctx, parseTestUUID(t, view.Route[3].AgentID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The server's own hidden agent, not the member's agent on that runtime.
+	if !isAcceptCarrier(carrier) || carrier.RuntimeID != r.agentRuntime("accept") {
+		t.Fatalf("accept runs on %s kind %s key %v", carrier.Name, carrier.Kind, carrier.SystemKey)
+	}
+	visible, err := r.f.q.ListAgents(r.ctx, parseTestUUID(t, r.f.WorkspaceID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range visible {
+		if a.ID == carrier.ID {
+			t.Fatal("the accept agent shows in the agent list")
+		}
+	}
+
+	// A second reviewed route reuses the same agent.
+	other := newConveyorRigIn(t, r)
+	if got := other.enable("dev", "qa", "review", "close").Route[3].AgentID; got != view.Route[3].AgentID {
+		t.Fatalf("second route got accept agent %s, want %s", got, view.Route[3].AgentID)
+	}
+	if n := r.f.Count(t, "SELECT count(*) FROM agent WHERE workspace_id = $1 AND system_key = 'accept'", r.f.WorkspaceID); n != 1 {
+		t.Fatalf("%d accept agents, want one", n)
 	}
 }
 
@@ -129,4 +166,18 @@ func TestConveyorLeavesRoutesWithoutReviewOrAcceptAgentAsWritten(t *testing.T) {
 	if got := steps(other.enable("dev", "qa", "close").Route); got != "dev,qa,close" {
 		t.Fatalf("no review: route %s", got)
 	}
+}
+
+// newConveyorRigIn is another issue of the same workspace, routed by the same agents.
+func newConveyorRigIn(t *testing.T, r *conveyorRig) *conveyorRig {
+	t.Helper()
+	other := *r
+	other.t = t
+	other.issue = parseTestUUID(t, r.f.Issue(t, "Second routed issue"))
+	r.f.Cleanup(t, "DELETE FROM issue_conveyor_event WHERE issue_id=$1", other.issue)
+	r.f.Cleanup(t, "DELETE FROM issue_conveyor WHERE issue_id=$1", other.issue)
+	r.f.Cleanup(t, "DELETE FROM issue_wakeup WHERE issue_id=$1", other.issue)
+	r.f.Cleanup(t, "DELETE FROM comment WHERE issue_id=$1", other.issue)
+	r.f.Cleanup(t, "DELETE FROM agent_task_queue WHERE issue_id=$1", other.issue)
+	return &other
 }

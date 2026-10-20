@@ -229,11 +229,12 @@ func (s *IssueConveyorService) resolveRoute(ctx context.Context, q *db.Queries, 
 		}
 		entries = entries[start:]
 	}
-	agents, err := q.ListAgents(ctx, issue.WorkspaceID)
+	// Hidden carriers (the accept agent) are route nodes too: read every kind.
+	agents, err := q.ListAllAgentsAnyKind(ctx, issue.WorkspaceID)
 	if err != nil {
 		return nil, err
 	}
-	if entries, err = withImplicitAccept(ctx, q, issue.WorkspaceID, agents, entries); err != nil {
+	if entries, agents, err = withImplicitAccept(ctx, q, issue.WorkspaceID, agents, entries); err != nil {
 		return nil, err
 	}
 	route := make([]ConveyorNode, 0, len(entries))
@@ -250,7 +251,8 @@ func (s *IssueConveyorService) resolveRoute(ctx context.Context, q *db.Queries, 
 		if agent.ArchivedAt.Valid || !agent.RuntimeID.Valid {
 			return nil, conveyorErr(ErrConveyorInvalid, "agent %q is archived or has no runtime", agent.Name)
 		}
-		if !CanMemberInvokeAgent(ctx, q, agent, invoker, issue.WorkspaceID) {
+		// The hidden accept agent belongs to no member: the route invokes it.
+		if !isAcceptCarrier(agent) && !CanMemberInvokeAgent(ctx, q, agent, invoker, issue.WorkspaceID) {
 			return nil, conveyorErr(ErrConveyorForbidden, "you may not invoke agent %q", agent.Name)
 		}
 		route = append(route, ConveyorNode{Idx: int32(i), Step: e.Step, AgentID: util.UUIDToString(agent.ID)})
@@ -280,7 +282,8 @@ func (s *IssueConveyorService) resolveRoute(ctx context.Context, q *db.Queries, 
 func pickConveyorAgent(agents []db.Agent, ref string) (db.Agent, error) {
 	var found []db.Agent
 	for _, a := range agents {
-		if util.UUIDToString(a.ID) == ref || (strings.EqualFold(a.Name, ref) && !a.ArchivedAt.Valid) {
+		// A name names a member-visible agent; hidden carriers are reached by id only.
+		if util.UUIDToString(a.ID) == ref || (strings.EqualFold(a.Name, ref) && !a.ArchivedAt.Valid && a.Kind != "system") {
 			found = append(found, a)
 		}
 	}
@@ -726,55 +729,107 @@ func (s *IssueConveyorService) Events(ctx context.Context, issueID pgtype.UUID, 
 // have judged that commit first.
 // withImplicitAccept adds acceptance to a reviewed route: nobody writes
 // accept into routes, the server puts it right before close whenever the
-// route has a review and no accept of its own. It runs on a workspace agent
-// of an accept runtime (an online one first); a workspace without such an
-// agent keeps the route as written. Acceptance passes without a merge when
-// the repository has no .multica/acceptance.json, so reviewed work in a
-// repository merged by people goes on to close as before.
-func withImplicitAccept(ctx context.Context, q *db.Queries, workspaceID pgtype.UUID, agents []db.Agent, entries []ConveyorRouteEntry) ([]ConveyorRouteEntry, error) {
+// route has a review and no accept of its own. It runs on the workspace's
+// hidden accept agent (acceptAgent); a workspace whose daemons offer no
+// accept runtime keeps the route as written. Acceptance passes without a
+// merge when the repository has no .multica/acceptance.json, so reviewed
+// work in a repository merged by people goes on to close as before.
+func withImplicitAccept(ctx context.Context, q *db.Queries, workspaceID pgtype.UUID, agents []db.Agent, entries []ConveyorRouteEntry) ([]ConveyorRouteEntry, []db.Agent, error) {
 	review := false
 	for _, e := range entries {
 		switch e.Step {
 		case conveyorStepAccept:
-			return entries, nil
+			return entries, agents, nil
 		case conveyorStepReview:
 			review = true
 		}
 	}
 	if !review || len(entries) < 2 || entries[len(entries)-1].Step != conveyorStepClose {
-		return entries, nil
+		return entries, agents, nil
 	}
-	runtimes, err := q.ListAgentRuntimes(ctx, workspaceID)
-	if err != nil {
-		return nil, err
+	agent, created, err := acceptAgent(ctx, q, workspaceID, agents)
+	if err != nil || agent == nil {
+		return entries, agents, err
 	}
-	online := map[string]bool{}
-	for _, r := range runtimes {
-		if r.Provider == conveyorStepAccept {
-			online[util.UUIDToString(r.ID)] = r.Status == "online"
-		}
-	}
-	var pick *db.Agent
-	for i := range agents {
-		a := &agents[i]
-		if a.ArchivedAt.Valid || !a.RuntimeID.Valid {
-			continue
-		}
-		isOnline, ok := online[util.UUIDToString(a.RuntimeID)]
-		if !ok {
-			continue
-		}
-		if pick == nil || (isOnline && !online[util.UUIDToString(pick.RuntimeID)]) {
-			pick = a
-		}
-	}
-	if pick == nil {
-		return entries, nil
+	if created {
+		agents = append(agents, *agent)
 	}
 	out := make([]ConveyorRouteEntry, 0, len(entries)+1)
 	out = append(out, entries[:len(entries)-1]...)
-	out = append(out, ConveyorRouteEntry{Step: conveyorStepAccept, Agent: util.UUIDToString(pick.ID)}, entries[len(entries)-1])
-	return out, nil
+	out = append(out, ConveyorRouteEntry{Step: conveyorStepAccept, Agent: util.UUIDToString(agent.ID)}, entries[len(entries)-1])
+	return out, agents, nil
+}
+
+// acceptSystemKey marks the hidden agent that carries accept steps.
+const acceptSystemKey = "accept"
+
+// isAcceptCarrier reports whether the agent is the server's hidden accept agent.
+func isAcceptCarrier(a db.Agent) bool {
+	return a.Kind == "system" && a.SystemKey.Valid && a.SystemKey.String == acceptSystemKey
+}
+
+// acceptAgent returns the workspace's hidden accept agent: the one on an
+// online accept runtime first, created there when that runtime has none yet,
+// else any existing one. nil when no daemon of the workspace offers accept.
+func acceptAgent(ctx context.Context, q *db.Queries, workspaceID pgtype.UUID, agents []db.Agent) (*db.Agent, bool, error) {
+	runtimes, err := q.ListAgentRuntimes(ctx, workspaceID)
+	if err != nil {
+		return nil, false, err
+	}
+	var accept []db.AgentRuntime
+	for _, r := range runtimes {
+		if r.Provider == conveyorStepAccept {
+			accept = append(accept, r)
+		}
+	}
+	if len(accept) == 0 {
+		return nil, false, nil
+	}
+	carrierOn := func(runtimeID pgtype.UUID) *db.Agent {
+		for i := range agents {
+			if isAcceptCarrier(agents[i]) && !agents[i].ArchivedAt.Valid && agents[i].RuntimeID == runtimeID {
+				return &agents[i]
+			}
+		}
+		return nil
+	}
+	var fallback *db.Agent
+	for _, r := range accept {
+		if a := carrierOn(r.ID); a != nil {
+			if r.Status == "online" {
+				return a, false, nil
+			}
+			if fallback == nil {
+				fallback = a
+			}
+		}
+	}
+	for _, r := range accept {
+		if r.Status != "online" {
+			continue
+		}
+		created, err := q.CreateSystemAcceptAgent(ctx, db.CreateSystemAcceptAgentParams{
+			WorkspaceID: workspaceID, Name: "Приёмка", RuntimeMode: r.RuntimeMode, RuntimeID: r.ID, OwnerID: r.OwnerID,
+		})
+		var unique *pgconn.PgError
+		if errors.As(err, &unique) && unique.Code == "23505" {
+			// Another route enabled at the same moment created it: read it back.
+			again, lerr := q.ListAllAgentsAnyKind(ctx, workspaceID)
+			if lerr != nil {
+				return nil, false, lerr
+			}
+			for i := range again {
+				if isAcceptCarrier(again[i]) && !again[i].ArchivedAt.Valid && again[i].RuntimeID == r.ID {
+					return &again[i], true, nil
+				}
+			}
+		}
+		if err != nil {
+			return nil, false, err
+		}
+		return &created, true, nil
+	}
+	return fallback, false, nil
 }
 
 func acceptPlacementError(entries []ConveyorRouteEntry) error {
