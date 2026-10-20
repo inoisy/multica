@@ -33,6 +33,7 @@
     "./model-profiles": "./model-profiles/index.ts",
     "./conveyor": "./conveyor/index.ts",
     "./subs-login": "./subs-login/index.ts",
+    "./subscriptions": "./subscriptions/index.ts",
     "./issue-statuses": "./issue-statuses/index.ts",
     "./issue-statuses/queries": "./issue-statuses/queries.ts",
     "./issue-statuses/hooks": "./issue-statuses/hooks.ts",
