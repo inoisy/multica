@@ -716,7 +716,7 @@ func (h *Handler) CreateSubscription(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	windows := []string{"5h", "week"}
+	windows := defaultWindowsForProvider(provider)
 	if req.Windows != nil {
 		windows = *req.Windows
 	}
@@ -740,6 +740,7 @@ func (h *Handler) CreateSubscription(w http.ResponseWriter, r *http.Request) {
 	if req.Settings != nil {
 		settings = *req.Settings
 	}
+	applyProviderDefaults(provider, settings)
 	if err := validateSubscriptionSettings(settings, ""); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -785,6 +786,42 @@ func deref(s *string) string {
 		return ""
 	}
 	return *s
+}
+
+// providerBaseURLs are the Anthropic-compatible endpoints of the API-key
+// providers. Models stay the admin's choice: they change faster than code.
+var providerBaseURLs = map[string]string{
+	"zai":        "https://api.z.ai/api/anthropic",
+	"minimax":    "https://api.minimax.io/anthropic",
+	"openrouter": "https://openrouter.ai/api",
+	"loodsen-ai": "https://ai.loodsen.ru/api",
+}
+
+// applyProviderDefaults fills settings.env.ANTHROPIC_BASE_URL for an API-key
+// provider when the request did not set it.
+func applyProviderDefaults(provider string, settings map[string]any) {
+	url, ok := providerBaseURLs[provider]
+	if !ok {
+		return
+	}
+	env, _ := settings["env"].(map[string]any)
+	if env == nil {
+		env = map[string]any{}
+	}
+	if _, set := env["ANTHROPIC_BASE_URL"]; !set {
+		env["ANTHROPIC_BASE_URL"] = url
+	}
+	settings["env"] = env
+}
+
+// defaultWindowsForProvider: plans with 5-hour and weekly windows, or none for
+// pay-as-you-go keys.
+func defaultWindowsForProvider(provider string) []string {
+	switch provider {
+	case "openrouter", "loodsen-ai":
+		return []string{}
+	}
+	return []string{"5h", "week"}
 }
 
 func defaultAuthForProvider(provider string) string {
@@ -1100,8 +1137,16 @@ type poolSubscriptionsResponse struct {
 	SpendOrder     string                 `json:"spend_order"`
 	Subscriptions  []SubscriptionResponse `json:"subscriptions"`
 	// Keys listed on the profile with no subscription row (deleted out of
-	// band). subs-run skips them.
+	// band); they are skipped.
 	Missing []string `json:"missing"`
+	// Agents bound to this runtime's instances.
+	Agents []PoolAgentResponse `json:"agents"`
+}
+
+// PoolAgentResponse is an agent running on a runtime of the profile.
+type PoolAgentResponse struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
 }
 
 // GetRuntimeProfileSubscriptions — GET
@@ -1136,6 +1181,12 @@ func (h *Handler) poolResponse(ctx context.Context, profile db.RuntimeProfile) p
 		SpendOrder:     profile.SpendOrder,
 		Subscriptions:  []SubscriptionResponse{},
 		Missing:        []string{},
+		Agents:         []PoolAgentResponse{},
+	}
+	if agents, err := h.Queries.ListAgentsOnRuntimeProfiles(ctx, []pgtype.UUID{profile.ID}); err == nil {
+		for _, a := range agents {
+			resp.Agents = append(resp.Agents, PoolAgentResponse{ID: uuidToString(a.ID), Name: a.Name})
+		}
 	}
 	if len(keys) == 0 {
 		return resp
