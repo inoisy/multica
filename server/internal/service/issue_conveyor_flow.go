@@ -436,6 +436,13 @@ func (s *IssueConveyorService) deliver(ctx context.Context, actionID pgtype.UUID
 	}
 	agent, err := q.GetAgentInWorkspace(ctx, db.GetAgentInWorkspaceParams{ID: agentID, WorkspaceID: cv.WorkspaceID})
 	if errors.Is(err, pgx.ErrNoRows) {
+		// GetAgentInWorkspace sees only kind = 'user'; the accept step runs on the
+		// hidden system agent, so look it up by id and accept only that carrier.
+		if carrier, cerr := q.GetAgent(ctx, agentID); cerr == nil && carrier.WorkspaceID == cv.WorkspaceID && isAcceptCarrier(carrier) {
+			agent, err = carrier, nil
+		}
+	}
+	if errors.Is(err, pgx.ErrNoRows) {
 		return wait("agent not found in the workspace")
 	}
 	if err != nil {
