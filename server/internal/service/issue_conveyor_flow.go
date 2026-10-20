@@ -423,6 +423,11 @@ func (s *IssueConveyorService) deliver(ctx context.Context, actionID pgtype.UUID
 		}
 		return tx.Commit(ctx)
 	}
+	// A route that passed every step closes the issue itself: the coordinator
+	// is woken only when something needs a decision, not to say "done".
+	if action.Action.String == conveyorActionNotifyCoordinator && cv.Status == ConveyorCompleted {
+		return s.autoClose(ctx, tx, q, issue, cv, action)
+	}
 	wait := func(reason string) error {
 		if err := q.SetIssueConveyorActionReason(ctx, db.SetIssueConveyorActionReasonParams{ID: action.ID, Reason: pgtype.Text{String: reason, Valid: true}}); err != nil {
 			return err
@@ -888,4 +893,112 @@ func (s *TaskService) deliverConveyorAfterTerminal(ctx context.Context, task db.
 	if task.ConveyorActionID.Valid && task.IssueID.Valid {
 		s.conveyor().DeliverPending(ctx, task.IssueID)
 	}
+}
+
+// conveyorAutoCloseReason journals why a completed route woke nobody.
+const conveyorAutoCloseReason = "every step passed: the server closed the issue"
+
+// autoClose ends a route that passed every step: the issue goes to done, a
+// system comment sums up what passed and what was merged, and the owed
+// coordinator run is withdrawn. It commits the delivery transaction.
+func (s *IssueConveyorService) autoClose(ctx context.Context, tx pgx.Tx, q *db.Queries, issue db.Issue, cv db.IssueConveyor, action db.IssueConveyorEvent) error {
+	if err := q.CancelIssueConveyorAction(ctx, db.CancelIssueConveyorActionParams{ID: action.ID, Reason: pgtype.Text{String: conveyorAutoCloseReason, Valid: true}}); err != nil {
+		return err
+	}
+	prevStatus := issue.Status
+	var err error
+	if prevStatus != issuestatus.Done {
+		if issue, err = q.UpdateIssueStatus(ctx, db.UpdateIssueStatusParams{ID: issue.ID, WorkspaceID: issue.WorkspaceID, Status: issuestatus.Done}); err != nil {
+			return err
+		}
+	}
+	value, _ := json.Marshal(conveyorStepClose)
+	if _, err = q.SetIssueMetadataKey(ctx, db.SetIssueMetadataKeyParams{ID: issue.ID, WorkspaceID: issue.WorkspaceID, Key: "step", Value: value}); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return err
+	}
+	summary, err := s.autoCloseSummary(ctx, q, cv)
+	if err != nil {
+		return err
+	}
+	if _, err = q.CreateComment(ctx, db.CreateCommentParams{
+		ID: dbid.NewV7(), IssueID: issue.ID, WorkspaceID: issue.WorkspaceID,
+		AuthorType: "system", AuthorID: pgtype.UUID{Valid: true}, Content: summary, Type: "comment",
+	}); err != nil {
+		return err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return err
+	}
+	if s.Tasks.Bus != nil {
+		s.Tasks.broadcastIssueUpdated(ctx, issue, prevStatus)
+	}
+	return nil
+}
+
+// autoCloseSummary is the closing comment: the steps that passed with their
+// executors, the branch and commit, and what acceptance did with them.
+func (s *IssueConveyorService) autoCloseSummary(ctx context.Context, q *db.Queries, cv db.IssueConveyor) (string, error) {
+	route, err := conveyorRoute(cv)
+	if err != nil {
+		return "", err
+	}
+	agents, err := q.ListAllAgentsAnyKind(ctx, cv.WorkspaceID)
+	if err != nil {
+		return "", err
+	}
+	names := make(map[string]string, len(agents))
+	for _, a := range agents {
+		names[util.UUIDToString(a.ID)] = a.Name
+	}
+	steps := make([]string, 0, len(route))
+	for _, n := range route {
+		if n.Step == conveyorStepClose {
+			continue
+		}
+		if n.Step == conveyorStepAccept {
+			steps = append(steps, "accept")
+			continue
+		}
+		steps = append(steps, fmt.Sprintf("%s (%s)", n.Step, names[n.AgentID]))
+	}
+	events, err := q.ListIssueConveyorEvents(ctx, db.ListIssueConveyorEventsParams{ConveyorID: cv.ID, AfterSeq: pgtype.Int8{Int64: 0, Valid: true}, PageSize: 500})
+	if err != nil {
+		return "", err
+	}
+	var branch, acceptReport string
+	for _, e := range events {
+		if e.Kind != conveyorEventResult || e.Action.String != ConveyorOutcomePass {
+			continue
+		}
+		var d struct {
+			Artifact struct {
+				Branch string `json:"branch"`
+			} `json:"artifact"`
+			Report string `json:"report"`
+		}
+		_ = json.Unmarshal(e.Details, &d)
+		if d.Artifact.Branch != "" && branch == "" {
+			branch = d.Artifact.Branch
+		}
+		if node := conveyorNodeAt(route, e.Idx.Int32); node != nil && node.Step == conveyorStepAccept {
+			acceptReport = strings.SplitN(strings.TrimSpace(d.Report), "\n", 2)[0]
+		}
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "Маршрут пройден: %s. Задача закрыта сервером.", strings.Join(steps, " → "))
+	if cv.AcceptedCommit.Valid {
+		commit := cv.AcceptedCommit.String
+		if len(commit) > 9 {
+			commit = commit[:9]
+		}
+		fmt.Fprintf(&b, "\n\nКоммит `%s`", commit)
+		if branch != "" {
+			fmt.Fprintf(&b, ", ветка `%s`", branch)
+		}
+		b.WriteString(".")
+	}
+	if acceptReport != "" {
+		fmt.Fprintf(&b, "\n\n%s", acceptReport)
+	}
+	return b.String(), nil
 }
