@@ -1214,10 +1214,19 @@ func TestConveyorRouteStartedAtQAPinsTheFirstCommit(t *testing.T) {
 // share, as a backend and a frontend do.
 func twoDevRig(t *testing.T) *conveyorRig {
 	t.Helper()
+	return devPeersRig(t, "front")
+}
+
+// devPeersRig routes dev:dev, then dev to each peer, then qa and close.
+func devPeersRig(t *testing.T, peers ...string) *conveyorRig {
+	t.Helper()
 	r := newConveyorRig(t)
-	r.agents["front"] = parseTestUUID(t, r.f.privateAgentOwnedBy(t, util.UUIDToString(r.owner), "front"))
-	route := r.route("dev") + ",dev:" + util.UUIDToString(r.agents["front"]) + "," + r.route("qa", "close")
-	raw, _ := json.Marshal(route)
+	route := r.route("dev")
+	for _, name := range peers {
+		r.agents[name] = parseTestUUID(t, r.f.privateAgentOwnedBy(t, util.UUIDToString(r.owner), name))
+		route += ",dev:" + util.UUIDToString(r.agents[name])
+	}
+	raw, _ := json.Marshal(route + "," + r.route("qa", "close"))
 	r.mustApply(ConveyorCommand{Action: ConveyorCmdEnable, Route: raw})
 	return r
 }
@@ -1293,14 +1302,33 @@ func TestConveyorResumeAfterQARerunsEveryPeer(t *testing.T) {
 	}
 }
 
-func TestConveyorResumeRerunsPeerWhoseBranchMoved(t *testing.T) {
+func TestConveyorResumeAfterPeerFailedRerunsEveryPeer(t *testing.T) {
 	r := twoDevRig(t)
 	r.pass("dev", "abcdef1234567")
-	// The frontend handed in on the same branch at another commit, then its
-	// run broke: the backend's commit is no longer the branch head.
+	// The frontend hands in a failure that blames the backend: the
+	// coordinator sends the route back to dev for the backend to fix it.
 	task := r.start(r.only("front"))
-	r.mustSubmit(task, r.result(ConveyorOutcomePass, "1234567abcdef"))
-	r.fail(task, "cancelled", "task cancelled by server")
+	in := r.result(ConveyorOutcomeBlocked, "")
+	in.Report = "the backend API answers 500"
+	r.mustSubmit(task, in)
+	r.complete(task)
+	if view := r.view(); view.Status != ConveyorAwaitingCoordinator || view.CurrentIdx != 1 {
+		t.Fatalf("failed frontend: %+v", view)
+	}
+	view := r.mustApply(ConveyorCommand{Action: ConveyorCmdResume, FromStep: "dev", ExpectedRevision: r.revision()})
+	if view.CurrentIdx != 0 || len(r.tasksOf("dev")) != 2 {
+		t.Fatalf("the frontend blamed the backend, yet it was skipped: %+v; journal:%s", view, r.dump())
+	}
+}
+
+func TestConveyorResumeRerunsPeerWhoseBranchMoved(t *testing.T) {
+	r := devPeersRig(t, "front", "mobile")
+	r.pass("dev", "abcdef1234567")
+	// The frontend handed in on the same branch at another commit, then the
+	// mobile run was cut: the backend's commit is no longer the branch head.
+	r.pass("front", "1234567abcdef")
+	tasks := r.tasksOf("mobile")
+	r.fail(r.start(tasks[len(tasks)-1]), "cancelled", "task cancelled by server")
 	view := r.mustApply(ConveyorCommand{Action: ConveyorCmdResume, FromStep: "dev", ExpectedRevision: r.revision()})
 	if view.CurrentIdx != 0 || len(r.tasksOf("dev")) != 2 {
 		t.Fatalf("moved branch, yet the backend was skipped: %+v", view)
