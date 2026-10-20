@@ -143,8 +143,9 @@ func TestSquadDefaultRouteRunsTheIssueWithoutTheLeader(t *testing.T) {
 	if status, _ := r.conveyorStatus(); status != "completed" {
 		t.Fatalf("route status %q, want completed", status)
 	}
-	if r.runs("lead") != 1 {
-		t.Fatalf("leader has %d runs after close, want 1", r.runs("lead"))
+	// Every step passed: the server closed the issue without waking the leader.
+	if r.runs("lead") != 0 {
+		t.Fatalf("leader has %d runs after the route passed, want 0", r.runs("lead"))
 	}
 
 	// Assigning again while the route already ran does not start a second one
