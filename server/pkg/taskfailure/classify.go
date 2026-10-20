@@ -257,6 +257,18 @@ func Classify(rawError string) Reason {
 			"i/o timeout",
 			"deadline exceeded",
 			"timeout exceeded while awaiting",
+			// Transient transport failures a self-hosted stand sees between the
+			// runtime and its provider: a reset connection, a TLS or websocket
+			// handshake that never completes, and a proxy wrapper that refused
+			// the tunnel. They clear on their own, so the run is retried like any
+			// other provider network cut. Bare ECONNRESET / ETIMEDOUT stay out on
+			// purpose: local tools and MCP servers print them too (see
+			// isCursorProviderNetworkError).
+			"connection reset",
+			"handshake timeout",
+			"require-vless",
+			"routing discovery failed",
+			"control protocol failed",
 		):
 		return ReasonAgentProviderNetwork
 

@@ -75,6 +75,9 @@ const (
 	conveyorStepDev    = "dev"
 	conveyorStepQA     = "qa"
 	conveyorStepReview = "review"
+	// conveyorStepAccept checks the commit the route accepted on top of the
+	// base branch and merges it; a daemon runs it without a model.
+	conveyorStepAccept = "accept"
 )
 
 // Errors map to HTTP in the handler: invalid 400, forbidden 403, not found
@@ -260,6 +263,9 @@ func (s *IssueConveyorService) resolveRoute(ctx context.Context, q *db.Queries, 
 	if lastDev >= 0 && lastQA < lastDev {
 		return nil, conveyorErr(ErrConveyorInvalid, "a qa step must follow dev")
 	}
+	if err := acceptPlacementError(entries); err != nil {
+		return nil, err
+	}
 	var meta map[string]any
 	_ = json.Unmarshal(issue.Metadata, &meta)
 	if risky, _ := meta["risky"].(bool); risky && !hasReview {
@@ -430,19 +436,41 @@ func (s *IssueConveyorService) enable(ctx context.Context, q *db.Queries, issue 
 }
 
 // Route steps use ordinary custom statuses. Existing catalog entries keep
-// their names and colors; archived or terminal keys cannot be repurposed.
+// their names and colors; terminal keys cannot be repurposed. A route status
+// someone archived is brought back when an owner or admin enables the route:
+// the key stays owned by the archived row, so nothing else could serve it.
 func ensureConveyorIssueStatuses(ctx context.Context, q *db.Queries, workspaceID, invoker pgtype.UUID, route []ConveyorNode) error {
+	canManage := func() (bool, error) {
+		member, err := q.GetMemberByUserAndWorkspace(ctx, db.GetMemberByUserAndWorkspaceParams{WorkspaceID: workspaceID, UserID: invoker})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, nil
+		}
+		if err != nil {
+			return false, err
+		}
+		return member.Role == "owner" || member.Role == "admin", nil
+	}
 	for _, node := range route {
 		if node.Step != conveyorStepQA && node.Step != conveyorStepReview {
 			continue
 		}
-		_, err := q.GetIssueStatusEntryByKey(ctx, db.GetIssueStatusEntryByKeyParams{WorkspaceID: workspaceID, Key: node.Step})
-		if errors.Is(err, pgx.ErrNoRows) {
-			member, merr := q.GetMemberByUserAndWorkspace(ctx, db.GetMemberByUserAndWorkspaceParams{WorkspaceID: workspaceID, UserID: invoker})
-			if merr != nil && !errors.Is(merr, pgx.ErrNoRows) {
+		entry, err := q.GetIssueStatusEntryByKey(ctx, db.GetIssueStatusEntryByKeyParams{WorkspaceID: workspaceID, Key: node.Step})
+		if err == nil && entry.ArchivedAt.Valid && !entry.IsSystem && entry.Category == issuestatus.CategoryStarted {
+			ok, merr := canManage()
+			if merr != nil {
 				return merr
 			}
-			if merr != nil || (member.Role != "owner" && member.Role != "admin") {
+			if !ok {
+				return conveyorErr(ErrConveyorForbidden, "an owner or admin must restore the archived route status %q", node.Step)
+			}
+			_, err = q.RestoreIssueStatusEntry(ctx, db.RestoreIssueStatusEntryParams{ID: entry.ID, WorkspaceID: workspaceID})
+		}
+		if errors.Is(err, pgx.ErrNoRows) {
+			ok, merr := canManage()
+			if merr != nil {
+				return merr
+			}
+			if !ok {
 				return conveyorErr(ErrConveyorForbidden, "an owner or admin must create the missing route status %q", node.Step)
 			}
 			name := "QA"
@@ -687,4 +715,26 @@ func (s *IssueConveyorService) Events(ctx context.Context, issueID pgtype.UUID, 
 		limit = 100
 	}
 	return s.q().ListIssueConveyorEvents(ctx, db.ListIssueConveyorEventsParams{ConveyorID: cv.ID, AfterSeq: pgtype.Int8{Int64: after, Valid: true}, PageSize: limit})
+}
+
+// acceptPlacementError enforces where the accept step may stand: at most once,
+// right before close, after a review of the same route. It merges what the
+// route accepted, so nothing may change the commit after it and a review must
+// have judged that commit first.
+func acceptPlacementError(entries []ConveyorRouteEntry) error {
+	review := false
+	for i, e := range entries {
+		switch e.Step {
+		case conveyorStepReview:
+			review = true
+		case conveyorStepAccept:
+			if i != len(entries)-2 {
+				return conveyorErr(ErrConveyorInvalid, "accept is only allowed once, right before close")
+			}
+			if !review {
+				return conveyorErr(ErrConveyorInvalid, "accept needs a review step before it")
+			}
+		}
+	}
+	return nil
 }
