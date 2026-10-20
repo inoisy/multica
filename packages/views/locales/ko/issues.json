@@ -1396,5 +1396,16 @@
   "model_profile": {
     "label": "Model profile",
     "assignee": "Assignee's profile"
+  },
+  "stage_dispatch": {
+    "label": "단계",
+    "off": "배정 안 함"
+  },
+  "route_step": {
+    "title": "경로 단계, {{round}}회차",
+    "paused": "일시 중지",
+    "awaiting_coordinator": "코디네이터 대기",
+    "waiting_provider": "공급자 대기",
+    "disabled": "꺼짐"
   }
 }

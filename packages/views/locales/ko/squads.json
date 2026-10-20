@@ -91,7 +91,8 @@
   },
   "detail_tabs": {
     "members": "멤버",
-    "instructions": "지침"
+    "instructions": "지침",
+    "route": "경로"
   },
   "details": {
     "leader": "리더",
@@ -110,7 +111,9 @@
     "leader_updated": "리더를 업데이트했습니다",
     "leader_update_failed": "리더를 업데이트하지 못했습니다",
     "archive_failed": "스쿼드를 보관하지 못했습니다",
-    "instructions_saved": "지침을 저장했습니다"
+    "instructions_saved": "지침을 저장했습니다",
+    "route_saved": "경로가 저장되었습니다",
+    "route_save_failed": "경로를 저장하지 못했습니다"
   },
   "profile_card": {
     "unavailable": "스쿼드를 사용할 수 없습니다",
@@ -140,5 +143,11 @@
     "filter_label": "필터",
     "filter_active_count_other": "필터 {{count}}개",
     "clear_filters": "필터 지우기"
+  },
+  "route_tab": {
+    "description": "이 스쿼드에 할당된 이슈는 서버에서 이 경로를 따라 진행됩니다. 각 단계는 자동으로 시작되며, 리더는 반려·중단·종료 때만 깨어납니다.",
+    "placeholder": "dev:Backend,qa:Tester,review:Reviewer,accept:Acceptor,close:Lead",
+    "rules": "단계는 step:Agent 형식으로 쉼표로 구분하고 close:<코디네이터>로 끝냅니다. qa는 dev 다음에 오며, accept는 review 이후 close 바로 앞에 한 번만 두고 승인된 커밋을 병합합니다.",
+    "clear_button": "끄기"
   }
 }
