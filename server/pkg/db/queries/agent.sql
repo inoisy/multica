@@ -85,6 +85,23 @@ INSERT INTO agent (
 )
 RETURNING *;
 
+-- name: CreateSystemAcceptAgent :one
+-- The hidden carrier of a route's accept step on one accept runtime: the
+-- daemon claims work per agent, so acceptance needs an agent row, but it has
+-- no model, prompt or owner choices. `kind = 'system'` keeps it out of agent
+-- lists and pickers; migration 172's index makes (workspace, owner, runtime,
+-- system_key) unique, so a concurrent create fails and the caller re-reads.
+INSERT INTO agent (
+    workspace_id, name, description, runtime_mode, runtime_config, runtime_id,
+    visibility, permission_mode, max_concurrent_tasks, owner_id, instructions,
+    custom_env, custom_args, kind, system_key
+) VALUES (
+    @workspace_id, @name, '', @runtime_mode, '{}'::jsonb, @runtime_id,
+    'private', 'private', 4, @owner_id, '',
+    '{}'::jsonb, '[]'::jsonb, 'system', 'accept'
+)
+RETURNING *;
+
 -- name: DeleteSystemAgentByID :exec
 -- Builder sessions own their hidden execution agent. Deleting the session
 -- removes that carrier and its task rows; the kind guard prevents this cleanup
