@@ -379,7 +379,7 @@ func (s *IssueConveyorService) deliver(ctx context.Context, actionID pgtype.UUID
 		return err
 	}
 	var overlay runtimeMCPOverlayData
-	if agent, aerr := s.q().GetAgent(ctx, agentID); aerr == nil && !agent.ArchivedAt.Valid && agent.RuntimeID.Valid && CanMemberInvokeAgent(ctx, s.q(), agent, preview.EnabledBy, issue.WorkspaceID) {
+	if agent, aerr := s.q().GetAgent(ctx, agentID); aerr == nil && !agent.ArchivedAt.Valid && agent.RuntimeID.Valid && !isAcceptCarrier(agent) && CanMemberInvokeAgent(ctx, s.q(), agent, preview.EnabledBy, issue.WorkspaceID) {
 		overlay = s.Tasks.buildRuntimeMCPOverlay(ctx, preview.EnabledBy, agent)
 	}
 
@@ -451,7 +451,8 @@ func (s *IssueConveyorService) deliver(ctx context.Context, actionID pgtype.UUID
 	if agent.ArchivedAt.Valid || !agent.RuntimeID.Valid {
 		return wait("agent is archived or has no runtime")
 	}
-	if !CanMemberInvokeAgent(ctx, q, agent, cv.EnabledBy, cv.WorkspaceID) {
+	// The hidden accept agent belongs to no member: the route itself runs it.
+	if !isAcceptCarrier(agent) && !CanMemberInvokeAgent(ctx, q, agent, cv.EnabledBy, cv.WorkspaceID) {
 		return wait("the person who enabled the route may not invoke the agent")
 	}
 	route, err := conveyorRoute(cv)
