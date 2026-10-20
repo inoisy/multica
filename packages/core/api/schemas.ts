@@ -3978,6 +3978,17 @@ export const RuntimeProfileSubscriptionsSchema = z.object({
   spend_order: z.string().nullish().catch("first").transform((v) => v || "first"),
   subscriptions: z.array(SubscriptionSchema),
   missing: z.array(z.string()).nullish().catch([]).transform((v) => v ?? []),
+  // Agents bound to the pool's runtimes; a malformed entry is dropped, not the pool.
+  agents: z
+    .array(z.unknown())
+    .nullish()
+    .catch([])
+    .transform((v) =>
+      (v ?? []).flatMap((a) => {
+        const parsed = z.object({ id: z.string(), name: z.string().catch("") }).safeParse(a);
+        return parsed.success ? [parsed.data] : [];
+      }),
+    ),
 });
 
 export const CreateRuntimePoolResultSchema = z.object({

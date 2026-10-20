@@ -101,6 +101,7 @@ it("reads a pool's subscriptions with the profile's pool fields", async () => {
   const pool = await client.getRuntimeProfileSubscriptions("w1", "p1");
   expect(pool.spend_order).toBe("first");
   expect(pool.missing).toEqual([]);
+  expect(pool.agents).toEqual([]);
   expect(pool.runtime_profile).toMatchObject({ subscriptions: ["claude-3"], share_key: "pool-1", all_workspaces: false, spend_order: "first" });
   respond({ runtime_profile: null, subscriptions: [] });
   await expect(client.getRuntimeProfileSubscriptions("w1", "p1")).rejects.toThrow("Could not load the runtime's subscriptions");
@@ -126,4 +127,16 @@ it("reads the new pool and the workspaces it skipped", async () => {
 it("surfaces a refused write", async () => {
   respond({ error: "instance admin only" }, 403);
   await expect(client.updateSubscription("claude-3", { reserve: 10 })).rejects.toThrow();
+});
+
+it("reads a pool's agents and drops malformed ones", async () => {
+  const runtime_profile = {
+    id: "p1", workspace_id: "w1", display_name: "Pool", protocol_family: "claude", command_name: "claude",
+    description: null, fixed_args: [], visibility: "workspace", created_by: null, enabled: true,
+  };
+  respond({ runtime_profile, subscriptions: [], agents: [{ id: "a1", name: "Writer" }, { id: 5 }, "x", { id: "a2" }] });
+  const pool = await client.getRuntimeProfileSubscriptions("w1", "p1");
+  expect(pool.agents).toEqual([{ id: "a1", name: "Writer" }, { id: "a2", name: "" }]);
+  respond({ runtime_profile, subscriptions: [], agents: "nope" });
+  await expect(client.getRuntimeProfileSubscriptions("w1", "p1")).resolves.toMatchObject({ agents: [] });
 });

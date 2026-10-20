@@ -107,6 +107,8 @@ export interface CreateSubscriptionInput {
   caps?: Record<string, number>;
   reserve?: number;
   account_group?: string;
+  /** Provider settings; secrets are refused by the server. */
+  settings?: { env?: Record<string, string> };
 }
 
 export interface UpdateSubscriptionInput {
@@ -155,6 +157,8 @@ export interface RuntimeProfileSubscriptions {
   subscriptions: Subscription[];
   /** Keys in the profile's order that no longer exist. */
   missing: string[];
+  /** Agents that run on this pool. */
+  agents: { id: string; name: string }[];
 }
 
 export interface UpdateRuntimeProfileSubscriptionsInput {
