@@ -39,7 +39,7 @@ func newIssueConveyorCommand() *cobra.Command {
 		c.Flags().Int64("revision", -1, "Revision the change expects (default: the current one; enable on a new route expects 0)")
 		switch action {
 		case "enable":
-			c.Flags().String("route", "", "Route as step:Agent,step:Agent,close:Agent (default: the issue's metadata.route)")
+			c.Flags().String("route", "", "Route as step:Agent,step:Agent,close:Agent (default: the issue's metadata.route). A node may add options: step:Agent[profile=<model profile>;cross=<earlier step>;back=<earlier step>;rounds=N] — the step's own model profile, a model family other than the one that ran cross, and changes_requested reopening the work at back for up to N rounds")
 			c.Flags().String("from-step", "", "Start at this step of the route")
 		case "resume":
 			c.Flags().String("step", "", "Open a new round at this step (default: the step the route stopped on)")

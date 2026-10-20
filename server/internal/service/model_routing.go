@@ -55,7 +55,12 @@ func choiceForTask(ctx context.Context, q *db.Queries, task db.AgentTaskQueue, n
 			return ModelChoice{}, agent, err
 		}
 	}
-	choice, err := PreviewChoice(ctx, q, agent, issue, now)
+	// A route step may name its own profile and a model family to avoid.
+	routeModel, err := (&IssueConveyorService{}).RunModel(ctx, q, task)
+	if err != nil {
+		return ModelChoice{}, agent, err
+	}
+	choice, err := previewChoice(ctx, q, agent, issue, routeModel, now)
 	return choice, agent, err
 }
 
