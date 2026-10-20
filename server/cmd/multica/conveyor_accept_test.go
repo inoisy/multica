@@ -209,16 +209,25 @@ func TestAcceptChecksAgainWhenTheBaseMoves(t *testing.T) {
 	}
 }
 
-func TestAcceptWithoutDescriptionAsksTheCoordinator(t *testing.T) {
+// A repository without the acceptance file is merged by people: the step
+// passes without a merge, so a reviewed route there goes on to close.
+func TestAcceptWithoutDescriptionPassesWithoutMerge(t *testing.T) {
 	r := newAcceptRig(t)
 	r.git(r.dev, "checkout", "--quiet", "-B", "t-9", "origin/main")
 	r.write(r.dev, "x.txt", "x\n")
 	r.git(r.dev, "add", ".")
 	r.git(r.dev, "commit", "--quiet", "-m", "no acceptance")
 	r.git(r.dev, "push", "--quiet", "origin", "t-9")
+	before := r.main()
 	out, _ := r.accept(r.git(r.dev, "rev-parse", "HEAD"), "t-9")
-	if out.Outcome != "needs_coordinator" || !strings.Contains(out.Reason, acceptanceFile) {
-		t.Fatalf("outcome %s %q", out.Outcome, out.Reason)
+	if out.Outcome != "pass" || !out.Skipped || !strings.Contains(out.Reason, acceptanceFile) {
+		t.Fatalf("outcome %s skipped %v %q", out.Outcome, out.Skipped, out.Reason)
+	}
+	if r.main() != before {
+		t.Fatal("a repository without acceptance got a merge")
+	}
+	if report := acceptResult(out, "repo", "abc")["report"].(string); !strings.HasPrefix(report, "Приёмки нет") {
+		t.Fatalf("report %q", report)
 	}
 	missing, _ := r.accept(strings.Repeat("ab", 20), "")
 	if missing.Outcome != "needs_coordinator" {
