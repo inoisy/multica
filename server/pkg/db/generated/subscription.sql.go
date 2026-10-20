@@ -181,6 +181,21 @@ func (q *Queries) CreateSubscriptionUsage(ctx context.Context, arg CreateSubscri
 	return i, err
 }
 
+const deleteRuntimeUnavailableByReasonPrefix = `-- name: DeleteRuntimeUnavailableByReasonPrefix :exec
+DELETE FROM runtime_unavailable
+WHERE runtime_id = $1 AND starts_with(reason, $2::text)
+`
+
+type DeleteRuntimeUnavailableByReasonPrefixParams struct {
+	RuntimeID pgtype.UUID `json:"runtime_id"`
+	Prefix    string      `json:"prefix"`
+}
+
+func (q *Queries) DeleteRuntimeUnavailableByReasonPrefix(ctx context.Context, arg DeleteRuntimeUnavailableByReasonPrefixParams) error {
+	_, err := q.db.Exec(ctx, deleteRuntimeUnavailableByReasonPrefix, arg.RuntimeID, arg.Prefix)
+	return err
+}
+
 const deleteSubscription = `-- name: DeleteSubscription :exec
 DELETE FROM subscription
 WHERE id = $1
@@ -188,6 +203,16 @@ WHERE id = $1
 
 func (q *Queries) DeleteSubscription(ctx context.Context, id pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, deleteSubscription, id)
+	return err
+}
+
+const deleteSubscriptionHostStates = `-- name: DeleteSubscriptionHostStates :exec
+DELETE FROM subscription_host_state
+WHERE subscription_id = $1
+`
+
+func (q *Queries) DeleteSubscriptionHostStates(ctx context.Context, subscriptionID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteSubscriptionHostStates, subscriptionID)
 	return err
 }
 
@@ -230,6 +255,79 @@ func (q *Queries) GetSubscriptionByKey(ctx context.Context, key string) (Subscri
 	return i, err
 }
 
+const listAgentRuntimesByProfiles = `-- name: ListAgentRuntimesByProfiles :many
+SELECT id, workspace_id, profile_id FROM agent_runtime
+WHERE profile_id = ANY($1::uuid[])
+`
+
+type ListAgentRuntimesByProfilesRow struct {
+	ID          pgtype.UUID `json:"id"`
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+	ProfileID   pgtype.UUID `json:"profile_id"`
+}
+
+// Registered runtime instances of the given profiles, for the "every
+// subscription is over its cap" decision.
+func (q *Queries) ListAgentRuntimesByProfiles(ctx context.Context, profileIds []pgtype.UUID) ([]ListAgentRuntimesByProfilesRow, error) {
+	rows, err := q.db.Query(ctx, listAgentRuntimesByProfiles, profileIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListAgentRuntimesByProfilesRow{}
+	for rows.Next() {
+		var i ListAgentRuntimesByProfilesRow
+		if err := rows.Scan(&i.ID, &i.WorkspaceID, &i.ProfileID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAgentsOnRuntimeProfiles = `-- name: ListAgentsOnRuntimeProfiles :many
+SELECT a.id, a.name, a.workspace_id, ar.profile_id
+FROM agent a
+JOIN agent_runtime ar ON ar.id = a.runtime_id
+WHERE ar.profile_id = ANY($1::uuid[]) AND a.archived_at IS NULL
+`
+
+type ListAgentsOnRuntimeProfilesRow struct {
+	ID          pgtype.UUID `json:"id"`
+	Name        string      `json:"name"`
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+	ProfileID   pgtype.UUID `json:"profile_id"`
+}
+
+// Active agents bound to runtimes of the given profiles, for discrepancies.
+func (q *Queries) ListAgentsOnRuntimeProfiles(ctx context.Context, profileIds []pgtype.UUID) ([]ListAgentsOnRuntimeProfilesRow, error) {
+	rows, err := q.db.Query(ctx, listAgentsOnRuntimeProfiles, profileIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListAgentsOnRuntimeProfilesRow{}
+	for rows.Next() {
+		var i ListAgentsOnRuntimeProfilesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.WorkspaceID,
+			&i.ProfileID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAllWorkspaceIDs = `-- name: ListAllWorkspaceIDs :many
 SELECT id FROM workspace
 ORDER BY created_at ASC
@@ -264,6 +362,50 @@ ORDER BY share_key, created_at ASC
 // One template per share_key among profiles marked for every workspace.
 func (q *Queries) ListAllWorkspaceRuntimeProfiles(ctx context.Context) ([]RuntimeProfile, error) {
 	rows, err := q.db.Query(ctx, listAllWorkspaceRuntimeProfiles)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []RuntimeProfile{}
+	for rows.Next() {
+		var i RuntimeProfile
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.DisplayName,
+			&i.ProtocolFamily,
+			&i.CommandName,
+			&i.Description,
+			&i.FixedArgs,
+			&i.Visibility,
+			&i.CreatedBy,
+			&i.Enabled,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.RuntimeType,
+			&i.Subscriptions,
+			&i.SpendOrder,
+			&i.ShareKey,
+			&i.AllWorkspaces,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEnabledRuntimeProfilesWithSubscriptionsForWorkspace = `-- name: ListEnabledRuntimeProfilesWithSubscriptionsForWorkspace :many
+SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, subscriptions, spend_order, share_key, all_workspaces FROM runtime_profile
+WHERE workspace_id = $1 AND enabled = true AND jsonb_array_length(subscriptions) > 0
+ORDER BY created_at
+`
+
+func (q *Queries) ListEnabledRuntimeProfilesWithSubscriptionsForWorkspace(ctx context.Context, workspaceID pgtype.UUID) ([]RuntimeProfile, error) {
+	rows, err := q.db.Query(ctx, listEnabledRuntimeProfilesWithSubscriptionsForWorkspace, workspaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -459,6 +601,84 @@ func (q *Queries) ListRuntimeProfilesWithSubscriptions(ctx context.Context) ([]R
 			&i.SpendOrder,
 			&i.ShareKey,
 			&i.AllWorkspaces,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSharedRuntimeProfiles = `-- name: ListSharedRuntimeProfiles :many
+SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, subscriptions, spend_order, share_key, all_workspaces FROM runtime_profile
+WHERE share_key IS NOT NULL
+ORDER BY workspace_id, created_at
+`
+
+// Subscription pools: profiles created as one runtime across workspaces.
+func (q *Queries) ListSharedRuntimeProfiles(ctx context.Context) ([]RuntimeProfile, error) {
+	rows, err := q.db.Query(ctx, listSharedRuntimeProfiles)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []RuntimeProfile{}
+	for rows.Next() {
+		var i RuntimeProfile
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.DisplayName,
+			&i.ProtocolFamily,
+			&i.CommandName,
+			&i.Description,
+			&i.FixedArgs,
+			&i.Visibility,
+			&i.CreatedBy,
+			&i.Enabled,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.RuntimeType,
+			&i.Subscriptions,
+			&i.SpendOrder,
+			&i.ShareKey,
+			&i.AllWorkspaces,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSubscriptionHostStates = `-- name: ListSubscriptionHostStates :many
+SELECT id, subscription_id, daemon_id, device_name, credential_state, error, checked_at FROM subscription_host_state
+ORDER BY subscription_id, daemon_id
+`
+
+func (q *Queries) ListSubscriptionHostStates(ctx context.Context) ([]SubscriptionHostState, error) {
+	rows, err := q.db.Query(ctx, listSubscriptionHostStates)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SubscriptionHostState{}
+	for rows.Next() {
+		var i SubscriptionHostState
+		if err := rows.Scan(
+			&i.ID,
+			&i.SubscriptionID,
+			&i.DaemonID,
+			&i.DeviceName,
+			&i.CredentialState,
+			&i.Error,
+			&i.CheckedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -882,6 +1102,46 @@ func (q *Queries) UpdateSubscription(ctx context.Context, arg UpdateSubscription
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const upsertSubscriptionHostState = `-- name: UpsertSubscriptionHostState :one
+INSERT INTO subscription_host_state (subscription_id, daemon_id, device_name, credential_state, error, checked_at)
+VALUES ($1, $2, $3, $4, $5, now())
+ON CONFLICT (subscription_id, daemon_id) DO UPDATE
+SET device_name = EXCLUDED.device_name,
+    credential_state = EXCLUDED.credential_state,
+    error = EXCLUDED.error,
+    checked_at = now()
+RETURNING id, subscription_id, daemon_id, device_name, credential_state, error, checked_at
+`
+
+type UpsertSubscriptionHostStateParams struct {
+	SubscriptionID  pgtype.UUID `json:"subscription_id"`
+	DaemonID        string      `json:"daemon_id"`
+	DeviceName      string      `json:"device_name"`
+	CredentialState string      `json:"credential_state"`
+	Error           string      `json:"error"`
+}
+
+func (q *Queries) UpsertSubscriptionHostState(ctx context.Context, arg UpsertSubscriptionHostStateParams) (SubscriptionHostState, error) {
+	row := q.db.QueryRow(ctx, upsertSubscriptionHostState,
+		arg.SubscriptionID,
+		arg.DaemonID,
+		arg.DeviceName,
+		arg.CredentialState,
+		arg.Error,
+	)
+	var i SubscriptionHostState
+	err := row.Scan(
+		&i.ID,
+		&i.SubscriptionID,
+		&i.DaemonID,
+		&i.DeviceName,
+		&i.CredentialState,
+		&i.Error,
+		&i.CheckedAt,
 	)
 	return i, err
 }

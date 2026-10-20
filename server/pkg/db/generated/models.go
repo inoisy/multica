@@ -1568,6 +1568,16 @@ type Subscription struct {
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 }
 
+type SubscriptionHostState struct {
+	ID              pgtype.UUID        `json:"id"`
+	SubscriptionID  pgtype.UUID        `json:"subscription_id"`
+	DaemonID        string             `json:"daemon_id"`
+	DeviceName      string             `json:"device_name"`
+	CredentialState string             `json:"credential_state"`
+	Error           string             `json:"error"`
+	CheckedAt       pgtype.Timestamptz `json:"checked_at"`
+}
+
 type SubscriptionUsage struct {
 	ID             pgtype.UUID        `json:"id"`
 	SubscriptionID pgtype.UUID        `json:"subscription_id"`
