@@ -295,6 +295,13 @@ func (h *Handler) CreateWorkspace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Runtimes marked for every workspace (subscription pools) appear in the
+	// new workspace with it.
+	if err := copyAllWorkspaceRuntimeProfiles(r.Context(), qtx, ws.ID); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to copy shared runtime profiles: "+err.Error())
+		return
+	}
+
 	// NOTE: CreateWorkspace deliberately does NOT mark the user as
 	// onboarded. The `onboarded_at` flag is owned by CompleteOnboarding
 	// (Step 3 of the flow) and by AcceptInvitation (invitee joining an
