@@ -334,6 +334,10 @@ Agent-specific overrides:
 | `MULTICA_CODEX_PATH` | Custom path to the `codex` binary |
 | `MULTICA_CODEX_MODEL` | Override the Codex model used |
 | `MULTICA_CODEX_ARGS` | Default extra arguments for Codex runs |
+| `MULTICA_CODEX_AGENTS_MD` | File linked as `AGENTS.md` into every task `CODEX_HOME` that has none (shared agent rules) |
+| `MULTICA_REQUIRE_VLESS` | Check run before a Claude or Codex subscription is spent (e.g. `/usr/local/bin/require-vless`); a non-zero exit fails the run |
+| `MULTICA_SUBSCRIPTION_PROBE_INTERVAL` | How often the daemon measures the quota of the subscriptions its runtimes spend (default `5m`) |
+| `MULTICA_SUBSCRIPTION_CLAUDE_PROBE_INTERVAL` | The same for Claude accounts, which answer frequent polling with 429 (default `30m`) |
 | `MULTICA_COPILOT_PATH` | Custom path to the `copilot` binary |
 | `MULTICA_COPILOT_MODEL` | Override the Copilot model used (note: GitHub Copilot routes models through your account entitlement, so this may not be honoured) |
 | `MULTICA_OPENCODE_PATH` | Custom path to the `opencode` binary |

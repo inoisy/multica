@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/multica-ai/multica/server/internal/daemon/subscriptions"
 	"github.com/multica-ai/multica/server/pkg/agent"
 	"github.com/multica-ai/multica/server/pkg/protocol"
 	"github.com/multica-ai/multica/server/pkg/remotemcp"
@@ -727,11 +728,12 @@ func (c *Client) GetTaskStatus(ctx context.Context, taskID string) (string, erro
 // heartbeat paths share a single type and a single decoder shape. Aliases
 // (rather than wrappers) keep call sites unchanged.
 type (
-	HeartbeatResponse       = protocol.DaemonHeartbeatAckPayload
-	PendingUpdate           = protocol.DaemonHeartbeatPendingUpdate
-	PendingModelList        = protocol.DaemonHeartbeatPendingModelList
-	PendingLocalSkills      = protocol.DaemonHeartbeatPendingLocalSkills
-	PendingLocalSkillImport = protocol.DaemonHeartbeatPendingLocalSkillImport
+	HeartbeatResponse        = protocol.DaemonHeartbeatAckPayload
+	PendingUpdate            = protocol.DaemonHeartbeatPendingUpdate
+	PendingModelList         = protocol.DaemonHeartbeatPendingModelList
+	PendingSubscriptionLogin = protocol.DaemonHeartbeatPendingSubscriptionLogin
+	PendingLocalSkills       = protocol.DaemonHeartbeatPendingLocalSkills
+	PendingLocalSkillImport  = protocol.DaemonHeartbeatPendingLocalSkillImport
 )
 
 func (c *Client) SendHeartbeat(ctx context.Context, runtimeID string) (*HeartbeatResponse, error) {
@@ -743,6 +745,28 @@ func (c *Client) SendHeartbeat(ctx context.Context, runtimeID string) (*Heartbea
 		return nil, err
 	}
 	return &resp, nil
+}
+
+// GetWorkspaceSubscriptions lists the subscriptions the workspace's runtimes
+// spend, for probing.
+func (c *Client) GetWorkspaceSubscriptions(ctx context.Context, workspaceID string) ([]subscriptions.Subscription, error) {
+	var resp struct {
+		Subscriptions []subscriptions.Subscription `json:"subscriptions"`
+	}
+	if err := c.getJSON(ctx, fmt.Sprintf("/api/daemon/workspaces/%s/subscriptions", workspaceID), &resp); err != nil {
+		return nil, err
+	}
+	return resp.Subscriptions, nil
+}
+
+// ReportSubscriptionUsage sends probe results and credential states.
+func (c *Client) ReportSubscriptionUsage(ctx context.Context, workspaceID string, body map[string]any) error {
+	return c.postJSON(ctx, fmt.Sprintf("/api/daemon/workspaces/%s/subscription-usage", workspaceID), body, nil)
+}
+
+// ReportSubscriptionLogin sends sign-in progress and its outcome.
+func (c *Client) ReportSubscriptionLogin(ctx context.Context, runtimeID, loginID string, body map[string]any) error {
+	return c.postJSON(ctx, fmt.Sprintf("/api/daemon/runtimes/%s/subscription-logins/%s/result", runtimeID, loginID), body, nil)
 }
 
 // ReportUpdateResult sends the CLI update result back to the server.
