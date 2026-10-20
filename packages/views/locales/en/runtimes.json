@@ -371,6 +371,8 @@
       "family_locked_hint": "The base runtime cannot be changed after creation.",
       "display_name_label": "Display name",
       "display_name_placeholder": "e.g. My custom Claude…",
+      "subscriptions_hint": "Claude and Codex subscriptions are set up on the Subscriptions page.",
+      "subscriptions_link": "Open Subscriptions",
       "command_name_label": "Command",
       "command_name_placeholder": "e.g. agent --model composer-2.5…",
       "description_label": "Description",

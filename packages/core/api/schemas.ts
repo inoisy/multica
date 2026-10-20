@@ -3715,6 +3715,10 @@ export const RuntimeProfileSchema = z
     enabled: z.boolean().catch(true),
     created_at: z.string().catch(""),
     updated_at: z.string().catch(""),
+    subscriptions: z.array(z.string()).nullish().catch([]).transform((v) => v ?? []),
+    spend_order: z.string().nullish().catch("first").transform((v) => v || "first"),
+    share_key: z.string().nullish().catch(null).transform((v) => v || null),
+    all_workspaces: z.boolean().nullish().catch(false).transform((v) => v === true),
   })
   .passthrough()
   .transform((profile) => ({
@@ -3847,3 +3851,148 @@ export const StageDispatchListSchema = z.object({
     dispatch_by: z.string().nullable().default(null),
   }).loose()).default([]),
 }).loose();
+
+// Instance subscriptions. Enum-like fields fall back to a safe value so a
+// newer server's states still render; every optional field has a default.
+const nullableString = z.string().nullish().catch(null).transform((v) => v ?? null);
+const stringOrEmpty = z.string().nullish().catch("").transform((v) => v ?? "");
+const percentMap = z
+  .record(z.string(), z.number())
+  .nullish()
+  .catch({})
+  .transform((v) => v ?? {});
+
+export const SubscriptionLoginSessionSchema = z.object({
+  id: stringOrEmpty,
+  state: z.enum(["waiting", "done", "failed", "cancelled", "expired"]).catch("failed"),
+  url: nullableString,
+  code: nullableString,
+  message: stringOrEmpty,
+  started_at: nullableString,
+});
+
+export const SubscriptionSchema = z
+  .object({
+    id: z.string(),
+    key: z.string(),
+    provider: z.string(),
+    family: z.string().nullish().catch(null),
+    title: stringOrEmpty,
+    owner_note: stringOrEmpty,
+    auth: stringOrEmpty,
+    credential_path: stringOrEmpty,
+    windows: z.array(z.string()).nullish().catch([]).transform((v) => v ?? []),
+    caps: percentMap,
+    reserve: z.number().nullish().catch(0).transform((v) => v ?? 0),
+    effective_caps: percentMap,
+    account_group: stringOrEmpty,
+    disabled_until: nullableString,
+    disabled: z.boolean().nullish().catch(false).transform((v) => v === true),
+    usage: z
+      .array(
+        z.object({
+          window: z.string(),
+          used_percent: z.number().nullish().catch(null).transform((v) => v ?? null),
+          resets_at: nullableString,
+          limit_reached: z.boolean().nullish().catch(false).transform((v) => v === true),
+          source: stringOrEmpty,
+          observed_at: stringOrEmpty,
+        }),
+      )
+      .nullish()
+      .catch([])
+      .transform((v) => v ?? []),
+    used_by: z
+      .array(
+        z.object({
+          workspace_id: z.string(),
+          runtime_profile_id: z.string(),
+          display_name: stringOrEmpty,
+          position: z.number().int().nullish().catch(0).transform((v) => v ?? 0),
+        }),
+      )
+      .nullish()
+      .catch([])
+      .transform((v) => v ?? []),
+    hosts: z
+      .array(
+        z.object({
+          daemon_id: stringOrEmpty,
+          device_name: stringOrEmpty,
+          credential_state: z.enum(["present", "missing", "revoked", "unreadable", "unknown"]).catch("unknown"),
+          checked_at: nullableString,
+          error: stringOrEmpty,
+        }),
+      )
+      .nullish()
+      .catch([])
+      .transform((v) => v ?? []),
+    // Absent on servers that do not check sign-in yet; an unknown state reads as unchecked.
+    login_state: z
+      .enum(["logged_in", "revoked", "never", "check_failed", "unchecked"])
+      .nullish()
+      .catch("unchecked")
+      .transform((v) => v ?? null),
+    login: SubscriptionLoginSessionSchema.nullish().catch(null).transform((v) => v ?? null),
+    created_at: stringOrEmpty,
+    updated_at: stringOrEmpty,
+  })
+  .transform((sub) => ({
+    ...sub,
+    // Every provider but codex runs through Claude Code.
+    family: sub.family === "codex" || sub.family === "claude" ? sub.family : sub.provider === "codex" ? "codex" : "claude",
+  }));
+
+export const SubscriptionListSchema = z.object({
+  subscriptions: z.array(SubscriptionSchema),
+  can_manage: z.boolean().nullish().catch(false).transform((v) => v === true),
+});
+
+export const SubscriptionLoginResponseSchema = z.object({
+  login: SubscriptionLoginSessionSchema.nullish().transform((v) => v ?? null),
+});
+
+export const SubscriptionDiscrepancyListSchema = z.object({
+  items: z.array(
+    z.object({
+      kind: z.string(),
+      message: stringOrEmpty,
+      subscription_key: nullableString,
+      runtime_profile_id: nullableString,
+      runtime_name: nullableString,
+      workspace_id: nullableString,
+      agent_id: nullableString,
+      agent_name: nullableString,
+      device_name: nullableString,
+    }),
+  ),
+});
+
+export const DeleteSubscriptionResultSchema = z.object({
+  deleted: z.boolean().catch(true),
+  detached_runtime_profile_ids: z.array(z.string()).nullish().catch([]).transform((v) => v ?? []),
+});
+
+export const RuntimeProfileSubscriptionsSchema = z.object({
+  runtime_profile: RuntimeProfileSchema,
+  spend_order: z.string().nullish().catch("first").transform((v) => v || "first"),
+  subscriptions: z.array(SubscriptionSchema),
+  missing: z.array(z.string()).nullish().catch([]).transform((v) => v ?? []),
+  // Agents bound to the pool's runtimes; a malformed entry is dropped, not the pool.
+  agents: z
+    .array(z.unknown())
+    .nullish()
+    .catch([])
+    .transform((v) =>
+      (v ?? []).flatMap((a) => {
+        const parsed = z.object({ id: z.string(), name: z.string().catch("") }).safeParse(a);
+        return parsed.success ? [parsed.data] : [];
+      }),
+    ),
+});
+
+export const CreateRuntimePoolResultSchema = z.object({
+  share_key: stringOrEmpty,
+  runtime_profiles: z.array(RuntimeProfileSchema).nullish().catch([]).transform((v) => v ?? []),
+  skipped_workspace_ids: z.array(z.string()).nullish().catch([]).transform((v) => v ?? []),
+});

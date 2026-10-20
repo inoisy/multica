@@ -47,6 +47,19 @@ vi.mock("@multica/core/runtimes", () => ({
   })),
 }));
 
+vi.mock("@multica/core/paths", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@multica/core/paths")>()),
+  useWorkspaceSlug: () => "acme",
+}));
+
+vi.mock("../../navigation", () => ({
+  AppLink: ({ href, children, ...props }: { href: string; children: React.ReactNode }) => (
+    <a href={href} {...props}>
+      {children}
+    </a>
+  ),
+}));
+
 vi.mock("./delete-runtime-profile-dialog", () => ({
   DeleteRuntimeProfileDialog: () => null,
 }));
@@ -217,6 +230,9 @@ describe("RuntimeProfilesDialog", () => {
     fireEvent.change(screen.getByLabelText("Display name"), {
       target: { value: "Composer Agent" },
     });
+    expect(
+      screen.getByRole("link", { name: "Open Subscriptions" }),
+    ).toHaveAttribute("href", "/acme/subscriptions");
     fireEvent.change(screen.getByLabelText("Command"), {
       target: { value: "agent --model composer-2.5" },
     });
