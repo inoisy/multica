@@ -68,6 +68,8 @@ const (
 	conveyorDecisionWaitProvider = "wait_provider"
 	conveyorDecisionStale        = "stale"
 	conveyorDecisionHeld         = "held"
+	// conveyorDecisionBack opens a new round at the node's back step.
+	conveyorDecisionBack = "back"
 )
 
 const (
@@ -100,13 +102,23 @@ type ConveyorNode struct {
 	Idx     int32  `json:"idx"`
 	Step    string `json:"step"`
 	AgentID string `json:"agent_id"`
+	// Options of the node (issue_conveyor_node.go); empty for a plain node.
+	ProfileID   string `json:"profile_id,omitempty"`
+	ProfileName string `json:"profile_name,omitempty"`
+	Cross       string `json:"cross,omitempty"`
+	Back        string `json:"back,omitempty"`
+	Rounds      int32  `json:"rounds,omitempty"`
 }
 
 // ConveyorRouteEntry is a route position as an operator writes it; Agent is a
 // workspace agent name or id.
 type ConveyorRouteEntry struct {
-	Step  string `json:"step"`
-	Agent string `json:"agent"`
+	Step    string `json:"step"`
+	Agent   string `json:"agent"`
+	Profile string `json:"profile,omitempty"`
+	Cross   string `json:"cross,omitempty"`
+	Back    string `json:"back,omitempty"`
+	Rounds  int32  `json:"rounds,omitempty"`
 }
 
 // ConveyorCommand is the body of PUT /api/issues/{id}/conveyor. Route is
@@ -157,7 +169,8 @@ func conveyorNodeAt(route []ConveyorNode, idx int32) *ConveyorNode {
 	return &route[idx]
 }
 
-// ParseConveyorRouteSpec reads the metadata form "step:Agent,step:Agent".
+// ParseConveyorRouteSpec reads the metadata form "step:Agent,step:Agent";
+// a node may add options: "step:Agent[profile=…;cross=…;back=…;rounds=N]".
 func ParseConveyorRouteSpec(spec string) ([]ConveyorRouteEntry, error) {
 	var out []ConveyorRouteEntry
 	for _, part := range strings.Split(spec, ",") {
@@ -166,11 +179,16 @@ func ParseConveyorRouteSpec(spec string) ([]ConveyorRouteEntry, error) {
 			continue
 		}
 		step, agent, ok := strings.Cut(part, ":")
-		step, agent = strings.ToLower(strings.TrimSpace(step)), strings.TrimSpace(agent)
+		step = strings.ToLower(strings.TrimSpace(step))
+		agent, entry, err := splitNodeOptions(agent)
+		if err != nil {
+			return nil, err
+		}
 		if !ok || step == "" || agent == "" {
 			return nil, conveyorErr(ErrConveyorInvalid, "route position %q must look like step:Agent", part)
 		}
-		out = append(out, ConveyorRouteEntry{Step: step, Agent: agent})
+		entry.Step, entry.Agent = step, agent
+		out = append(out, entry)
 	}
 	return out, nil
 }
@@ -200,6 +218,9 @@ func (cmd ConveyorCommand) routeEntries(issue db.Issue) ([]ConveyorRouteEntry, e
 		for i := range entries {
 			entries[i].Step = strings.ToLower(strings.TrimSpace(entries[i].Step))
 			entries[i].Agent = strings.TrimSpace(entries[i].Agent)
+			entries[i].Profile = strings.TrimSpace(entries[i].Profile)
+			entries[i].Cross = strings.ToLower(strings.TrimSpace(entries[i].Cross))
+			entries[i].Back = strings.ToLower(strings.TrimSpace(entries[i].Back))
 		}
 		return entries, nil
 	}
@@ -255,7 +276,15 @@ func (s *IssueConveyorService) resolveRoute(ctx context.Context, q *db.Queries, 
 		if !isAcceptCarrier(agent) && !CanMemberInvokeAgent(ctx, q, agent, invoker, issue.WorkspaceID) {
 			return nil, conveyorErr(ErrConveyorForbidden, "you may not invoke agent %q", agent.Name)
 		}
-		route = append(route, ConveyorNode{Idx: int32(i), Step: e.Step, AgentID: util.UUIDToString(agent.ID)})
+		node := ConveyorNode{Idx: int32(i), Step: e.Step, AgentID: util.UUIDToString(agent.ID), Cross: e.Cross, Back: e.Back, Rounds: e.Rounds}
+		if e.Profile != "" {
+			p, err := resolveNodeProfile(ctx, q, issue.WorkspaceID, e.Profile)
+			if err != nil {
+				return nil, err
+			}
+			node.ProfileID, node.ProfileName = util.UUIDToString(p.ID), p.Name
+		}
+		route = append(route, node)
 		switch e.Step {
 		case conveyorStepDev:
 			lastDev = i
@@ -269,6 +298,9 @@ func (s *IssueConveyorService) resolveRoute(ctx context.Context, q *db.Queries, 
 		return nil, conveyorErr(ErrConveyorInvalid, "a qa step must follow dev")
 	}
 	if err := acceptPlacementError(entries); err != nil {
+		return nil, err
+	}
+	if err := validateNodeRefs(entries); err != nil {
 		return nil, err
 	}
 	var meta map[string]any

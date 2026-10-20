@@ -34,6 +34,7 @@ const (
 	ModelRowOffline      = "offline"       // runtime is not heartbeating
 	ModelRowMissing      = "missing"       // runtime no longer exists in the workspace
 	ModelRowNotPermitted = "not_permitted" // private runtime of another owner
+	ModelRowSameFamily   = "same_family"   // the route asks for another model family than this row's
 )
 
 // ModelOption is one row of a model list.
@@ -86,8 +87,11 @@ type ModelChoiceInput struct {
 	Agent          ModelChoiceAgent
 	IssueID        string
 	IssueProfileID string
-	Profiles       map[string]ModelProfileData
-	Runtimes       map[string]RuntimeAvailability
+	// ExcludeFamily, when set, makes every row of that model family
+	// unavailable: a route step that must judge work on another family.
+	ExcludeFamily string
+	Profiles      map[string]ModelProfileData
+	Runtimes      map[string]RuntimeAvailability
 }
 
 // ModelRowState is one row of the list that was consulted, with its state.
@@ -104,15 +108,17 @@ type ModelRowState struct {
 // ModelChoice is the outcome: the chosen row (nil when the run must wait) and
 // a structured reason. It is stored on the run as model_choice.
 type ModelChoice struct {
-	Source      string       `json:"source"`
-	ProfileID   string       `json:"profile_id,omitempty"`
-	ProfileName string       `json:"profile_name,omitempty"`
-	IssueID     string       `json:"issue_id,omitempty"`
-	Reason      string       `json:"reason"`
-	Position    int32        `json:"position,omitempty"`
-	Chosen      *ModelOption `json:"chosen,omitempty"`
-	RuntimeName string       `json:"runtime_name,omitempty"`
-	Provider    string       `json:"provider,omitempty"`
+	Source      string `json:"source"`
+	ProfileID   string `json:"profile_id,omitempty"`
+	ProfileName string `json:"profile_name,omitempty"`
+	IssueID     string `json:"issue_id,omitempty"`
+	// ExcludedFamily is the model family the route ruled out for this run.
+	ExcludedFamily string       `json:"excluded_family,omitempty"`
+	Reason         string       `json:"reason"`
+	Position       int32        `json:"position,omitempty"`
+	Chosen         *ModelOption `json:"chosen,omitempty"`
+	RuntimeName    string       `json:"runtime_name,omitempty"`
+	Provider       string       `json:"provider,omitempty"`
 	// ExhaustedProfiles are the profiles whose every row was unavailable,
 	// in the order they were given up (fallback_profile and all_unavailable).
 	ExhaustedProfiles []string `json:"exhausted_profiles,omitempty"`
@@ -164,10 +170,14 @@ func (c ModelChoice) Summary() string {
 	case ModelReasonFallbackProfile:
 		return fmt.Sprintf("every model of %s unavailable, took %q row %d: %s", strings.Join(quoteAll(c.ExhaustedProfiles), ", "), c.ProfileName, c.Position, chosen)
 	case ModelReasonAllUnavailable:
-		if c.WaitUntil != nil {
-			return "every model unavailable until " + c.WaitUntil.UTC().Format(time.RFC3339) + ", the run waits"
+		out := "every model unavailable"
+		if c.ExcludedFamily != "" {
+			out = "every model unavailable (family " + c.ExcludedFamily + " excluded by the route)"
 		}
-		return "every model unavailable, the run waits"
+		if c.WaitUntil != nil {
+			return out + " until " + c.WaitUntil.UTC().Format(time.RFC3339) + ", the run waits"
+		}
+		return out + ", the run waits"
 	default:
 		return "no model list and no runtime"
 	}
@@ -242,8 +252,45 @@ func rowState(in ModelChoiceInput, o ModelOption, now time.Time) (string, *time.
 		return ModelRowLimited, &until
 	case !rt.Online:
 		return ModelRowOffline, nil
+	case in.ExcludeFamily != "" && ModelFamily(rt.Provider, o.Model) == in.ExcludeFamily:
+		return ModelRowSameFamily, nil
 	}
 	return ModelRowAvailable, nil
+}
+
+// ModelFamily names who trained the model, so a reviewer can be put on a
+// different family than the author. The model name decides: a Claude-CLI
+// runtime may serve GLM or MiniMax. Without a model the provider stands in.
+func ModelFamily(provider, model string) string {
+	m := strings.ToLower(strings.TrimSpace(model))
+	switch {
+	case m == "":
+	case strings.HasPrefix(m, "claude") || strings.Contains(m, "opus") || strings.Contains(m, "sonnet") ||
+		strings.Contains(m, "haiku") || strings.Contains(m, "fable"):
+		return "anthropic"
+	case strings.HasPrefix(m, "gpt") || strings.HasPrefix(m, "codex") || strings.HasPrefix(m, "o1") ||
+		strings.HasPrefix(m, "o3") || strings.HasPrefix(m, "o4"):
+		return "openai"
+	case strings.HasPrefix(m, "glm"):
+		return "zhipu"
+	case strings.Contains(m, "minimax"):
+		return "minimax"
+	case strings.Contains(m, "gemini"):
+		return "google"
+	case strings.Contains(m, "qwen"):
+		return "qwen"
+	case strings.Contains(m, "deepseek"):
+		return "deepseek"
+	case strings.Contains(m, "kimi"):
+		return "moonshot"
+	}
+	switch strings.ToLower(provider) {
+	case "claude":
+		return "anthropic"
+	case "codex":
+		return "openai"
+	}
+	return strings.ToLower(provider)
 }
 
 func sortedOptions(options []ModelOption) []ModelOption {
@@ -258,7 +305,7 @@ func sortedOptions(options []ModelOption) []ModelOption {
 // agent's own list and plain fields have no exhausted-profile: they wait.
 func ChooseModel(in ModelChoiceInput, now time.Time) ModelChoice {
 	list := resolveModelList(in)
-	choice := ModelChoice{Source: list.source, IssueID: in.IssueID, Rows: []ModelRowState{}}
+	choice := ModelChoice{Source: list.source, IssueID: in.IssueID, ExcludedFamily: in.ExcludeFamily, Rows: []ModelRowState{}}
 	if list.source != ModelSourceIssueProfile {
 		choice.IssueID = ""
 	}

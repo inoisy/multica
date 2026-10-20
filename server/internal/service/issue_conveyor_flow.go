@@ -172,6 +172,36 @@ func (s *IssueConveyorService) OnTaskTerminal(ctx context.Context, q *db.Queries
 	}
 	v := judge(cv, *node, task, res)
 
+	// A verifier that asked for changes returns the work by itself when its
+	// node says where to, while rounds are left; the coordinator is woken
+	// only when they run out.
+	if v.action == conveyorDecisionEscalate && res != nil && res.Outcome == ConveyorOutcomeChangesRequested && node.Back != "" {
+		backs, err := q.CountIssueConveyorBacks(ctx, db.CountIssueConveyorBacksParams{ConveyorID: cv.ID, Revision: pgtype.Int8{Int64: cv.Revision, Valid: true}})
+		if err != nil {
+			return err
+		}
+		if backIdx := stepIdxBefore(route, node.Back, cv.CurIdx); backIdx >= 0 && int32(backs)+1 < node.backRounds() {
+			backNode := route[backIdx]
+			cv.CurIdx, cv.Round = backIdx, cv.Round+1
+			cv.Status, cv.CurTaskID, cv.WaitingReason = ConveyorActive, pgtype.UUID{}, pgtype.Text{}
+			if backNode.Step != conveyorStepQA && backNode.Step != conveyorStepReview && backNode.Step != conveyorStepAccept {
+				cv.AcceptedCommit = pgtype.Text{}
+			}
+			if _, err = q.SaveIssueConveyor(ctx, saveParams(cv)); err != nil {
+				return err
+			}
+			why := fmt.Sprintf("step %s requested changes: round %d starts at %s", node.Step, cv.Round, backNode.Step)
+			owed, err := s.owe(ctx, q, cv, conveyorActionRunStep, backIdx, why, map[string]any{
+				"report": clip(res.Report, 4000), "returned_by": node.Step, "source_task_id": util.UUIDToString(task.ID),
+			})
+			if err != nil {
+				return err
+			}
+			return decide(conveyorDecisionBack, why, map[string]any{"action_id": util.UUIDToString(owed.ID), "to_idx": backIdx})
+		}
+		v.reason = fmt.Sprintf("%s; %d round(s) of back=%s spent", v.reason, node.backRounds(), node.Back)
+	}
+
 	switch v.action {
 	case conveyorDecisionWaitProvider:
 		cv.Status, cv.WaitingReason = ConveyorWaitingProvider, pgtype.Text{String: v.reason, Valid: true}

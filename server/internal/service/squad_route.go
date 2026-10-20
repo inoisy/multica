@@ -52,12 +52,20 @@ func NormalizeSquadRouteTemplate(ctx context.Context, q *db.Queries, workspaceID
 		if agent.ArchivedAt.Valid || !agent.RuntimeID.Valid {
 			return "", conveyorErr(ErrConveyorInvalid, "agent %q is archived or has no runtime", agent.Name)
 		}
-		parts[i] = e.Step + ":" + e.Agent
+		if e.Profile != "" {
+			if _, err := resolveNodeProfile(ctx, q, workspaceID, e.Profile); err != nil {
+				return "", err
+			}
+		}
+		parts[i] = e.spec()
 	}
 	if lastDev >= 0 && lastQA < lastDev {
 		return "", conveyorErr(ErrConveyorInvalid, "a qa step must follow dev")
 	}
 	if err := acceptPlacementError(entries); err != nil {
+		return "", err
+	}
+	if err := validateNodeRefs(entries); err != nil {
 		return "", err
 	}
 	return strings.Join(parts, ","), nil
