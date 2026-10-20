@@ -199,7 +199,8 @@
     "edit_description_title": "Edit description",
     "description_placeholder": "What does this agent do?",
     "save": "Save",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "model_routed": "The run's model is chosen in the Models section below."
   },
   "overview": {
     "agent_context": "Agent",
@@ -1039,7 +1040,21 @@
     "state_limited": "on a limit until {{time}}",
     "state_offline": "runtime offline",
     "state_missing": "runtime deleted",
-    "state_not_permitted": "runtime not available to the agent"
+    "state_not_permitted": "runtime not available to the agent",
+    "mode_label": "Where the model comes from",
+    "mode_profile": "Profile",
+    "mode_profile_hint": "a list shared by several agents",
+    "mode_chain": "Own chain",
+    "mode_chain_hint": "this agent's list with fallbacks",
+    "mode_single": "One model",
+    "mode_one_hint": "exactly this model, no fallbacks",
+    "mode_fields_hint": "No profile and no own model: a run takes the runtime and model from the fields above.",
+    "switch_to_profile": "Use profile “{{name}}”",
+    "profile_unused": "Profile “{{name}}” is not used while the agent has its own model.",
+    "chain_title": "Own chain",
+    "one_title": "Agent model",
+    "one_hint": "No fallbacks: when the runtime is at its limit or offline, the run waits for the reset and the owner is notified.",
+    "edit_single": "Change model"
   },
   "model_profiles": {
     "title": "Profiles",
@@ -1189,6 +1204,85 @@
       "key_label": "API key",
       "done": "Signed in",
       "failed": "Sign-in did not finish; the current credential is unchanged"
+    },
+    "limited_banner": "At the agents' limit: {{titles}}. Agents move to the next model of their profile.",
+    "spent_by": "Spent by:",
+    "spent_by_none": "no runtime",
+    "groups": {
+      "claude": "Claude",
+      "codex": "Codex",
+      "api": "API keys"
+    },
+    "groups_hint": {
+      "claude": "subscriptions, sign-in with a claude setup-token token",
+      "codex": "ChatGPT subscriptions, sign-in with a link and a code",
+      "api": "pay per key, sign-in with a new key"
+    },
+    "menu": {
+      "open": "Actions for “{{title}}”",
+      "caps": "Agent limits…",
+      "runtime": "Spending order: {{runtime}}…",
+      "rename": "Rename…",
+      "rename_title": "Subscription name",
+      "delete": "Delete subscription…",
+      "delete_confirm": "Delete “{{title}}”? It is removed from every runtime; the credential file stays on the server."
+    },
+    "runtime_dialog": {
+      "agents": "Runtime in the chains of: {{names}}.",
+      "no_agents": "No agent has this runtime in its chain.",
+      "order_title": "Subscriptions in order",
+      "empty": "No subscriptions behind this runtime — agents on it will not start.",
+      "move_up": "Move up: {{name}}",
+      "move_down": "Move down: {{name}}",
+      "remove": "Remove {{name}}",
+      "add": "Add a subscription",
+      "add_placeholder": "Pick a subscription…",
+      "spend_title": "How to spend",
+      "first_hint": "the first subscription that still has room for agents",
+      "balanced_hint": "of the usable ones, the least used this week"
+    },
+    "add": {
+      "open": "Add subscription",
+      "title": "Add subscription",
+      "description": "The account appears on this page; agents spend it once it is part of a runtime.",
+      "step_kind": "1. What to connect",
+      "kind_claude": "Claude",
+      "kind_claude_hint": "Pro / Max subscription",
+      "kind_codex": "Codex",
+      "kind_codex_hint": "ChatGPT subscription",
+      "kind_api": "API key",
+      "kind_api_hint": "z.ai, MiniMax, OpenRouter",
+      "provider": "Provider",
+      "providers": {
+        "zai": "z.ai (GLM, coding plan)",
+        "minimax": "MiniMax (coding plan)",
+        "openrouter": "OpenRouter (pay as you go)",
+        "locia": "Lotsia model (needs the cisco VPN)"
+      },
+      "step_name": "2. Name",
+      "name_placeholder": "For example, Claude, third subscription",
+      "name_hint": "Id {{id}} and credential {{path}} are created for you.",
+      "step_login": "3. Sign in",
+      "codex_login": "After adding, press “Sign in again” on the card: it shows a link and a code for the account.",
+      "claude_login": "On your computer, signed in to this Claude account in the browser, run claude setup-token and paste the token.",
+      "key_login": "Create a key in the provider's dashboard and paste it here.",
+      "secret_hint": "It goes straight to the credential file on the server (mode 600) and is never shown. Leave it empty to sign in later from the card.",
+      "step_runtimes": "4. Where to use it",
+      "placement": "Place in the spending order: {{runtime}}",
+      "placement_last": "last",
+      "placement_first": "first",
+      "unpick": "Do not use in {{runtime}}",
+      "runtimes_search": "Pick runtimes ({{provider}})…",
+      "runtimes_filter": "Find a runtime…",
+      "runtimes_none": "No runtimes for this provider",
+      "runtime_empty": "no subscriptions",
+      "runtimes_hint": "Only this provider's runtimes are shown. With none picked the subscription is created but agents do not spend it.",
+      "step_caps": "5. How much agents may use",
+      "no_windows": "The provider has no quota windows — agents up to the provider limit.",
+      "submit": "Add",
+      "submit_login": "Add and sign in",
+      "done": "Subscription “{{title}}” added",
+      "done_codex": "Subscription “{{title}}” added — sign in from its card"
     }
   }
 }
