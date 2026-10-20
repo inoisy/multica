@@ -3843,6 +3843,10 @@ func (h *Handler) UpdateIssue(w http.ResponseWriter, r *http.Request) {
 		}
 		statusKeyForGuard = statusKey
 		params.Status = pgtype.Text{String: statusKey, Valid: true}
+		actorType, _ := h.resolveActor(r, userID, workspaceID)
+		if !h.guardRouteStatusWrite(w, r, prevIssue, actorType, statusKey) {
+			return
+		}
 	}
 	if req.Priority != nil {
 		if !validateIssueEnum(w, "priority", *req.Priority, validIssuePriorities) {
@@ -4145,6 +4149,24 @@ func (h *Handler) UpdateIssue(w http.ResponseWriter, r *http.Request) {
 // Returns (statusCode, errorMessage). statusCode == 0 means the pair is valid;
 // callers should treat any non-zero status as a rejection and surface it back
 // to the client.
+// guardRouteStatusWrite writes the refusal when a live route owns the status
+// of the issue an agent is about to move, and reports whether to go on.
+func (h *Handler) guardRouteStatusWrite(w http.ResponseWriter, r *http.Request, issue db.Issue, actorType, status string) bool {
+	svc := h.conveyorService()
+	err := svc.GuardAgentStatusWrite(r.Context(), issue, actorType, status)
+	switch {
+	case err == nil:
+		return true
+	case errors.Is(err, service.ErrConveyorOwnsStatus):
+		writeError(w, http.StatusConflict, err.Error())
+	default:
+		slog.Error("conveyor: resolve route state for a status write failed",
+			append(logger.RequestAttrs(r), "issue_id", uuidToString(issue.ID), "error", err)...)
+		writeError(w, http.StatusInternalServerError, "failed to check the issue route")
+	}
+	return false
+}
+
 func (h *Handler) validateAssigneePair(ctx context.Context, r *http.Request, workspaceID string, assigneeType pgtype.Text, assigneeID pgtype.UUID) (int, string) {
 	// Both unset → unassigned issue, valid.
 	if !assigneeType.Valid && !assigneeID.Valid {
@@ -4599,6 +4621,25 @@ func (h *Handler) BatchUpdateIssues(w http.ResponseWriter, r *http.Request) {
 	}
 	if !h.validateBatchTriageLocks(w, r, wsUUID, req.IssueIDs, rawUpdates) {
 		return
+	}
+	// A routed issue refuses an agent's status write for the whole batch,
+	// before any row changes, rather than being skipped in the loop below.
+	if req.Updates.Status != nil {
+		if actorType, _ := h.resolveActor(r, userID, workspaceID); actorType == "agent" {
+			for _, issueID := range req.IssueIDs {
+				issueUUID, err := util.ParseUUID(issueID)
+				if err != nil {
+					continue
+				}
+				prevIssue, err := h.Queries.GetIssueInWorkspace(r.Context(), db.GetIssueInWorkspaceParams{ID: issueUUID, WorkspaceID: wsUUID})
+				if err != nil {
+					continue
+				}
+				if !h.guardRouteStatusWrite(w, r, prevIssue, actorType, batchStatusKey) {
+					return
+				}
+			}
+		}
 	}
 	// The batch shares one project_id, so it is checked once here rather than
 	// per issue, and rejected instead of skipped like the per-item guards in
