@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"reflect"
-	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -60,6 +60,7 @@ func addFlags(cmd *cobra.Command) {
 	f.StringArray("cap", nil, "")
 	f.Int("reserve", 0, "")
 	f.Bool("token-stdin", false, "")
+	f.Bool("login", false, "")
 	f.Bool("enable", false, "")
 }
 
@@ -89,15 +90,32 @@ func TestSubscriptionAddSendsNoSecrets(t *testing.T) {
 		t.Fatalf("key sent although not given: %v", body)
 	}
 
-	// --token-stdin is refused before anything is read or sent.
-	before := len(*got)
+	// --token-stdin: the token goes only into the sign-in request, read from
+	// stdin, and the command follows the sign-in to the end.
+	got2 := subscriptionTestServer(t, map[string]any{
+		"POST /api/subscriptions":                map[string]any{"key": "claude-3", "auth": "claude_oauth"},
+		"POST /api/subscriptions/claude-3/login": map[string]any{"login": map[string]any{"id": "l1", "state": "waiting"}},
+		"GET /api/subscriptions/claude-3/login":  map[string]any{"login": map[string]any{"id": "l1", "state": "done"}},
+	})
+	stdin, w, _ := os.Pipe()
+	w.WriteString("sk-ant-oat01-from-stdin\n")
+	w.Close()
+	orig := os.Stdin
+	os.Stdin = stdin
+	defer func() { os.Stdin = orig }()
 	cmd = subscriptionTestCmd(addFlags)
 	_ = cmd.Flags().Set("token-stdin", "true")
-	if err := runSubscriptionAdd(cmd, []string{"claude"}); err == nil || !strings.Contains(err.Error(), "not available yet") {
-		t.Fatalf("token-stdin: err = %v", err)
+	if err := runSubscriptionAdd(cmd, []string{"claude"}); err != nil {
+		t.Fatalf("add with token: %v", err)
 	}
-	if len(*got) != before {
-		t.Fatal("token-stdin must not reach the server")
+	if len(*got2) != 3 {
+		t.Fatalf("requests: %+v", *got2)
+	}
+	if _, leaked := (*got2)[0].Body["token"]; leaked {
+		t.Fatal("the token must not be in the subscription body")
+	}
+	if (*got2)[1].Body["token"] != "sk-ant-oat01-from-stdin" {
+		t.Fatalf("login body: %v", (*got2)[1].Body)
 	}
 }
 
