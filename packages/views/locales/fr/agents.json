@@ -199,7 +199,8 @@
     "edit_description_title": "Modifier la description",
     "description_placeholder": "Que fait cet agent ?",
     "save": "Enregistrer",
-    "cancel": "Annuler"
+    "cancel": "Annuler",
+    "model_routed": "Le modèle de l'exécution est choisi dans la section Modèles ci-dessous."
   },
   "overview": {
     "agent_context": "Agent",
@@ -1039,7 +1040,21 @@
     "state_limited": "on a limit until {{time}}",
     "state_offline": "runtime offline",
     "state_missing": "runtime deleted",
-    "state_not_permitted": "runtime not available to the agent"
+    "state_not_permitted": "runtime not available to the agent",
+    "mode_label": "D'où vient le modèle",
+    "mode_profile": "Profil",
+    "mode_profile_hint": "une liste partagée par plusieurs agents",
+    "mode_chain": "Chaîne propre",
+    "mode_chain_hint": "la liste de cet agent avec des replis",
+    "mode_single": "Un modèle",
+    "mode_one_hint": "exactement ce modèle, sans repli",
+    "mode_fields_hint": "Ni profil ni modèle propre : l'exécution prend le runtime et le modèle des champs ci-dessus.",
+    "switch_to_profile": "Utiliser le profil « {{name}} »",
+    "profile_unused": "Le profil « {{name}} » n'est pas utilisé tant que l'agent a son propre modèle.",
+    "chain_title": "Chaîne propre",
+    "one_title": "Modèle de l'agent",
+    "one_hint": "Sans repli : si le runtime est à sa limite ou hors ligne, l'exécution attend la réinitialisation et le propriétaire est averti.",
+    "edit_single": "Changer de modèle"
   },
   "model_profiles": {
     "title": "Profiles",
@@ -1189,6 +1204,85 @@
       "key_label": "Clé API",
       "done": "Connexion réussie",
       "failed": "La connexion n'a pas abouti ; l'identifiant actuel est inchangé"
+    },
+    "limited_banner": "À la limite des agents : {{titles}}. Les agents passent au modèle suivant de leur profil.",
+    "spent_by": "Utilisé par :",
+    "spent_by_none": "aucun runtime",
+    "groups": {
+      "claude": "Claude",
+      "codex": "Codex",
+      "api": "Clés API"
+    },
+    "groups_hint": {
+      "claude": "abonnements, connexion avec un jeton claude setup-token",
+      "codex": "abonnements ChatGPT, connexion par lien et code",
+      "api": "paiement par clé, connexion avec une nouvelle clé"
+    },
+    "menu": {
+      "open": "Actions pour « {{title}} »",
+      "caps": "Limites des agents…",
+      "runtime": "Ordre de dépense : {{runtime}}…",
+      "rename": "Renommer…",
+      "rename_title": "Nom de l'abonnement",
+      "delete": "Supprimer l'abonnement…",
+      "delete_confirm": "Supprimer « {{title}} » ? Il est retiré de tous les runtimes ; le fichier d'identifiants reste sur le serveur."
+    },
+    "runtime_dialog": {
+      "agents": "Runtime dans les chaînes de : {{names}}.",
+      "no_agents": "Aucun agent n'a ce runtime dans sa chaîne.",
+      "order_title": "Abonnements dans l'ordre",
+      "empty": "Aucun abonnement derrière ce runtime — les agents ne démarreront pas.",
+      "move_up": "Monter : {{name}}",
+      "move_down": "Descendre : {{name}}",
+      "remove": "Retirer {{name}}",
+      "add": "Ajouter un abonnement",
+      "add_placeholder": "Choisir un abonnement…",
+      "spend_title": "Comment dépenser",
+      "first_hint": "le premier abonnement qui a encore de la marge pour les agents",
+      "balanced_hint": "parmi les utilisables, le moins utilisé cette semaine"
+    },
+    "add": {
+      "open": "Ajouter un abonnement",
+      "title": "Ajouter un abonnement",
+      "description": "Le compte apparaît sur cette page ; les agents le dépensent une fois inclus dans un runtime.",
+      "step_kind": "1. Quoi connecter",
+      "kind_claude": "Claude",
+      "kind_claude_hint": "abonnement Pro / Max",
+      "kind_codex": "Codex",
+      "kind_codex_hint": "abonnement ChatGPT",
+      "kind_api": "Clé API",
+      "kind_api_hint": "z.ai, MiniMax, OpenRouter",
+      "provider": "Fournisseur",
+      "providers": {
+        "zai": "z.ai (GLM, offre coding)",
+        "minimax": "MiniMax (offre coding)",
+        "openrouter": "OpenRouter (paiement à l'usage)",
+        "locia": "Modèle Lotsia (VPN cisco requis)"
+      },
+      "step_name": "2. Nom",
+      "name_placeholder": "Par exemple, Claude, troisième abonnement",
+      "name_hint": "L'id {{id}} et l'identifiant {{path}} sont créés pour vous.",
+      "step_login": "3. Connexion",
+      "codex_login": "Après l'ajout, cliquez sur « Se reconnecter » sur la carte : un lien et un code s'affichent.",
+      "claude_login": "Sur votre ordinateur, connecté à ce compte Claude dans le navigateur, lancez claude setup-token et collez le jeton.",
+      "key_login": "Créez une clé dans le tableau de bord du fournisseur et collez-la ici.",
+      "secret_hint": "Il va directement dans le fichier d'identifiants sur le serveur (mode 600) et n'est jamais affiché. Laissez vide pour vous connecter plus tard depuis la carte.",
+      "step_runtimes": "4. Où l'utiliser",
+      "placement": "Place dans l'ordre de dépense : {{runtime}}",
+      "placement_last": "en dernier",
+      "placement_first": "en premier",
+      "unpick": "Ne pas utiliser dans {{runtime}}",
+      "runtimes_search": "Choisir des runtimes ({{provider}})…",
+      "runtimes_filter": "Trouver un runtime…",
+      "runtimes_none": "Aucun runtime pour ce fournisseur",
+      "runtime_empty": "sans abonnement",
+      "runtimes_hint": "Seuls les runtimes de ce fournisseur sont affichés. Sans choix, l'abonnement est créé mais les agents ne le dépensent pas.",
+      "step_caps": "5. Part réservée aux agents",
+      "no_windows": "Le fournisseur n'a pas de fenêtres de quota — agents jusqu'à la limite du fournisseur.",
+      "submit": "Ajouter",
+      "submit_login": "Ajouter et se connecter",
+      "done": "Abonnement « {{title}} » ajouté",
+      "done_codex": "Abonnement « {{title}} » ajouté — connectez-vous depuis sa carte"
     }
   }
 }

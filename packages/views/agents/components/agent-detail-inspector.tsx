@@ -17,6 +17,8 @@ import {
   runtimeModelsOptions,
 } from "@multica/core/runtimes";
 import { isImeComposing } from "@multica/core/utils";
+import { useCurrentWorkspace } from "@multica/core/paths";
+import { agentModelsOptions } from "@multica/core/model-profiles";
 import { Input } from "@multica/ui/components/ui/input";
 import { Textarea } from "@multica/ui/components/ui/textarea";
 import { AvatarUploadControl } from "../../common/avatar-upload-control";
@@ -116,6 +118,12 @@ export function AgentDetailInspector({
       profileDraft.description.length <= AGENT_DESCRIPTION_MAX_LENGTH,
     isEqual: profileDraftsEqual,
   });
+
+  // A profile or an own list picks the run's model on the server; the plain
+  // runtime/model fields then do nothing and only confuse.
+  const workspace = useCurrentWorkspace();
+  const models = useQuery(agentModelsOptions(workspace?.id ?? "", agent.id));
+  const modelRouted = Boolean(models.data && (models.data.own_list || models.data.model_profile_id));
 
   const isOnline = runtime?.status === "online";
   const canReadRuntime =
@@ -239,6 +247,14 @@ export function AgentDetailInspector({
         title={t(($) => $.inspector.section_execution)}
       >
         <SettingsCard>
+          {modelRouted ? (
+            <SettingsRow label={t(($) => $.inspector.prop_model)} size="text">
+              <p className="text-caption text-muted-foreground" data-testid="inspector-model-routed">
+                {t(($) => $.inspector.model_routed)}
+              </p>
+            </SettingsRow>
+          ) : (
+          <>
           <SettingsRow
             label={t(($) => $.inspector.prop_runtime)}
             size="select-wide"
@@ -290,6 +306,8 @@ export function AgentDetailInspector({
               update({ thinking_level: thinkingLevel })
             }
           />
+          </>
+          )}
           <ServiceTierSettingField
             label={t(($) => $.inspector.prop_speed)}
             runtimeId={agent.runtime_id}
