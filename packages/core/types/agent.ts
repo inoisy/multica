@@ -162,6 +162,13 @@ export interface RuntimeProfile {
   enabled: boolean;
   created_at: string;
   updated_at: string;
+  /** Subscription keys the profile spends, in order; empty for a plain CLI profile. */
+  subscriptions?: string[];
+  spend_order?: string;
+  /** Copies of one pool in different workspaces share this key; an edit reaches every copy. */
+  share_key?: string | null;
+  /** New workspaces get a copy of the profile. */
+  all_workspaces?: boolean;
 }
 
 // POST body. runtime_type is the immutable compatibility target; the server
@@ -188,6 +195,7 @@ export interface UpdateRuntimeProfileRequest {
   fixed_args?: string[];
   visibility?: RuntimeProfileVisibility;
   enabled?: boolean;
+  all_workspaces?: boolean;
 }
 
 // Coarse classifier set by the backend when a task transitions to "failed".
