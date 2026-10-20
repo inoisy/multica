@@ -139,3 +139,35 @@ func (s *IssueConveyorService) RouteLeadsIssue(ctx context.Context, issueID pgty
 	}
 	return "conveyor:" + util.UUIDToString(cv.ID), true, nil
 }
+
+// ErrConveyorOwnsStatus marks an agent's status write refused because a live
+// route leads the issue.
+var ErrConveyorOwnsStatus = errors.New("conveyor: the route owns the issue status")
+
+// conveyorStatusError carries the refusal an agent reads back from its CLI
+// call, so it must say what to do instead.
+type conveyorStatusError struct{ issueID string }
+
+func (e conveyorStatusError) Error() string {
+	return "задача ведётся по маршруту: сдайте шаг `multica issue conveyor result " + e.issueID + " --file result.json`; статус ведёт сервер"
+}
+
+func (e conveyorStatusError) Is(target error) bool { return target == ErrConveyorOwnsStatus }
+
+// GuardAgentStatusWrite refuses an agent's write of a new status while a live
+// route leads the issue. The route moves the status itself, step by step, and
+// closes the issue when it is through; an agent that sets done on its own
+// leaves the route stranded on a closed issue, so the next step never starts.
+// People keep the status in their hands, and so do agents once the route is
+// paused, awaiting its coordinator, disabled or completed. A write that keeps
+// the current status changes nothing and passes.
+func (s *IssueConveyorService) GuardAgentStatusWrite(ctx context.Context, issue db.Issue, actorType, status string) error {
+	if actorType != "agent" || status == "" || status == issue.Status {
+		return nil
+	}
+	_, leads, err := s.RouteLeadsIssue(ctx, issue.ID)
+	if err != nil || !leads {
+		return err
+	}
+	return conveyorStatusError{issueID: util.UUIDToString(issue.ID)}
+}

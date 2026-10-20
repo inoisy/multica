@@ -52,6 +52,7 @@ func conveyorHandoffNote(issue db.Issue, cv db.IssueConveyor, action db.IssueCon
 			b.WriteString("\nВсе шаги пройдены. Примите работу по обычным правилам; статус задачи конвейер не меняет.\n")
 		} else {
 			fmt.Fprintf(&b, "\nРешите по существу. Вернуть работу в маршрут новым раундом: `multica issue conveyor resume %s --step <шаг> --revision %d`; остановить маршрут: `multica issue conveyor disable %s --revision %d`.\n", id, cv.Revision, id, cv.Revision)
+			b.WriteString("Решение сдайте одной из этих команд. Статус задачи не меняйте и подзадач не заводите — их ведёт маршрут; исключение — `blocked`, если без человека не решить.\n")
 		}
 		return b.String()
 	}
@@ -74,6 +75,7 @@ func conveyorHandoffNote(issue db.Issue, cv db.IssueConveyor, action db.IssueCon
 		}
 		b.WriteString(" и укажите его в artifact.commit.\n")
 	}
+	b.WriteString("Статус задачи не меняйте и подзадач не заводите — это делает маршрут: сервер отклонит смену статуса, пока маршрут ведёт задачу.\n")
 	b.WriteString("Не упоминайте следующего исполнителя и координатора, не ставьте будильники на свой ран: следующий шаг запустит сервер после того, как этот ран завершится.\n")
 	return b.String()
 }
