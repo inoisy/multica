@@ -125,8 +125,28 @@ describe("AgentModels", () => {
   it("opens the own chain as a copy of the profile rows", async () => {
     apiMock.getAgentModels.mockResolvedValue(models());
     renderSection();
-    fireEvent.click(await screen.findByRole("switch", { name: "Differs from the profile" }));
+    expect((await screen.findByRole("radio", { name: /^Profile/ }) as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(screen.getByRole("radio", { name: /^Own chain/ }));
     expect((await screen.findByTestId("rows-editor")).textContent).toBe("2 rows");
+  });
+
+  it("pins one model from the profile's primary row", async () => {
+    apiMock.getAgentModels.mockResolvedValue(models());
+    renderSection();
+    fireEvent.click(await screen.findByRole("radio", { name: /^One model/ }));
+    expect((await screen.findByTestId("rows-editor")).textContent).toBe("1 rows");
+  });
+
+  it("goes back from an own chain to the profile by clearing the list", async () => {
+    const own = [row(1, "claude", "sonnet"), row(2, "codex", "sol")];
+    apiMock.getAgentModels.mockResolvedValue(models({ own_list: true, options: own, preview: choice({ source: "agent_list", rows: own }) }));
+    apiMock.updateAgentModels.mockResolvedValue(models());
+    renderSection();
+    expect((await screen.findByRole("radio", { name: /^Own chain/ }) as HTMLInputElement).checked).toBe(true);
+    expect(screen.getByText("Profile “Strong” is not used while the agent has its own model.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("radio", { name: /^Profile/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Use profile “Strong”" }));
+    await waitFor(() => expect(apiMock.updateAgentModels).toHaveBeenCalledWith("agent-1", { options: [], model_profile_id: "p1" }));
   });
 
   it("shows its own chain and the journal for an agent with an own list", async () => {
@@ -137,7 +157,9 @@ describe("AgentModels", () => {
       journal: [{ task_id: "t1", status: "completed", issue_id: "i1", issue_identifier: "STT-9", issue_title: "x", position: 1, choice: entry, created_at: "2026-10-19T12:00:00Z" }],
     }));
     renderSection();
-    expect(await screen.findByRole("switch", { name: "Differs from the profile" })).toBeTruthy();
+    // A one-row own list is a pinned model.
+    expect((await screen.findByRole("radio", { name: /^One model/ }) as HTMLInputElement).checked).toBe(true);
+    expect(screen.getByTestId("agent-models-own").textContent).toContain("sonnet");
     expect(screen.queryByText("Models of “Strong”")).toBeNull();
     expect(screen.getByTestId("agent-models-journal").textContent).toContain("STT-9");
     expect(screen.getByTestId("agent-models-journal").textContent).toContain("own chain");
