@@ -152,6 +152,11 @@ func TestSubscriptionRefusesSecrets(t *testing.T) {
 	if ok["auth"] != "api_key" || ok["credential_path"] != "~/.config/subtest-zai/key" {
 		t.Fatalf("api key defaults: %v", ok)
 	}
+	or := createSubtestSubscription(t, h, map[string]any{"key": "subtest-or", "provider": "openrouter"})
+	env := or["settings"].(map[string]any)["env"].(map[string]any)
+	if env["ANTHROPIC_BASE_URL"] != "https://openrouter.ai/api" || len(or["windows"].([]any)) != 0 {
+		t.Fatalf("provider defaults: %v", or)
+	}
 }
 
 func TestSubscriptionUpdateMergesCapsAndUsage(t *testing.T) {
@@ -222,7 +227,7 @@ func TestRuntimePoolSharedAcrossWorkspaces(t *testing.T) {
 		t.Fatalf("want a copy in each workspace: %v", created)
 	}
 	first := profiles[0].(map[string]any)
-	if first["command_name"] != SubscriptionRunCommand || first["fixed_args"].([]any)[0] != "claude" || first["share_key"] != created["share_key"] {
+	if first["command_name"] != "claude" || len(first["fixed_args"].([]any)) != 0 || first["share_key"] != created["share_key"] {
 		t.Fatalf("pool profile: %v", first)
 	}
 	var mine, theirs string

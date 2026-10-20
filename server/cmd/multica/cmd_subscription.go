@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"text/tabwriter"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -52,7 +54,7 @@ var subscriptionAddCmd = &cobra.Command{
 
 var subscriptionLoginCmd = &cobra.Command{
 	Use:   "login <key>",
-	Short: "Sign a subscription in again (not available yet)",
+	Short: "Sign a subscription in again: Codex prints a link and code, Claude and API keys take the token from stdin",
 	Args:  exactArgs(1),
 	RunE:  runSubscriptionLogin,
 }
@@ -123,7 +125,8 @@ func init() {
 	f.Int("reserve", 0, "Percent of every window kept for people")
 	f.String("account-group", "", "Account shared with other subscriptions (one usage row)")
 	f.String("settings-json", "", "Non-secret settings as a JSON object (API keys: {\"env\": {...}})")
-	f.Bool("token-stdin", false, "Read a token from stdin (sign-in is not available yet)")
+	f.Bool("token-stdin", false, "Read the token (claude setup-token) or API key from stdin and sign in right away")
+	f.Bool("login", false, "Codex: start the device sign-in right after adding")
 	f.String("output", "json", "Output format: table or json")
 
 	u := subscriptionUpdateCmd.Flags()
@@ -139,11 +142,13 @@ func init() {
 	u.Bool("enable", false, "Clear --disable-until")
 	u.String("output", "json", "Output format: table or json")
 
+	subscriptionLoginCmd.Flags().Bool("token-stdin", false, "Read the token or API key from stdin (never pass it as an argument)")
+	subscriptionLoginCmd.Flags().Duration("wait", 15*time.Minute, "How long to wait for the sign-in to finish")
 	subscriptionUsageCmd.Flags().String("since", "1d", "How far back: a duration like 7d or 12h, or an RFC 3339 time")
 	subscriptionUsageCmd.Flags().String("output", "table", "Output format: table or json")
 
 	p := runtimePoolCreateCmd.Flags()
-	p.StringSlice("subs", nil, "Subscription keys in spend order, e.g. claude-second,claude-main")
+	p.StringSlice("subs", nil, "Subscription keys in spend order, e.g. claude-2,claude-1")
 	p.String("order", "first", "Spend order: first (first usable) or balanced (least-used week)")
 	p.String("type", "", "claude or codex (default: the family of the first subscription)")
 	p.String("description", "", "Optional description")
@@ -309,11 +314,17 @@ func formatUsedBy(v any) string {
 }
 
 func runSubscriptionAdd(cmd *cobra.Command, args []string) error {
-	if tokenStdin, _ := cmd.Flags().GetBool("token-stdin"); tokenStdin {
-		// Sign-in through multica (server -> daemon -> credential file) is the
-		// next stage. Refuse before reading stdin so a token is never held or
-		// sent anywhere by this command.
-		return errors.New("sign-in through multica is not available yet: add the subscription without --token-stdin, then put the token into its credential_path on the daemon host (subs-login does this today)")
+	tokenStdin, _ := cmd.Flags().GetBool("token-stdin")
+	startLogin, _ := cmd.Flags().GetBool("login")
+	var token string
+	if tokenStdin {
+		// Read before creating anything, so a bad paste leaves no half-made
+		// subscription behind.
+		t, err := readSecretFromStdin()
+		if err != nil {
+			return err
+		}
+		token = t
 	}
 	body := map[string]any{"provider": strings.TrimSpace(args[0])}
 	for flag, field := range map[string]string{
@@ -362,13 +373,96 @@ func runSubscriptionAdd(cmd *cobra.Command, args []string) error {
 	if output, _ := cmd.Flags().GetString("output"); output == "table" {
 		printSubscriptionTable([]map[string]any{sub})
 		fmt.Fprintf(os.Stderr, "Credential file on the daemon host: %s\n", str(sub["credential_path"]))
-		return nil
+	} else if err := cli.PrintJSON(os.Stdout, sub); err != nil {
+		return err
 	}
-	return cli.PrintJSON(os.Stdout, sub)
+	if token != "" || (startLogin && str(sub["auth"]) == "codex_auth") {
+		return signIn(cmd, client, str(sub["key"]), token, 15*time.Minute)
+	}
+	if str(sub["auth"]) == "codex_auth" {
+		fmt.Fprintf(os.Stderr, "Sign in: multica subscription login %s\n", str(sub["key"]))
+	}
+	return nil
 }
 
-func runSubscriptionLogin(_ *cobra.Command, args []string) error {
-	return fmt.Errorf("sign-in through multica is not available yet: sign %s in with subs-login on the daemon host", args[0])
+// readSecretFromStdin reads one token or key from stdin. Tokens are never
+// taken as arguments: those end up in shell history and process listings.
+func readSecretFromStdin() (string, error) {
+	data, err := io.ReadAll(io.LimitReader(os.Stdin, 8192))
+	if err != nil {
+		return "", fmt.Errorf("read token from stdin: %w", err)
+	}
+	token := strings.TrimSpace(string(data))
+	if token == "" {
+		return "", errors.New("stdin is empty: pipe the token, e.g. `claude setup-token | multica subscription login <key> --token-stdin`")
+	}
+	return token, nil
+}
+
+func runSubscriptionLogin(cmd *cobra.Command, args []string) error {
+	var token string
+	if tokenStdin, _ := cmd.Flags().GetBool("token-stdin"); tokenStdin {
+		t, err := readSecretFromStdin()
+		if err != nil {
+			return err
+		}
+		token = t
+	}
+	wait, _ := cmd.Flags().GetDuration("wait")
+	client, err := newAPIClient(cmd)
+	if err != nil {
+		return err
+	}
+	return signIn(cmd, client, args[0], token, wait)
+}
+
+// loginPollInterval paces the sign-in status polling.
+var loginPollInterval = 2 * time.Second
+
+// signIn starts a sign-in and follows it: the daemon hosting the
+// subscription writes the credential file; a Codex login prints the link and
+// code to open in a browser.
+func signIn(cmd *cobra.Command, client *cli.APIClient, key, token string, wait time.Duration) error {
+	ctx, cancel := context.WithTimeout(context.Background(), wait)
+	defer cancel()
+	body := map[string]any{}
+	if token != "" {
+		body["token"] = token
+	}
+	var started struct {
+		Login map[string]any `json:"login"`
+	}
+	if err := client.PostJSON(ctx, subscriptionPath(key)+"/login", body, &started); err != nil {
+		return subscriptionError("sign in", err)
+	}
+	shown := false
+	for {
+		var cur struct {
+			Login map[string]any `json:"login"`
+		}
+		if err := client.GetJSON(ctx, subscriptionPath(key)+"/login", &cur); err != nil {
+			return subscriptionError("sign in", err)
+		}
+		l := cur.Login
+		if l != nil && str(l["id"]) == str(started.Login["id"]) {
+			if !shown && str(l["url"]) != "" && str(l["code"]) != "" {
+				fmt.Fprintf(os.Stdout, "Open %s and enter the code %s\n", str(l["url"]), str(l["code"]))
+				shown = true
+			}
+			switch str(l["state"]) {
+			case "done":
+				fmt.Fprintf(os.Stdout, "Signed in: %s\n", key)
+				return nil
+			case "failed", "cancelled", "expired":
+				return fmt.Errorf("sign in %s: %s (%s)", key, str(l["state"]), str(l["message"]))
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("sign in %s: still waiting after %s; check `multica subscription list`", key, wait)
+		case <-time.After(loginPollInterval):
+		}
+	}
 }
 
 func runSubscriptionUpdate(cmd *cobra.Command, args []string) error {

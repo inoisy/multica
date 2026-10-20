@@ -415,14 +415,17 @@ type DaemonHeartbeatRequestPayload struct {
 // and re-registers; without it the dead UUID would keep heartbeating until the
 // daemon process restarts.
 type DaemonHeartbeatAckPayload struct {
-	RuntimeID               string                                  `json:"runtime_id"`
-	Status                  string                                  `json:"status"`
-	ServerCapabilities      []string                                `json:"server_capabilities,omitempty"`
-	RuntimeGone             bool                                    `json:"runtime_gone,omitempty"`
-	PendingUpdate           *DaemonHeartbeatPendingUpdate           `json:"pending_update,omitempty"`
-	PendingModelList        *DaemonHeartbeatPendingModelList        `json:"pending_model_list,omitempty"`
-	PendingLocalSkills      *DaemonHeartbeatPendingLocalSkills      `json:"pending_local_skills,omitempty"`
-	PendingLocalSkillImport *DaemonHeartbeatPendingLocalSkillImport `json:"pending_local_skill_import,omitempty"`
+	RuntimeID          string                           `json:"runtime_id"`
+	Status             string                           `json:"status"`
+	ServerCapabilities []string                         `json:"server_capabilities,omitempty"`
+	RuntimeGone        bool                             `json:"runtime_gone,omitempty"`
+	PendingUpdate      *DaemonHeartbeatPendingUpdate    `json:"pending_update,omitempty"`
+	PendingModelList   *DaemonHeartbeatPendingModelList `json:"pending_model_list,omitempty"`
+	// PendingSubscriptionLogin asks the daemon to sign a subscription in and
+	// write its credential file. Token is set only for pasted secrets.
+	PendingSubscriptionLogin *DaemonHeartbeatPendingSubscriptionLogin `json:"pending_subscription_login,omitempty"`
+	PendingLocalSkills       *DaemonHeartbeatPendingLocalSkills       `json:"pending_local_skills,omitempty"`
+	PendingLocalSkillImport  *DaemonHeartbeatPendingLocalSkillImport  `json:"pending_local_skill_import,omitempty"`
 	// PendingLocalSkillImports carries multiple import requests in a single
 	// heartbeat so the daemon can process them concurrently. Old daemons
 	// that don't know this field silently ignore it (standard JSON behavior)
@@ -439,6 +442,18 @@ const HeartbeatStatusRuntimeGone = "runtime_gone"
 type DaemonHeartbeatPendingUpdate struct {
 	ID            string `json:"id"`
 	TargetVersion string `json:"target_version"`
+}
+
+// DaemonHeartbeatPendingSubscriptionLogin describes a subscription sign-in for
+// the daemon: a Codex device login, or a pasted Claude token / API key to write
+// atomically to credential_path. The token is never logged by either side.
+type DaemonHeartbeatPendingSubscriptionLogin struct {
+	ID             string `json:"id"`
+	Key            string `json:"key"`
+	Provider       string `json:"provider"`
+	Auth           string `json:"auth"`
+	CredentialPath string `json:"credential_path"`
+	Token          string `json:"token,omitempty"`
 }
 
 // DaemonHeartbeatPendingModelList describes a request for the daemon to

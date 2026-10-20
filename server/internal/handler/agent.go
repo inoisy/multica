@@ -385,6 +385,8 @@ type AgentTaskResponse struct {
 	// regardless of issue / chat / autopilot / quick-create — sees the same
 	// shared context. Empty when the workspace owner hasn't set it.
 	WorkspaceContext string `json:"workspace_context,omitempty"`
+	// SubscriptionPool is set for runtimes whose profile spends subscriptions.
+	SubscriptionPool *SubscriptionPoolPayload `json:"subscription_pool,omitempty"`
 	// IssueStatuses is the workspace's ACTIVE CUSTOM status catalog (MUL-6460),
 	// injected into the agent brief so agents can see and use statuses beyond
 	// the seven built-ins. Built-ins are omitted: their keys, names, and

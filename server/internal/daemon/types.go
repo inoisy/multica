@@ -3,6 +3,7 @@ package daemon
 import (
 	"encoding/json"
 
+	"github.com/multica-ai/multica/server/internal/daemon/subscriptions"
 	"github.com/multica-ai/multica/server/internal/runtimeapps"
 	"github.com/multica-ai/multica/server/pkg/remotemcp"
 )
@@ -91,6 +92,9 @@ type Task struct {
 	// regardless of task kind so the daemon can inject `## Workspace Context`
 	// into the brief. Empty when the owner hasn't set one.
 	WorkspaceContext string `json:"workspace_context,omitempty"`
+	// SubscriptionPool is the runtime's subscriptions in spend order (stage B).
+	// The daemon picks one and launches the provider CLI on its credential.
+	SubscriptionPool *subscriptions.Pool `json:"subscription_pool,omitempty"`
 	// IssueStatuses mirrors the claim payload's active CUSTOM status catalog
 	// (MUL-6460): key/name/category/description per status, already in catalog
 	// order. Rendered into the brief's status-command line; empty (including on

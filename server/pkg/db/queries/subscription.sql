@@ -154,3 +154,49 @@ SET share_key      = COALESCE(share_key, @share_key::text),
     updated_at     = now()
 WHERE id = @id
 RETURNING *;
+
+-- name: UpsertSubscriptionHostState :one
+INSERT INTO subscription_host_state (subscription_id, daemon_id, device_name, credential_state, error, checked_at)
+VALUES ($1, $2, $3, $4, $5, now())
+ON CONFLICT (subscription_id, daemon_id) DO UPDATE
+SET device_name = EXCLUDED.device_name,
+    credential_state = EXCLUDED.credential_state,
+    error = EXCLUDED.error,
+    checked_at = now()
+RETURNING *;
+
+-- name: ListSubscriptionHostStates :many
+SELECT * FROM subscription_host_state
+ORDER BY subscription_id, daemon_id;
+
+-- name: DeleteSubscriptionHostStates :exec
+DELETE FROM subscription_host_state
+WHERE subscription_id = $1;
+
+-- name: ListEnabledRuntimeProfilesWithSubscriptionsForWorkspace :many
+SELECT * FROM runtime_profile
+WHERE workspace_id = $1 AND enabled = true AND jsonb_array_length(subscriptions) > 0
+ORDER BY created_at;
+
+-- name: ListAgentRuntimesByProfiles :many
+-- Registered runtime instances of the given profiles, for the "every
+-- subscription is over its cap" decision.
+SELECT id, workspace_id, profile_id FROM agent_runtime
+WHERE profile_id = ANY(@profile_ids::uuid[]);
+
+-- name: DeleteRuntimeUnavailableByReasonPrefix :exec
+DELETE FROM runtime_unavailable
+WHERE runtime_id = $1 AND starts_with(reason, @prefix::text);
+
+-- name: ListAgentsOnRuntimeProfiles :many
+-- Active agents bound to runtimes of the given profiles, for discrepancies.
+SELECT a.id, a.name, a.workspace_id, ar.profile_id
+FROM agent a
+JOIN agent_runtime ar ON ar.id = a.runtime_id
+WHERE ar.profile_id = ANY(@profile_ids::uuid[]) AND a.archived_at IS NULL;
+
+-- name: ListSharedRuntimeProfiles :many
+-- Subscription pools: profiles created as one runtime across workspaces.
+SELECT * FROM runtime_profile
+WHERE share_key IS NOT NULL
+ORDER BY workspace_id, created_at;

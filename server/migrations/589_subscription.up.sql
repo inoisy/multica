@@ -28,8 +28,8 @@ CREATE TABLE IF NOT EXISTS subscription (
     -- Percent of every window kept for people; agents stop at 100 - reserve.
     reserve INT NOT NULL DEFAULT 0 CHECK (reserve BETWEEN 0 AND 100),
     settings JSONB NOT NULL DEFAULT '{}'::jsonb,
-    -- Subscriptions of one account share one usage row (claude-main and
-    -- claude-max). Empty = the subscription is its own account.
+    -- Subscriptions of one account share one usage row (two keys of one
+    -- plan). Empty = the subscription is its own account.
     account_group TEXT NOT NULL DEFAULT '',
     disabled_until TIMESTAMPTZ,
     created_by UUID,
