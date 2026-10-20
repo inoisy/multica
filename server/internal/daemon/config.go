@@ -165,6 +165,18 @@ type Config struct {
 	// prefers a matching, executable override over resolving the profile's
 	// command_name on PATH. nil/empty means "always resolve via PATH".
 	ProfileCommandOverrides map[string]string
+	// RequireVLESS is a host check run before a Claude or Codex subscription
+	// is spent (MULTICA_REQUIRE_VLESS, e.g. /usr/local/bin/require-vless);
+	// empty skips it.
+	RequireVLESS string
+	// CodexAgentsMD is linked as AGENTS.md into every task CODEX_HOME that has
+	// none (MULTICA_CODEX_AGENTS_MD, e.g. /etc/agent-memory/AGENTS.md): Codex
+	// reads shared rules from there. Empty skips it.
+	CodexAgentsMD string
+	// Subscription probe cadence (MULTICA_SUBSCRIPTION_PROBE_INTERVAL,
+	// MULTICA_SUBSCRIPTION_CLAUDE_PROBE_INTERVAL); zero means the defaults.
+	SubscriptionProbeInterval       time.Duration
+	SubscriptionClaudeProbeInterval time.Duration
 }
 
 // Overrides allows CLI flags to override environment variables and defaults.
@@ -333,6 +345,14 @@ func LoadConfig(overrides Overrides) (Config, error) {
 	// MULTICA_AGENT_IDLE_WATCHDOG=0 disables the per-task idle watchdog. We
 	// route 0 through durationFromEnv so the operator can opt out without
 	// patching the binary; any positive duration overrides DefaultAgentIdleWatchdog.
+	subscriptionProbeInterval, err := durationFromEnv("MULTICA_SUBSCRIPTION_PROBE_INTERVAL", 0)
+	if err != nil {
+		return Config{}, err
+	}
+	subscriptionClaudeProbeInterval, err := durationFromEnv("MULTICA_SUBSCRIPTION_CLAUDE_PROBE_INTERVAL", 0)
+	if err != nil {
+		return Config{}, err
+	}
 	agentIdleWatchdog, err := durationFromEnv("MULTICA_AGENT_IDLE_WATCHDOG", DefaultAgentIdleWatchdog)
 	if err != nil {
 		return Config{}, err
@@ -668,6 +688,10 @@ func LoadConfig(overrides Overrides) (Config, error) {
 		QwenArgs:                        qwenArgs,
 		QwenpawArgs:                     qwenpawArgs,
 		ProfileCommandOverrides:         profileCommandOverrides,
+		RequireVLESS:                    strings.TrimSpace(os.Getenv("MULTICA_REQUIRE_VLESS")),
+		CodexAgentsMD:                   strings.TrimSpace(os.Getenv("MULTICA_CODEX_AGENTS_MD")),
+		SubscriptionProbeInterval:       subscriptionProbeInterval,
+		SubscriptionClaudeProbeInterval: subscriptionClaudeProbeInterval,
 	}, nil
 }
 
