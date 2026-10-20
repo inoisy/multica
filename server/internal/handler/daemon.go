@@ -1197,6 +1197,9 @@ func (h *Handler) DaemonHeartbeat(w http.ResponseWriter, r *http.Request) {
 	if ack.PendingModelList != nil {
 		resp["pending_model_list"] = ack.PendingModelList
 	}
+	if ack.PendingSubscriptionLogin != nil {
+		resp["pending_subscription_login"] = ack.PendingSubscriptionLogin
+	}
 	if ack.PendingLocalSkills != nil {
 		resp["pending_local_skills"] = ack.PendingLocalSkills
 	}
@@ -1434,6 +1437,10 @@ func (h *Handler) processHeartbeat(ctx context.Context, runtimeID string, suppor
 			slog.Warn("model list HasPending failed", "error", probeModelErr, "runtime_id", runtimeID)
 		}
 	}
+
+	// A pending subscription sign-in rides the same ack. In-memory only: the
+	// pasted token must never reach a shared store.
+	ack.PendingSubscriptionLogin = h.pendingSubscriptionLoginFor(ctx, runtimeID)
 
 	// Probe then claim the local-skill list queue. The probe is bounded so a
 	// slow shared store cannot stall the heartbeat on empty-queue ticks; the
@@ -3582,6 +3589,10 @@ func (h *Handler) buildClaimedTaskResponse(r *http.Request, task *db.AgentTaskQu
 			"error", err,
 		)
 	}
+
+	// Subscriptions the runtime spends (stage B): the daemon picks one and
+	// launches the provider CLI on its credential.
+	resp.SubscriptionPool = h.subscriptionPoolForRuntime(r.Context(), runtime)
 
 	// Workspace status catalog (MUL-6460): active CUSTOM statuses only, so the
 	// daemon can render them into the brief's status-command line. Read on every

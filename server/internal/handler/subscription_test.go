@@ -222,7 +222,7 @@ func TestRuntimePoolSharedAcrossWorkspaces(t *testing.T) {
 		t.Fatalf("want a copy in each workspace: %v", created)
 	}
 	first := profiles[0].(map[string]any)
-	if first["command_name"] != SubscriptionRunCommand || first["fixed_args"].([]any)[0] != "claude" || first["share_key"] != created["share_key"] {
+	if first["command_name"] != "claude" || len(first["fixed_args"].([]any)) != 0 || first["share_key"] != created["share_key"] {
 		t.Fatalf("pool profile: %v", first)
 	}
 	var mine, theirs string

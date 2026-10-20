@@ -1563,6 +1563,11 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 		r.Get("/workspaces", h.ListDaemonWorkspaces)
 		r.Get("/workspaces/{workspaceId}/repos", h.GetDaemonWorkspaceRepos)
 		r.Get("/workspaces/{workspaceId}/runtime-profiles", h.DaemonListRuntimeProfiles)
+		// Subscriptions the workspace's runtimes spend: the daemon probes them
+		// and reports usage and the state of each credential file.
+		r.Get("/workspaces/{workspaceId}/subscriptions", h.DaemonListSubscriptions)
+		r.Post("/workspaces/{workspaceId}/subscription-usage", h.DaemonReportSubscriptionUsage)
+		r.Post("/runtimes/{runtimeId}/subscription-logins/{loginId}/result", h.DaemonReportSubscriptionLogin)
 
 		// Agent-triggered plugin hooks. The daemon's local MCP server calls
 		// this when an agent picks one of its tools; the server makes the
@@ -1697,11 +1702,15 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 		r.Route("/api/subscriptions", func(r chi.Router) {
 			r.Get("/", h.ListSubscriptions)
 			r.Post("/", h.CreateSubscription)
+			r.Get("/discrepancies", h.ListSubscriptionDiscrepancies)
 			r.Get("/{key}", h.GetSubscription)
 			r.Patch("/{key}", h.UpdateSubscription)
 			r.Delete("/{key}", h.DeleteSubscription)
 			r.Get("/{key}/usage", h.ListSubscriptionUsage)
 			r.Post("/{key}/usage", h.RecordSubscriptionUsage)
+			r.Post("/{key}/login", h.StartSubscriptionLogin)
+			r.Get("/{key}/login", h.GetSubscriptionLogin)
+			r.Delete("/{key}/login", h.CancelSubscriptionLogin)
 		})
 		r.Post("/api/runtime-pools", h.CreateRuntimePool)
 
