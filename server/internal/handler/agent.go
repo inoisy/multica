@@ -1226,7 +1226,7 @@ func (h *Handler) ListAgents(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) GetAgent(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	agent, ok := h.loadAgentForUser(w, r, id)
+	agent, ok := h.loadAgentForView(w, r, id)
 	if !ok {
 		return
 	}

@@ -202,3 +202,42 @@ func newConveyorRigIn(t *testing.T, r *conveyorRig) *conveyorRig {
 	r.f.Cleanup(t, "DELETE FROM agent_task_queue WHERE issue_id=$1", other.issue)
 	return &other
 }
+
+// An accept run cut short (pause, crash) is resumed on the same commit: a new
+// round of accept must not lose it and pass with nothing merged.
+func TestConveyorResumedAcceptKeepsTheAcceptedCommit(t *testing.T) {
+	const commit = "abcdef1234567"
+	r := newConveyorRig(t)
+	r.withAcceptAgent()
+	r.enable("dev", "qa", "review", "accept", "close")
+	for _, step := range []string{"dev", "qa", "review"} {
+		r.pass(step, commit)
+	}
+	r.mustApply(ConveyorCommand{Action: ConveyorCmdPause, ExpectedRevision: r.revision()})
+	view := r.mustApply(ConveyorCommand{Action: ConveyorCmdResume, FromStep: "accept", ExpectedRevision: r.revision()})
+	if view.Step != "accept" || view.AcceptedCommit != commit {
+		t.Fatalf("resumed at %s with accepted commit %q, want accept with %q", view.Step, view.AcceptedCommit, commit)
+	}
+}
+
+// The hidden accept agent is nobody's: its step is delivered whoever enabled
+// the route, even when the agent is private to another member.
+func TestConveyorDeliversTheHiddenAcceptAgent(t *testing.T) {
+	const commit = "abcdef1234567"
+	r := newConveyorRig(t)
+	r.withAcceptAgent()
+	r.onAcceptRuntime()
+	r.f.Exec(t, "UPDATE agent_runtime SET status = 'online' WHERE id = (SELECT runtime_id FROM agent WHERE id = $1)", r.agents["accept"])
+	r.f.Cleanup(t, "DELETE FROM agent WHERE workspace_id = $1 AND system_key = 'accept'", r.f.WorkspaceID)
+	view := r.enable("dev", "qa", "review", "close")
+	carrier := parseTestUUID(t, view.Route[3].AgentID)
+	other := r.f.User(t, "someone else", "accept-owner-"+view.Route[3].AgentID+"@multica.test")
+	r.f.Exec(t, "UPDATE agent SET owner_id = $2 WHERE id = $1", carrier, other)
+	r.agents["carrier"] = carrier
+	for _, step := range []string{"dev", "qa", "review"} {
+		r.pass(step, commit)
+	}
+	if got := len(r.tasksOf("carrier")); got != 1 {
+		t.Fatalf("accept agent has %d runs, want 1:%s", got, r.dump())
+	}
+}
