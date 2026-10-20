@@ -3,6 +3,8 @@ import type { IssueWakeup, IssueWakeupInput, IssueWakeupSummaryRow, PausedWakeup
 import type { WorkspaceWakeupPage, WorkspaceWakeupFilters } from "../types/issue-wakeup";
 import type { AgentModels, CreateModelProfileInput, IssueModelProfile, ModelProfile, ModelProfileChange, ModelProfileInput, RuntimeUnavailable, UpdateAgentModelsInput } from "../types/model-profile";
 import { AgentModelsSchema, IssueModelProfileSchema, ModelProfilePreviewSchema, ModelProfileSchema, RuntimeUnavailableSchema } from "./schemas";
+import { IssueStageDispatchSchema, StageDispatchListSchema } from "./schemas";
+import type { IssueStageDispatch, StageDispatchEpic } from "../types/stage-dispatch";
 import { WorkspaceWakeupPageSchema, IssueWakeupSchema, IssueWakeupSummaryRowSchema, PausedWakeupSchema, SystemWakeupSchema, WakeupRunSchema, WorkspaceSystemWakeupSchema } from "./schemas";
 import type { InboxFilters } from "../inbox/filter-store";
 import type { ArchivedInboxPage, ArchivedInboxFacets } from "../types/inbox";
@@ -1368,6 +1370,40 @@ export class ApiClient {
     const parsed = parseWithFallback<AgentModels | null>(raw, AgentModelsSchema, null, { endpoint: "PUT /api/agents/:id/models" });
     if (!parsed) throw new Error("Could not read the agent's models");
     return parsed;
+  }
+
+  /** The epic's stage dispatch; a backend without it reads as off. */
+  async getIssueStageDispatch(issueId: string): Promise<IssueStageDispatch> {
+    const off: IssueStageDispatch = { issue_id: issueId, squad_id: null, dispatch_by: null };
+    try {
+      const raw = await this.fetch<unknown>(`/api/issues/${encodeURIComponent(issueId)}/stage-dispatch`);
+      return parseWithFallback<IssueStageDispatch>(raw, IssueStageDispatchSchema, off, { endpoint: "GET /api/issues/:id/stage-dispatch" });
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404) return off;
+      throw error;
+    }
+  }
+
+  /** Hands the epic's stages to a squad, or stops with null. */
+  async setIssueStageDispatch(issueId: string, squadId: string | null): Promise<IssueStageDispatch> {
+    const raw = await this.fetch<unknown>(`/api/issues/${encodeURIComponent(issueId)}/stage-dispatch`, {
+      method: "PUT",
+      body: JSON.stringify({ squad_id: squadId }),
+    });
+    return parseWithFallback<IssueStageDispatch>(raw, IssueStageDispatchSchema, { issue_id: issueId, squad_id: squadId, dispatch_by: null }, {
+      endpoint: "PUT /api/issues/:id/stage-dispatch",
+    });
+  }
+
+  /** The workspace's epics whose stages the server dispatches; empty on a backend without it. */
+  async listStageDispatch(): Promise<StageDispatchEpic[]> {
+    try {
+      const raw = await this.fetch<unknown>("/api/stage-dispatch");
+      return parseWithFallback(raw, StageDispatchListSchema, { epics: [] }, { endpoint: "GET /api/stage-dispatch" }).epics as StageDispatchEpic[];
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404) return [];
+      throw error;
+    }
   }
 
   async getIssueModelProfile(issueId: string): Promise<IssueModelProfile> {
@@ -4587,7 +4623,7 @@ export class ApiClient {
     }) as Squad;
   }
 
-  async updateSquad(id: string, data: { name?: string; description?: string; instructions?: string; leader_id?: string; avatar_url?: string }): Promise<Squad> {
+  async updateSquad(id: string, data: { name?: string; description?: string; instructions?: string; leader_id?: string; avatar_url?: string; route_template?: string }): Promise<Squad> {
     const raw = await this.fetch<unknown>(`/api/squads/${id}`, { method: "PUT", body: JSON.stringify(data) });
     return parseWithFallback(raw, SquadSchema, EMPTY_SQUAD, {
       endpoint: "PUT /api/squads/:id",

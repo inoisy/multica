@@ -347,3 +347,5 @@ export type {
   ModelOption, ModelOptionInput, ModelProfile, ModelProfileChange, ModelProfileInput, ModelRef,
   ModelRowState, ModelRowStateName, RuntimeUnavailable, UpdateAgentModelsInput,
 } from "./model-profile";
+export type { IssueStageDispatch, StageDispatchEpic } from "./stage-dispatch";
+export type { IssueRoute } from "./issue";
