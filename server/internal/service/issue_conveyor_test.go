@@ -302,9 +302,18 @@ func TestConveyorHappyPath(t *testing.T) {
 	}
 	r.pass("review", commit)
 
-	lead := r.only("lead")
-	if !strings.Contains(lead.HandoffNote.String, "Все шаги пройдены") {
-		t.Fatalf("final coordinator run does not say the route is done: %q", lead.HandoffNote.String)
+	// Every step passed: the server closes the issue and sums it up; the
+	// coordinator is not woken.
+	if got := len(r.tasksOf("lead")); got != 0 {
+		t.Fatalf("lead was woken on a route that passed (%d runs)", got)
+	}
+	if got := r.loadIssue().Status; got != "done" {
+		t.Fatalf("issue status after the route = %s, want done", got)
+	}
+	var summary string
+	r.f.QueryRow(t, "SELECT content FROM comment WHERE issue_id=$1 AND author_type='system' ORDER BY created_at DESC LIMIT 1", r.issue).Scan(&summary)
+	if !strings.Contains(summary, "Маршрут пройден") || !strings.Contains(summary, commit[:9]) {
+		t.Fatalf("closing summary = %q", summary)
 	}
 	for _, name := range []string{"dev", "qa", "review"} {
 		r.only(name)
@@ -313,8 +322,8 @@ func TestConveyorHappyPath(t *testing.T) {
 	if view.Status != ConveyorCompleted || r.metadataStep() != "close" {
 		t.Fatalf("end state: status %s, metadata.step %q", view.Status, r.metadataStep())
 	}
-	if status := r.loadIssue().Status; status != "in_review" {
-		t.Fatalf("final issue status = %s, want in_review", status)
+	if status := r.loadIssue().Status; status != "done" {
+		t.Fatalf("final issue status = %s, want done", status)
 	}
 	if got := len(r.eventsOf(conveyorEventInput)); got != 3 {
 		t.Fatalf("journal has %d inputs, want 3:%s", got, r.dump())
