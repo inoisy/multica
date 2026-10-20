@@ -153,6 +153,24 @@ describe("SubscriptionsPage", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
 
+  it("writes an optional model of a key subscription into its settings", async () => {
+    api.createSubscription.mockResolvedValue(sub("zai-a", { title: "GLM", provider: "zai", auth: "api_key" }));
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Add subscription" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("radio", { name: /API key/ }));
+    fireEvent.change(within(dialog).getByLabelText("2. Name"), { target: { value: "GLM" } });
+    fireEvent.change(within(dialog).getByLabelText(/^Model/), { target: { value: "glm-4.6" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Add" }));
+    await waitFor(() =>
+      expect(api.createSubscription).toHaveBeenCalledWith({
+        provider: "zai", title: "GLM", windows: ["5h", "week"],
+        settings: { env: { ANTHROPIC_MODEL: "glm-4.6", ANTHROPIC_DEFAULT_OPUS_MODEL: "glm-4.6", ANTHROPIC_DEFAULT_SONNET_MODEL: "glm-4.6", ANTHROPIC_DEFAULT_HAIKU_MODEL: "glm-4.6" } },
+      }),
+    );
+    expect(api.startSubscriptionLogin).not.toHaveBeenCalled();
+  });
+
   it("adds a Codex subscription in a new runtime for all workspaces and shows the device code", async () => {
     api.createSubscription.mockResolvedValue(sub("cx-b", { title: "Codex B", provider: "codex", family: "codex", auth: "codex_auth" }));
     api.createRuntimePool.mockResolvedValue({ share_key: "pool-2", runtime_profiles: [], skipped_workspace_ids: [] });
@@ -220,10 +238,12 @@ describe("SubscriptionsPage", () => {
   it("reorders a runtime from the card's spent-by link", async () => {
     api.getRuntimeProfileSubscriptions.mockResolvedValue({
       runtime_profile: pools[0], spend_order: "first", subscriptions: [sub("acc-a", { title: "Plan A" }), sub("acc-b", { title: "Plan A max" })], missing: [],
+      agents: [{ id: "a1", name: "Writer" }, { id: "a2", name: "Reviewer" }],
     });
     renderPage();
     fireEvent.click(await screen.findByRole("button", { name: "Claude · pool (#2)" }));
     const dialog = await screen.findByRole("dialog");
+    expect(await within(dialog).findByText("Agents on this runtime: Writer, Reviewer")).toBeTruthy();
     fireEvent.click(await within(dialog).findByRole("button", { name: "Up: Plan A max" }));
     fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
     await waitFor(() =>

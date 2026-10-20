@@ -1238,7 +1238,9 @@
       "add_placeholder": "Pick a subscription…",
       "spend_title": "How to spend",
       "all_workspaces": "all workspaces",
-      "off": "off"
+      "off": "off",
+      "agents": "Agents on this runtime: {{names}}",
+      "no_agents": "No agent runs on this runtime."
     },
     "new_pool": {
       "open": "New runtime",
@@ -1300,7 +1302,10 @@
       "submit_login": "Add and sign in",
       "done": "Subscription “{{title}}” added",
       "done_login_later": "Subscription “{{title}}” added — sign in from its card",
-      "partly_failed": "Subscription “{{title}}” was created, but not every step worked: {{error}}. Finish it from the card."
+      "partly_failed": "Subscription “{{title}}” was created, but not every step worked: {{error}}. Finish it from the card.",
+      "model": "Model",
+      "model_hint": "Optional. Becomes the default model for every tier.",
+      "model_placeholder": "For example, glm-4.6"
     },
     "discrepancies": {
       "title": "Discrepancies",

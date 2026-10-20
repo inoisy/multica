@@ -55,6 +55,16 @@ function without<T>(record: Record<string, T>, key: string): Record<string, T> {
   return next;
 }
 
+/** One model for every tier of Claude Code on a key provider. */
+function modelEnv(model: string): Record<string, string> {
+  return {
+    ANTHROPIC_MODEL: model,
+    ANTHROPIC_DEFAULT_OPUS_MODEL: model,
+    ANTHROPIC_DEFAULT_SONNET_MODEL: model,
+    ANTHROPIC_DEFAULT_HAIKU_MODEL: model,
+  };
+}
+
 function errorText(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }
@@ -90,6 +100,7 @@ export function AddSubscriptionDialog({
   const [apiProvider, setApiProvider] = useState<ApiProvider>("zai");
   const [title, setTitle] = useState("");
   const [secret, setSecret] = useState("");
+  const [model, setModel] = useState("");
   const [mode, setMode] = useState<SpendMode>("existing");
   const [picked, setPicked] = useState<Record<string, Placement>>({});
   const [target, setTarget] = useState<PoolTarget>(() => emptyPoolTarget(wsId));
@@ -106,6 +117,7 @@ export function AddSubscriptionDialog({
     setApiProvider("zai");
     setTitle("");
     setSecret("");
+    setModel("");
     setMode("existing");
     setPicked({});
     setTarget(emptyPoolTarget(wsId));
@@ -154,6 +166,7 @@ export function AddSubscriptionDialog({
         windows,
         ...(Object.keys(capNumbers).length ? { caps: capNumbers } : {}),
         ...(reserveNumber ? { reserve: reserveNumber } : {}),
+        ...(kind === "api" && model.trim() ? { settings: { env: modelEnv(model.trim()) } } : {}),
       });
     } catch (error) {
       toast.error(errorText(error));
@@ -272,6 +285,17 @@ export function AddSubscriptionDialog({
                     </option>
                   ))}
                 </select>
+              </label>
+            ) : null}
+            {kind === "api" ? (
+              <label className="flex flex-col gap-1 text-caption">
+                <span className="text-muted-foreground">{t(($) => $.subscriptions.add.model)}</span>
+                <Input
+                  value={model}
+                  placeholder={t(($) => $.subscriptions.add.model_placeholder)}
+                  onChange={(event) => setModel(event.target.value)}
+                />
+                <span className="text-muted-foreground">{t(($) => $.subscriptions.add.model_hint)}</span>
               </label>
             ) : null}
           </fieldset>
