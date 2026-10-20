@@ -38,6 +38,9 @@ func TestClaimCarriesSubscriptionPool(t *testing.T) {
 		pool.Subscriptions[0].CredentialPath != "~/.config/subtest-claim/token" {
 		t.Fatalf("pool: %+v", pool)
 	}
+	if len(pool.Subscriptions) == 0 {
+		t.Fatal("no subscriptions")
+	}
 	rt.ProfileID.Valid = false
 	if h.subscriptionPoolForRuntime(context.Background(), rt) != nil {
 		t.Fatal("built-in runtimes carry no pool")
