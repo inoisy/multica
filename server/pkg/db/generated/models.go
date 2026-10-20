@@ -1447,6 +1447,10 @@ type RuntimeProfile struct {
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 	RuntimeType    string             `json:"runtime_type"`
+	Subscriptions  []byte             `json:"subscriptions"`
+	SpendOrder     string             `json:"spend_order"`
+	ShareKey       pgtype.Text        `json:"share_key"`
+	AllWorkspaces  bool               `json:"all_workspaces"`
 }
 
 type RuntimeUnavailable struct {
@@ -1543,6 +1547,36 @@ type SquadMember struct {
 	MemberID   pgtype.UUID        `json:"member_id"`
 	Role       string             `json:"role"`
 	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+}
+
+type Subscription struct {
+	ID             pgtype.UUID        `json:"id"`
+	Key            string             `json:"key"`
+	Provider       string             `json:"provider"`
+	Title          string             `json:"title"`
+	OwnerNote      string             `json:"owner_note"`
+	Auth           string             `json:"auth"`
+	CredentialPath string             `json:"credential_path"`
+	Windows        []byte             `json:"windows"`
+	Caps           []byte             `json:"caps"`
+	Reserve        int32              `json:"reserve"`
+	Settings       []byte             `json:"settings"`
+	AccountGroup   string             `json:"account_group"`
+	DisabledUntil  pgtype.Timestamptz `json:"disabled_until"`
+	CreatedBy      pgtype.UUID        `json:"created_by"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
+type SubscriptionUsage struct {
+	ID             pgtype.UUID        `json:"id"`
+	SubscriptionID pgtype.UUID        `json:"subscription_id"`
+	WindowKey      string             `json:"window_key"`
+	UsedPercent    float64            `json:"used_percent"`
+	ResetsAt       pgtype.Timestamptz `json:"resets_at"`
+	LimitReached   bool               `json:"limit_reached"`
+	Source         string             `json:"source"`
+	ObservedAt     pgtype.Timestamptz `json:"observed_at"`
 }
 
 type SysCronExecution struct {

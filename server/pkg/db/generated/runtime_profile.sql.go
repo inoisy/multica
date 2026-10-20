@@ -25,7 +25,7 @@ INSERT INTO runtime_profile (
     enabled,
     runtime_type
 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-RETURNING id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type
+RETURNING id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, subscriptions, spend_order, share_key, all_workspaces
 `
 
 type CreateRuntimeProfileParams struct {
@@ -72,6 +72,10 @@ func (q *Queries) CreateRuntimeProfile(ctx context.Context, arg CreateRuntimePro
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.RuntimeType,
+		&i.Subscriptions,
+		&i.SpendOrder,
+		&i.ShareKey,
+		&i.AllWorkspaces,
 	)
 	return i, err
 }
@@ -141,7 +145,7 @@ func (q *Queries) DeleteRuntimeProfile(ctx context.Context, arg DeleteRuntimePro
 }
 
 const getRuntimeProfile = `-- name: GetRuntimeProfile :one
-SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type FROM runtime_profile
+SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, subscriptions, spend_order, share_key, all_workspaces FROM runtime_profile
 WHERE id = $1
 `
 
@@ -162,12 +166,16 @@ func (q *Queries) GetRuntimeProfile(ctx context.Context, id pgtype.UUID) (Runtim
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.RuntimeType,
+		&i.Subscriptions,
+		&i.SpendOrder,
+		&i.ShareKey,
+		&i.AllWorkspaces,
 	)
 	return i, err
 }
 
 const getRuntimeProfileForWorkspace = `-- name: GetRuntimeProfileForWorkspace :one
-SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type FROM runtime_profile
+SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, subscriptions, spend_order, share_key, all_workspaces FROM runtime_profile
 WHERE id = $1 AND workspace_id = $2
 `
 
@@ -193,6 +201,10 @@ func (q *Queries) GetRuntimeProfileForWorkspace(ctx context.Context, arg GetRunt
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.RuntimeType,
+		&i.Subscriptions,
+		&i.SpendOrder,
+		&i.ShareKey,
+		&i.AllWorkspaces,
 	)
 	return i, err
 }
@@ -377,7 +389,7 @@ func (q *Queries) ListAgentRuntimeIDsByProfile(ctx context.Context, arg ListAgen
 }
 
 const listEnabledRuntimeProfilesForWorkspace = `-- name: ListEnabledRuntimeProfilesForWorkspace :many
-SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type FROM runtime_profile
+SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, subscriptions, spend_order, share_key, all_workspaces FROM runtime_profile
 WHERE workspace_id = $1 AND enabled = true
 ORDER BY created_at ASC
 `
@@ -407,6 +419,10 @@ func (q *Queries) ListEnabledRuntimeProfilesForWorkspace(ctx context.Context, wo
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.RuntimeType,
+			&i.Subscriptions,
+			&i.SpendOrder,
+			&i.ShareKey,
+			&i.AllWorkspaces,
 		); err != nil {
 			return nil, err
 		}
@@ -419,7 +435,7 @@ func (q *Queries) ListEnabledRuntimeProfilesForWorkspace(ctx context.Context, wo
 }
 
 const listRuntimeProfiles = `-- name: ListRuntimeProfiles :many
-SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type FROM runtime_profile
+SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, subscriptions, spend_order, share_key, all_workspaces FROM runtime_profile
 WHERE workspace_id = $1
 ORDER BY created_at ASC
 `
@@ -447,6 +463,10 @@ func (q *Queries) ListRuntimeProfiles(ctx context.Context, workspaceID pgtype.UU
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.RuntimeType,
+			&i.Subscriptions,
+			&i.SpendOrder,
+			&i.ShareKey,
+			&i.AllWorkspaces,
 		); err != nil {
 			return nil, err
 		}
@@ -459,7 +479,7 @@ func (q *Queries) ListRuntimeProfiles(ctx context.Context, workspaceID pgtype.UU
 }
 
 const lockRuntimeProfileForDelete = `-- name: LockRuntimeProfileForDelete :one
-SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type FROM runtime_profile
+SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, subscriptions, spend_order, share_key, all_workspaces FROM runtime_profile
 WHERE id = $1 AND workspace_id = $2
 FOR UPDATE
 `
@@ -488,12 +508,16 @@ func (q *Queries) LockRuntimeProfileForDelete(ctx context.Context, arg LockRunti
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.RuntimeType,
+		&i.Subscriptions,
+		&i.SpendOrder,
+		&i.ShareKey,
+		&i.AllWorkspaces,
 	)
 	return i, err
 }
 
 const lockRuntimeProfileForRegistration = `-- name: LockRuntimeProfileForRegistration :one
-SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type FROM runtime_profile
+SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, subscriptions, spend_order, share_key, all_workspaces FROM runtime_profile
 WHERE id = $1 AND workspace_id = $2
 FOR KEY SHARE
 `
@@ -524,6 +548,10 @@ func (q *Queries) LockRuntimeProfileForRegistration(ctx context.Context, arg Loc
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.RuntimeType,
+		&i.Subscriptions,
+		&i.SpendOrder,
+		&i.ShareKey,
+		&i.AllWorkspaces,
 	)
 	return i, err
 }
@@ -538,7 +566,7 @@ SET display_name = COALESCE($1, display_name),
     enabled      = COALESCE($6, enabled),
     updated_at   = now()
 WHERE id = $7 AND workspace_id = $8
-RETURNING id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type
+RETURNING id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, subscriptions, spend_order, share_key, all_workspaces
 `
 
 type UpdateRuntimeProfileParams struct {
@@ -582,6 +610,10 @@ func (q *Queries) UpdateRuntimeProfile(ctx context.Context, arg UpdateRuntimePro
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.RuntimeType,
+		&i.Subscriptions,
+		&i.SpendOrder,
+		&i.ShareKey,
+		&i.AllWorkspaces,
 	)
 	return i, err
 }

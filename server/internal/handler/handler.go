@@ -66,6 +66,9 @@ type dbExecutor interface {
 }
 
 type Config struct {
+	// InstanceAdmins are the emails (MULTICA_INSTANCE_ADMINS, comma separated)
+	// allowed to change instance-level subscriptions and their runtime pools.
+	InstanceAdmins      []string
 	AllowSignup         bool
 	AllowedEmails       []string
 	AllowedEmailDomains []string

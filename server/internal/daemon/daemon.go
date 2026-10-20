@@ -2277,6 +2277,23 @@ func (d *Daemon) recordProfileLaunch(profileID, path, version string, fixedArgs 
 	}
 }
 
+// RuntimeProfileIDEnv carries the claimed runtime's profile id into a run.
+const RuntimeProfileIDEnv = "MULTICA_RUNTIME_PROFILE_ID"
+
+// runtimeProfileID returns the custom runtime profile id of a registered
+// runtime, or "" for built-in and unknown runtimes.
+func (d *Daemon) runtimeProfileID(runtimeID string) string {
+	if runtimeID == "" {
+		return ""
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if rt, ok := d.runtimeIndex[runtimeID]; ok {
+		return rt.ProfileID
+	}
+	return ""
+}
+
 // customProfileLaunchForRuntime returns the resolved custom executable path and
 // fixed args for a claimed task's RuntimeID, and whether the runtime is a
 // custom-profile runtime. It returns false for built-in runtimes (no profile)
@@ -8477,6 +8494,13 @@ func (d *Daemon) runTask(ctx context.Context, task Task, provider string, slot i
 	agentEnv := taskMulticaEnvironment(task, agentName, agentToken, env.MulticaConfigRoot, d.cfg.WorkspacesRoot, d.cfg.ServerBaseURL, d.cfg.HealthPort, slot, taskTempDir)
 	if checkoutMode := repoCheckoutModeFor(provider, runtime.GOOS); checkoutMode != "" {
 		agentEnv[repoCheckoutModeEnv] = checkoutMode
+	}
+	// The custom runtime profile the run was claimed on. A launch wrapper
+	// (subs-run) reads the profile's subscriptions and spend order with it, so
+	// one command serves every subscription pool and no profile id lives in a
+	// command name or host config.
+	if profileID := d.runtimeProfileID(task.RuntimeID); profileID != "" {
+		agentEnv[RuntimeProfileIDEnv] = profileID
 	}
 	if task.AutopilotRunID != "" {
 		agentEnv["MULTICA_AUTOPILOT_RUN_ID"] = task.AutopilotRunID

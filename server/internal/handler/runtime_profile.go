@@ -44,8 +44,14 @@ type RuntimeProfileResponse struct {
 	Visibility     string   `json:"visibility"`
 	CreatedBy      *string  `json:"created_by"`
 	Enabled        bool     `json:"enabled"`
-	CreatedAt      string   `json:"created_at"`
-	UpdatedAt      string   `json:"updated_at"`
+	// Subscription pool: ordered subscription keys, spend order, and the key
+	// shared by this runtime's copies in other workspaces.
+	Subscriptions []string `json:"subscriptions"`
+	SpendOrder    string   `json:"spend_order"`
+	ShareKey      *string  `json:"share_key"`
+	AllWorkspaces bool     `json:"all_workspaces"`
+	CreatedAt     string   `json:"created_at"`
+	UpdatedAt     string   `json:"updated_at"`
 }
 
 func runtimeProfileToResponse(p db.RuntimeProfile) RuntimeProfileResponse {
@@ -68,6 +74,10 @@ func runtimeProfileToResponse(p db.RuntimeProfile) RuntimeProfileResponse {
 		Visibility:     p.Visibility,
 		CreatedBy:      uuidToPtr(p.CreatedBy),
 		Enabled:        p.Enabled,
+		Subscriptions:  decodeStringList(p.Subscriptions),
+		SpendOrder:     p.SpendOrder,
+		ShareKey:       textToPtr(p.ShareKey),
+		AllWorkspaces:  p.AllWorkspaces,
 		CreatedAt:      timestampToString(p.CreatedAt),
 		UpdatedAt:      timestampToString(p.UpdatedAt),
 	}
@@ -272,6 +282,9 @@ type updateRuntimeProfileRequest struct {
 	Description    *string   `json:"description"`
 	FixedArgs      *[]string `json:"fixed_args"`
 	Enabled        *bool     `json:"enabled"`
+	// AllWorkspaces marks the runtime for every workspace: copies are created
+	// where missing, and new workspaces receive one. Instance admins only.
+	AllWorkspaces *bool `json:"all_workspaces"`
 }
 
 // UpdateRuntimeProfile applies a partial update. runtime_type and protocol_family are immutable
@@ -301,6 +314,20 @@ func (h *Handler) UpdateRuntimeProfile(w http.ResponseWriter, r *http.Request) {
 	if req.RuntimeType != nil || req.ProtocolFamily != nil {
 		writeError(w, http.StatusBadRequest, "runtime_type and protocol_family are immutable; create a new profile")
 		return
+	}
+
+	// A shared runtime (share_key) is one runtime across workspaces: an edit
+	// here edits every copy, so it takes an instance admin, not just an admin
+	// of this workspace. The same holds for spreading a runtime everywhere.
+	before, err := h.Queries.GetRuntimeProfileForWorkspace(r.Context(), db.GetRuntimeProfileForWorkspaceParams{ID: profileUUID, WorkspaceID: wsUUID})
+	if err != nil {
+		writeError(w, http.StatusNotFound, "runtime profile not found")
+		return
+	}
+	if before.ShareKey.Valid || req.AllWorkspaces != nil {
+		if _, ok := h.requireInstanceAdmin(w, r); !ok {
+			return
+		}
 	}
 
 	params := db.UpdateRuntimeProfileParams{ID: profileUUID, WorkspaceID: wsUUID}
@@ -350,11 +377,42 @@ func (h *Handler) UpdateRuntimeProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	profileID := uuidToString(profile.ID)
-	h.requestDaemonRuntimeProfileRefresh(wsID, profileID)
-	h.publish(protocol.EventDaemonRegister, wsID, "member", uuidToString(member.UserID), map[string]any{
-		"runtime_profile_id": profileID,
-	})
+	if req.AllWorkspaces != nil {
+		profile, err = h.Queries.SetRuntimeProfileSharing(r.Context(), db.SetRuntimeProfileSharingParams{
+			ShareKey:      uuidToString(profile.ID),
+			AllWorkspaces: *req.AllWorkspaces,
+			ID:            profile.ID,
+		})
+		if err != nil {
+			slog.Error("SetRuntimeProfileSharing failed", "error", err, "profile_id", uuidToString(profileUUID))
+			writeError(w, http.StatusInternalServerError, "failed to update runtime profile")
+			return
+		}
+	}
+	changed := []db.RuntimeProfile{profile}
+	if profile.ShareKey.Valid {
+		copies, err := h.Queries.SyncRuntimeProfileCopies(r.Context(), profile.ID)
+		if err != nil {
+			if isUniqueViolation(err) {
+				writeError(w, http.StatusConflict, "another workspace already has a runtime profile with this display_name")
+				return
+			}
+			slog.Error("SyncRuntimeProfileCopies failed", "error", err, "profile_id", uuidToString(profileUUID))
+			writeError(w, http.StatusInternalServerError, "failed to update runtime profile copies")
+			return
+		}
+		changed = append(changed, copies...)
+		if profile.AllWorkspaces {
+			spread, err := spreadRuntimeProfileToAllWorkspaces(r.Context(), h.Queries, profile)
+			if err != nil {
+				slog.Error("spreadRuntimeProfileToAllWorkspaces failed", "error", err, "profile_id", uuidToString(profileUUID))
+				writeError(w, http.StatusInternalServerError, "failed to copy runtime profile to every workspace")
+				return
+			}
+			changed = append(changed, spread...)
+		}
+	}
+	h.publishRuntimeProfilesChanged(changed, uuidToString(member.UserID))
 
 	writeJSON(w, http.StatusOK, runtimeProfileToResponse(profile))
 }
