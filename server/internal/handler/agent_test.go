@@ -1596,3 +1596,32 @@ func insertHandlerTestTask(t *testing.T, agentID string) string {
 // Defence-in-depth: spot-check that the package compiles a small
 // fmt.Sprintf so accidental imports stay tidy.
 var _ = fmt.Sprintf
+
+// The hidden accept agent carries real runs, so a run view asks for it by id:
+// GET answers with its name (not "Unknown Agent"), while edits still 404.
+func TestGetAgent_ShowsHiddenAcceptAgentButKeepsItReadOnly(t *testing.T) {
+	if testHandler == nil {
+		t.Skip("database not available")
+	}
+	ctx := context.Background()
+	agentID := createHandlerTestAgent(t, "accept-carrier-view", nil)
+	if _, err := testPool.Exec(ctx, `UPDATE agent SET kind = 'system', system_key = 'accept' WHERE id = $1`, agentID); err != nil {
+		t.Fatalf("mark accept carrier: %v", err)
+	}
+
+	w := httptest.NewRecorder()
+	testHandler.GetAgent(w, withURLParam(newRequest("GET", "/agents/"+agentID, nil), "id", agentID))
+	if w.Code != http.StatusOK {
+		t.Fatalf("GET accept carrier: %d %s", w.Code, w.Body.String())
+	}
+	var got AgentResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil || got.Name != "accept-carrier-view" {
+		t.Fatalf("name = %q (%v)", got.Name, err)
+	}
+
+	w = httptest.NewRecorder()
+	testHandler.UpdateAgent(w, withURLParam(newRequest(http.MethodPut, "/api/agents/"+agentID, map[string]any{"name": "renamed"}), "id", agentID))
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("PUT accept carrier: %d, want 404", w.Code)
+	}
+}
