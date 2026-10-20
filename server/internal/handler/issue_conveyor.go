@@ -238,19 +238,46 @@ func (h *Handler) dropManagedRouteTriggers(ctx context.Context, issue db.Issue, 
 		slog.Warn("conveyor: resolve managed route agents failed", "issue_id", uuidToString(issue.ID), "error", err)
 		return triggers
 	}
-	if len(agents) == 0 {
+	// While a route leads the issue, an agent's comment does not hand it back
+	// to the squad leader by the implicit squad routing (assignee, thread or
+	// conversation): the route wakes the leader for a return, a stop or the
+	// end. An explicit mention still reaches the leader.
+	leadBy, routeLeads, err := svc.RouteLeadsIssue(ctx, issue.ID)
+	if err != nil {
+		slog.Warn("conveyor: resolve route state failed", "issue_id", uuidToString(issue.ID), "error", err)
+		routeLeads = false
+	}
+	if len(agents) == 0 && !routeLeads {
 		return triggers
 	}
 	kept := make([]commentAgentTrigger, 0, len(triggers))
 	for _, t := range triggers {
 		coveredBy, managed := agents[t.Agent.ID]
+		reason := "managed_route"
+		if !managed && routeLeads && implicitSquadLeaderTrigger(t) {
+			coveredBy, managed, reason = leadBy, true, "route_leads_issue"
+		}
 		if !managed {
 			kept = append(kept, t)
 			continue
 		}
-		svc.NoteSuperseded(ctx, h.Queries, issue.ID, sourceTaskID, coveredBy, "managed_route", map[string]any{
+		svc.NoteSuperseded(ctx, h.Queries, issue.ID, sourceTaskID, coveredBy, reason, map[string]any{
 			"agent_id": uuidToString(t.Agent.ID), "comment_id": uuidToString(commentID),
 		})
 	}
 	return kept
+}
+
+// implicitSquadLeaderTrigger is a trigger that reaches the squad leader in its
+// coordinator role without anyone naming it: the issue's squad assignee, or a
+// thread or conversation continued with the leader.
+func implicitSquadLeaderTrigger(t commentAgentTrigger) bool {
+	if t.Squad == nil {
+		return false
+	}
+	switch t.Source {
+	case commentTriggerSourceIssueAssignee, commentTriggerSourceThreadParent, commentTriggerSourceConversation:
+		return true
+	}
+	return false
 }
