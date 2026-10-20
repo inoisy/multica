@@ -68,6 +68,12 @@ SELECT * FROM issue_conveyor_event
 WHERE conveyor_id = @conveyor_id AND source_task_id = @source_task_id AND kind = 'decision'
 LIMIT 1;
 
+-- name: CountIssueConveyorBacks :one
+-- How many times the route went back by itself since its revision began:
+-- the rounds a node's back option has spent.
+SELECT count(*) FROM issue_conveyor_event
+WHERE conveyor_id = @conveyor_id AND revision = @revision AND kind = 'decision' AND action = 'back';
+
 -- name: ListIssueConveyorDecisionsForTasks :many
 -- Decisions already recorded for these runs; a decision that moved the route
 -- (not one that refused a stale run) means the route covers the run's ending.
