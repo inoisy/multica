@@ -1,93 +1,108 @@
 // @vitest-environment jsdom
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { LoginAccount } from "@multica/core/subs-login";
+import type { Subscription } from "@multica/core/types";
 import { renderWithI18n } from "../test/i18n";
 
-vi.mock("@multica/core/api", () => ({ api: { getToken: () => null } }));
+const api = vi.hoisted(() => ({
+  startSubscriptionLogin: vi.fn(),
+  getSubscriptionLogin: vi.fn(),
+  cancelSubscriptionLogin: vi.fn(),
+  listSubscriptions: vi.fn(),
+}));
+vi.mock("@multica/core/api", () => ({ api, ApiError: class ApiError extends Error {} }));
 
-// The helper is reached with fetch; `postLogin` answers POSTs with queued bodies and records what was sent.
-const loginMock = { postLogin: vi.fn() };
-function stubHelper() {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async (_url: string, init: RequestInit) => {
-      if (init.method !== "POST") return new Response(JSON.stringify({ state: "waiting" }), { status: 200 });
-      const sent = JSON.parse(String(init.body)) as { account: string; [key: string]: unknown };
-      const { account, ...action } = sent;
-      const body: unknown = await loginMock.postLogin("stt", account, action);
-      return new Response(JSON.stringify(body), { status: 200 });
-    }),
-  );
+import { SubscriptionLoginStatus } from "./subscription-login";
+
+function sub(extra: Partial<Subscription>): Subscription {
+  return {
+    id: "s1", key: "acc-a", provider: "claude", family: "claude", title: "Plan A", owner_note: "", auth: "claude_oauth",
+    credential_path: "", windows: [], caps: {}, reserve: 0, effective_caps: {}, account_group: "", disabled_until: null,
+    disabled: false, usage: [], used_by: [], hosts: [], login_state: "unchecked", login: null, created_at: "", updated_at: "",
+    ...extra,
+  };
 }
 
-import { SubscriptionLogin } from "./subscription-login";
+const session = (state: string, extra: Record<string, unknown> = {}) => ({
+  id: "l1", state, url: null, code: null, message: "", started_at: null, ...extra,
+});
 
-const codex: LoginAccount = { id: "codex-a", provider: "codex", auth: "codex_auth", state: "revoked", login: null };
-const claude: LoginAccount = { id: "claude-a", provider: "claude", auth: "claude_oauth", state: "unchecked", login: null };
-
-function renderLogin(account: LoginAccount, canLogin = true) {
+function renderStatus(subscription: Subscription, canManage = true) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return renderWithI18n(
     <QueryClientProvider client={client}>
-      <SubscriptionLogin account={account} canLogin={canLogin} wsSlug="stt" />
+      <SubscriptionLoginStatus sub={subscription} canManage={canManage} />
     </QueryClientProvider>,
   );
 }
 
-describe("SubscriptionLogin", () => {
+describe("SubscriptionLoginStatus", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    loginMock.postLogin.mockReset();
-    stubHelper();
+    api.getSubscriptionLogin.mockResolvedValue(null);
+    api.listSubscriptions.mockResolvedValue({ subscriptions: [], can_manage: true });
   });
-  afterEach(() => vi.unstubAllGlobals());
 
-  it("shows the status to members without the login action", () => {
-    renderLogin(codex, false);
+  it("shows the state and hosts to members without the sign-in action", () => {
+    renderStatus(
+      sub({ login_state: "revoked", hosts: [{ daemon_id: "d1", device_name: "vps", credential_state: "missing", checked_at: null, error: "" }] }),
+      false,
+    );
     expect(screen.getByText("Sign-in revoked")).toBeTruthy();
+    expect(screen.getByText("vps: no credential")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Sign in again" })).toBeNull();
   });
 
-  it("shows the device link and code, then cancels", async () => {
-    loginMock.postLogin
-      .mockResolvedValueOnce({ session: "s1", state: "waiting", url: "https://auth.test/device", code: "ABCD-12345", message: "" })
-      .mockResolvedValueOnce({ session: "s1", state: "cancelled", url: null, code: null, message: "вход отменён" });
-    renderLogin(codex);
+  it("shows nothing when the server does not report sign-in", () => {
+    const { container } = renderStatus(sub({ login_state: null }));
+    expect(container.textContent).toBe("");
+  });
+
+  it("offers no web sign-in for an interactive Claude login", () => {
+    renderStatus(sub({ auth: "claude_login" }));
+    expect(screen.queryByRole("button", { name: "Sign in again" })).toBeNull();
+  });
+
+  it("starts a device sign-in, shows the link and code, then cancels", async () => {
+    api.startSubscriptionLogin.mockResolvedValue(session("waiting", { url: "https://auth.test/device", code: "ABCD-12345" }));
+    api.getSubscriptionLogin.mockResolvedValue(null);
+    api.cancelSubscriptionLogin.mockResolvedValue(undefined);
+    renderStatus(sub({ key: "cx-a", auth: "codex_auth", provider: "codex", family: "codex" }));
     fireEvent.click(screen.getByRole("button", { name: "Sign in again" }));
     fireEvent.click(await screen.findByRole("button", { name: "Get link" }));
     expect(await screen.findByRole("link", { name: "https://auth.test/device" })).toBeTruthy();
     expect(screen.getByText("ABCD-12345")).toBeTruthy();
-    expect(loginMock.postLogin).toHaveBeenCalledWith("stt", "codex-a", { action: "start" });
+    expect(api.startSubscriptionLogin).toHaveBeenCalledWith("cx-a", {});
     fireEvent.click(screen.getByRole("button", { name: "Cancel sign-in" }));
-    expect((await screen.findByRole("alert")).textContent).toBe("вход отменён");
-    expect(loginMock.postLogin).toHaveBeenLastCalledWith("stt", "codex-a", { action: "cancel" });
+    await waitFor(() => expect(api.cancelSubscriptionLogin).toHaveBeenCalledWith("cx-a"));
   });
 
-  it("saves a pasted token and closes on success", async () => {
-    loginMock.postLogin.mockResolvedValue({ session: null, state: "done", url: null, code: null, message: "" });
-    renderLogin(claude);
+  it("sends a pasted token, clears the field and closes once the host has it", async () => {
+    api.startSubscriptionLogin.mockResolvedValue(session("waiting"));
+    renderStatus(sub({}));
     fireEvent.click(screen.getByRole("button", { name: "Sign in again" }));
-    const save = await screen.findByRole("button", { name: "Save" });
-    expect(save.hasAttribute("disabled")).toBe(true);
-    fireEvent.change(screen.getByLabelText("Token"), { target: { value: "sk-ant-oat01-x" } });
-    fireEvent.click(save);
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    expect(loginMock.postLogin).toHaveBeenCalledWith("stt", "claude-a", { action: "secret", value: "sk-ant-oat01-x" });
+    const send = await screen.findByRole("button", { name: "Send" });
+    expect(send.hasAttribute("disabled")).toBe(true);
+    const field = screen.getByLabelText("Token") as HTMLInputElement;
+    fireEvent.change(field, { target: { value: "sk-ant-oat01-x" } });
+    // The daemon reports the outcome on the next poll.
+    api.getSubscriptionLogin.mockResolvedValue(session("done"));
+    fireEvent.click(send);
+    expect(await screen.findByText("Waiting for the daemon to write the credential…")).toBeTruthy();
+    expect(api.startSubscriptionLogin).toHaveBeenCalledWith("acc-a", { token: "sk-ant-oat01-x" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull(), { timeout: 4000 });
   });
 
-  it("keeps the dialog and shows the reason when a key is rejected, also on retry", async () => {
-    loginMock.postLogin.mockResolvedValue({ session: null, state: "failed", url: null, code: null, message: "ключ отклонён" });
-    renderLogin({ ...claude, auth: "api_key", id: "or-a" });
+  it("keeps the dialog and shows the reason when a key is rejected", async () => {
+    api.startSubscriptionLogin.mockResolvedValue(session("failed", { message: "ключ отклонён" }));
+    renderStatus(sub({ auth: "api_key", provider: "openrouter" }));
     fireEvent.click(screen.getByRole("button", { name: "Sign in again" }));
     fireEvent.change(await screen.findByLabelText("API key"), { target: { value: "bad" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
     expect((await screen.findByRole("alert")).textContent).toBe("ключ отклонён");
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
-    await waitFor(() => expect(loginMock.postLogin).toHaveBeenCalledTimes(2));
-    expect((await screen.findByRole("alert")).textContent).toBe("ключ отклонён");
+    expect((screen.getByLabelText("API key") as HTMLInputElement).value).toBe("");
     expect(screen.getByRole("dialog")).toBeTruthy();
   });
 });
