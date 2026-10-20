@@ -73,7 +73,7 @@ func judge(cv db.IssueConveyor, node ConveyorNode, task db.AgentTaskQueue, res *
 			return conveyorVerdict{action: conveyorDecisionEscalate, reason: "dev passed without artifact.commit", report: clip(res.Report, 1500)}
 		}
 		return conveyorVerdict{action: conveyorDecisionAdvance, commit: commit}
-	case conveyorStepQA, conveyorStepReview:
+	case conveyorStepQA, conveyorStepReview, conveyorStepAccept:
 		accepted := cv.AcceptedCommit.String
 		if accepted != "" && commit != accepted {
 			return conveyorVerdict{action: conveyorDecisionEscalate, reason: fmt.Sprintf("%s judged commit %q, the accepted one is %q", node.Step, commit, accepted), report: clip(res.Report, 1500)}

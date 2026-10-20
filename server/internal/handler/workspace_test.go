@@ -1513,3 +1513,21 @@ func TestUpdateWorkspace_RejectsInvalidIssuePrefix(t *testing.T) {
 		t.Fatalf("issue_prefix changed on a rejected update: %q → %q", before, after)
 	}
 }
+
+func TestLocalGitRepoURL(t *testing.T) {
+	for url, want := range map[string]bool{
+		"file:///home/agents/resource-planning/service": true,
+		"file:///srv/repo.git":                          true,
+		"file://host/srv/repo":                          false,
+		"file:///":                                      false,
+		"file:///srv/../etc":                            false,
+		"file:///srv/re po":                             false,
+		"file:relative/path":                            false,
+		"/home/agents/service":                          false,
+		"https://github.com/o/r.git":                    false,
+	} {
+		if got := isLocalGitRepoURL(url); got != want {
+			t.Errorf("isLocalGitRepoURL(%q) = %v, want %v", url, got, want)
+		}
+	}
+}

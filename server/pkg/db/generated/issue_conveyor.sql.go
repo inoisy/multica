@@ -769,6 +769,47 @@ func (q *Queries) ListIssueConveyorEvents(ctx context.Context, arg ListIssueConv
 	return items, nil
 }
 
+const listIssueConveyorsByIssues = `-- name: ListIssueConveyorsByIssues :many
+SELECT id, workspace_id, issue_id, route, revision, cur_idx, round, cur_task_id, status, coordinator_agent_id, enabled_by, accepted_commit, waiting_reason, created_at, updated_at FROM issue_conveyor WHERE issue_id = ANY($1::uuid[])
+`
+
+// The routes of a page of issues (an epic's sub-issues), one row per routed issue.
+func (q *Queries) ListIssueConveyorsByIssues(ctx context.Context, issueIds []pgtype.UUID) ([]IssueConveyor, error) {
+	rows, err := q.db.Query(ctx, listIssueConveyorsByIssues, issueIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []IssueConveyor{}
+	for rows.Next() {
+		var i IssueConveyor
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.IssueID,
+			&i.Route,
+			&i.Revision,
+			&i.CurIdx,
+			&i.Round,
+			&i.CurTaskID,
+			&i.Status,
+			&i.CoordinatorAgentID,
+			&i.EnabledBy,
+			&i.AcceptedCommit,
+			&i.WaitingReason,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPendingIssueConveyorActions = `-- name: ListPendingIssueConveyorActions :many
 SELECT id, seq, conveyor_id, workspace_id, issue_id, kind, source_task_id, revision, idx, round, action, state, task_id, covered_by, reason, details, created_at FROM issue_conveyor_event
 WHERE kind = 'action' AND state = 'pending'
@@ -1030,7 +1071,7 @@ func (q *Queries) LockIssueConveyorEvent(ctx context.Context, id pgtype.UUID) (I
 }
 
 const lockIssueForConveyorDelivery = `-- name: LockIssueForConveyorDelivery :one
-SELECT id, workspace_id, title, description, status, priority, assignee_type, assignee_id, creator_type, creator_id, parent_issue_id, acceptance_criteria, context_refs, position, due_date, created_at, updated_at, number, project_id, origin_type, origin_id, first_executed_at, start_date, metadata, stage, properties, revision, last_activity_at, triage_state, duplicate_of_issue_id, model_profile_id FROM issue WHERE id = $1 AND workspace_id = $2 FOR UPDATE
+SELECT id, workspace_id, title, description, status, priority, assignee_type, assignee_id, creator_type, creator_id, parent_issue_id, acceptance_criteria, context_refs, position, due_date, created_at, updated_at, number, project_id, origin_type, origin_id, first_executed_at, start_date, metadata, stage, properties, revision, last_activity_at, triage_state, duplicate_of_issue_id, model_profile_id, stage_squad_id, stage_dispatch_by FROM issue WHERE id = $1 AND workspace_id = $2 FOR UPDATE
 `
 
 type LockIssueForConveyorDeliveryParams struct {
@@ -1074,6 +1115,8 @@ func (q *Queries) LockIssueForConveyorDelivery(ctx context.Context, arg LockIssu
 		&i.TriageState,
 		&i.DuplicateOfIssueID,
 		&i.ModelProfileID,
+		&i.StageSquadID,
+		&i.StageDispatchBy,
 	)
 	return i, err
 }

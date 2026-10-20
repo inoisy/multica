@@ -428,6 +428,45 @@ func (q *Queries) ReorderIssueStatusEntries(ctx context.Context, arg ReorderIssu
 	return result.RowsAffected(), nil
 }
 
+const restoreIssueStatusEntry = `-- name: RestoreIssueStatusEntry :one
+UPDATE issue_status SET
+    archived_at = NULL,
+    updated_at = now()
+WHERE id = $1::uuid
+  AND workspace_id = $2::uuid
+  AND is_system = FALSE
+  AND archived_at IS NOT NULL
+RETURNING id, workspace_id, key, name, description, category, color, is_system, position, archived_at, created_at, updated_at, icon
+`
+
+type RestoreIssueStatusEntryParams struct {
+	ID          pgtype.UUID `json:"id"`
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+}
+
+// Brings a retired custom status back into use under its own key: the key
+// stays owned by the archived row, so a new one cannot take it.
+func (q *Queries) RestoreIssueStatusEntry(ctx context.Context, arg RestoreIssueStatusEntryParams) (IssueStatus, error) {
+	row := q.db.QueryRow(ctx, restoreIssueStatusEntry, arg.ID, arg.WorkspaceID)
+	var i IssueStatus
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.Key,
+		&i.Name,
+		&i.Description,
+		&i.Category,
+		&i.Color,
+		&i.IsSystem,
+		&i.Position,
+		&i.ArchivedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Icon,
+	)
+	return i, err
+}
+
 const seedIssueStatusEntries = `-- name: SeedIssueStatusEntries :exec
 
 INSERT INTO issue_status (workspace_id, key, name, description, category, color, is_system, position)

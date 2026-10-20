@@ -842,6 +842,8 @@ type Issue struct {
 	TriageState        pgtype.Text        `json:"triage_state"`
 	DuplicateOfIssueID pgtype.UUID        `json:"duplicate_of_issue_id"`
 	ModelProfileID     pgtype.UUID        `json:"model_profile_id"`
+	StageSquadID       pgtype.UUID        `json:"stage_squad_id"`
+	StageDispatchBy    pgtype.UUID        `json:"stage_dispatch_by"`
 }
 
 type IssueChildEvent struct {

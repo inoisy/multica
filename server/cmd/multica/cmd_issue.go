@@ -1199,7 +1199,7 @@ func runIssueChildren(cmd *cobra.Command, args []string) error {
 	output, _ := cmd.Flags().GetString("output")
 	if output == "table" {
 		actors := loadActorDisplayLookup(ctx, client)
-		headers := []string{"STAGE", "KEY", "TITLE", "STATUS", "PRIORITY", "ASSIGNEE"}
+		headers := []string{"STAGE", "KEY", "TITLE", "STATUS", "STEP", "PRIORITY", "ASSIGNEE"}
 		rows := make([][]string, 0, len(children))
 		for _, c := range children {
 			stageCell := "-"
@@ -1211,6 +1211,7 @@ func runIssueChildren(cmd *cobra.Command, args []string) error {
 				issueDisplayKey(c),
 				strVal(c, "title"),
 				strVal(c, "status"),
+				childRouteStep(c),
 				strVal(c, "priority"),
 				formatAssignee(c, actors),
 			})
@@ -3604,4 +3605,18 @@ func compactComments(comments []map[string]any) {
 			}
 		}
 	}
+}
+
+// childRouteStep is the sub-issue's route step for the table ("-" without a
+// route), with the route status when it is not simply running.
+func childRouteStep(c map[string]any) string {
+	route, _ := c["route"].(map[string]any)
+	if route == nil {
+		return "-"
+	}
+	step, status := strVal(route, "step"), strVal(route, "status")
+	if status == "" || status == "active" {
+		return step
+	}
+	return step + " (" + status + ")"
 }

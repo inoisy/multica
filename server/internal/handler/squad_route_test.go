@@ -155,6 +155,35 @@ func TestSquadDefaultRouteRunsTheIssueWithoutTheLeader(t *testing.T) {
 	}
 }
 
+func TestIssueRouteWinsOverSquadTemplate(t *testing.T) {
+	r := newSquadRouteRig(t)
+	// The squad's template sends dev to the bystander; the leader wrote this
+	// issue's own route with another dev, and that one runs.
+	r.setTemplate("dev:" + r.agents["bystander"] + ",qa:" + r.agents["qa"] + ",close:" + r.agents["lead"]).Want(http.StatusOK)
+	dbfx.Exec(t, `UPDATE issue SET metadata = jsonb_build_object('route', $2::text) WHERE id = $1`, r.issue, r.spec("dev", "qa", "close"))
+	r.assignToSquad()
+
+	if status, step := r.conveyorStatus(); status != "active" || step != "dev" {
+		t.Fatalf("route after assignment: status %q step %q", status, step)
+	}
+	if r.runs("dev") != 1 || r.runs("bystander") != 0 || r.runs("lead") != 0 {
+		t.Fatalf("dev=%d bystander=%d lead=%d runs, want the issue's dev only", r.runs("dev"), r.runs("bystander"), r.runs("lead"))
+	}
+}
+
+func TestIssueRouteStartsWithoutSquadTemplate(t *testing.T) {
+	r := newSquadRouteRig(t)
+	dbfx.Exec(t, `UPDATE issue SET metadata = jsonb_build_object('route', $2::text) WHERE id = $1`, r.issue, r.spec("dev", "qa", "close"))
+	r.assignToSquad()
+
+	if status, step := r.conveyorStatus(); status != "active" || step != "dev" {
+		t.Fatalf("route after assignment: status %q step %q", status, step)
+	}
+	if r.runs("dev") != 1 || r.runs("lead") != 0 {
+		t.Fatalf("dev=%d lead=%d runs, want the issue's dev only", r.runs("dev"), r.runs("lead"))
+	}
+}
+
 func TestSquadWithoutTemplateWakesTheLeader(t *testing.T) {
 	r := newSquadRouteRig(t)
 	r.assignToSquad()
@@ -216,5 +245,28 @@ func TestCompletedRouteStartsANewRoundOnReassignment(t *testing.T) {
 	}
 	if r.runs("dev") != 2 || r.runs("lead") != 0 {
 		t.Fatalf("dev=%d lead=%d, want a second dev run and no leader run", r.runs("dev"), r.runs("lead"))
+	}
+}
+
+func TestArchivedRouteStatusIsRestoredWhenTheRouteStarts(t *testing.T) {
+	r := newSquadRouteRig(t)
+	route := "dev:" + r.agents["dev"] + ",qa:" + r.agents["qa"] + ",review:" + r.agents["qa"] + ",close:" + r.agents["lead"]
+	// Someone archived the review status the route needs.
+	r.setTemplate(route).Want(http.StatusOK)
+	if dbfx.Count(t, "SELECT count(*) FROM issue_status WHERE workspace_id=$1 AND key='review'", testWorkspaceID) == 0 {
+		dbfx.Exec(t, `INSERT INTO issue_status (workspace_id, key, name, category, color, position)
+			VALUES ($1, 'review', 'Review', 'started', '#f59e0b', (SELECT coalesce(max(position), 0) + 1 FROM issue_status WHERE workspace_id = $1))`, testWorkspaceID)
+		dbfx.Cleanup(t, "DELETE FROM issue_status WHERE workspace_id=$1 AND key='review'", testWorkspaceID)
+	}
+	dbfx.Exec(t, `UPDATE issue_status SET archived_at = now() WHERE workspace_id = $1 AND key = 'review'`, testWorkspaceID)
+	dbfx.Cleanup(t, `UPDATE issue_status SET archived_at = NULL WHERE workspace_id = $1 AND key = 'review'`, testWorkspaceID)
+	dbfx.Exec(t, `UPDATE issue SET metadata = jsonb_build_object('route', $2::text) WHERE id = $1`, r.issue, route)
+	r.assignToSquad()
+
+	if status, step := r.conveyorStatus(); status != "active" || step != "dev" {
+		t.Fatalf("route after assignment: status %q step %q", status, step)
+	}
+	if dbfx.Count(t, "SELECT count(*) FROM issue_status WHERE workspace_id=$1 AND key='review' AND archived_at IS NULL", testWorkspaceID) != 1 {
+		t.Fatal("the archived review status was not restored")
 	}
 }

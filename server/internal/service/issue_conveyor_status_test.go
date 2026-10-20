@@ -32,13 +32,29 @@ func TestConveyorStatusCatalog(t *testing.T) {
 			t.Fatalf("existing status changed: %q %q", name, color)
 		}
 	})
-	for _, category := range []string{"done", "closed", "unstarted", "archived"} {
+	t.Run("archived status is restored by an owner", func(t *testing.T) {
+		r := newConveyorRig(t)
+		id := r.f.Insert(t, "issue_status", testutil.Cols{"workspace_id": r.f.WorkspaceID, "key": "qa", "name": "QA",
+			"color": "#123456", "category": "started", "archived_at": testutil.Raw("now()")})
+		r.enable()
+		if r.f.Count(t, "SELECT count(*) FROM issue_status WHERE id=$1 AND archived_at IS NULL", id) != 1 {
+			t.Fatal("the archived route status was not restored")
+		}
+	})
+	t.Run("member cannot restore an archived status", func(t *testing.T) {
+		r := newConveyorRig(t)
+		r.f.Insert(t, "issue_status", testutil.Cols{"workspace_id": r.f.WorkspaceID, "key": "qa", "name": "QA",
+			"color": "#123456", "category": "started", "archived_at": testutil.Raw("now()")})
+		r.f.Exec(t, "UPDATE member SET role='member' WHERE user_id=$1 AND workspace_id=$2", r.owner, r.f.WorkspaceID)
+		_, err := r.apply(ConveyorCommand{Action: ConveyorCmdEnable, Route: mustJSON(r.route("dev", "qa", "close"))})
+		if !errors.Is(err, ErrConveyorForbidden) || len(r.tasksOf("dev")) != 0 {
+			t.Fatalf("member restoring an archived status: %v", err)
+		}
+	})
+	for _, category := range []string{"done", "closed", "unstarted"} {
 		t.Run(category, func(t *testing.T) {
 			r := newConveyorRig(t)
 			cols := testutil.Cols{"workspace_id": r.f.WorkspaceID, "key": "qa", "name": "QA", "color": "#123456", "category": category}
-			if category == "archived" {
-				cols["category"], cols["archived_at"] = "started", testutil.Raw("now()")
-			}
 			r.f.Insert(t, "issue_status", cols)
 			_, err := r.apply(ConveyorCommand{Action: ConveyorCmdEnable, Route: mustJSON(r.route("dev", "qa", "close"))})
 			if !errors.Is(err, ErrConveyorConflict) || len(r.tasksOf("dev")) != 0 {
