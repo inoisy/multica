@@ -32,6 +32,19 @@ type acceptRouteView struct {
 	Status         string `json:"status"`
 	AcceptedCommit string `json:"accepted_commit"`
 	CurrentTaskID  string `json:"current_task_id"`
+	Route          []struct {
+		Step string `json:"step"`
+	} `json:"route"`
+}
+
+// hasDev reports whether the route has a dev step: work that must hand in a commit.
+func (v acceptRouteView) hasDev() bool {
+	for _, n := range v.Route {
+		if n.Step == "dev" {
+			return true
+		}
+	}
+	return false
 }
 
 type acceptEventPage struct {
@@ -93,9 +106,13 @@ func runIssueConveyorAccept(cmd *cobra.Command, args []string) error {
 	outcome, repo, commit := acceptOutcome{}, "", view.AcceptedCommit
 	artifact, err := acceptedArtifact(ctx, client, base, view.AcceptedCommit)
 	switch {
+	case view.AcceptedCommit == "" && view.hasDev():
+		// A route with dev must have accepted a commit by now: something lost
+		// it, and passing would close the issue with nothing merged.
+		outcome = coordinator("the route has a dev step but no accepted commit")
 	case view.AcceptedCommit == "":
 		// The server adds acceptance to every reviewed route; work without a
-		// commit (analysis, a plan) simply has nothing to merge.
+		// commit (a plan, docs) simply has nothing to merge.
 		outcome = nothingToAccept("no earlier step handed in a commit")
 	case err != nil:
 		outcome = coordinator(err.Error())
