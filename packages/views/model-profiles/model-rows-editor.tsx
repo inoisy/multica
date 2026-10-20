@@ -26,6 +26,7 @@ export function ModelRowsEditor({
   members,
   currentUserId,
   disabled,
+  single = false,
 }: {
   rows: ModelOptionInput[];
   onChange: (rows: ModelOptionInput[]) => void;
@@ -33,6 +34,8 @@ export function ModelRowsEditor({
   members: MemberWithUser[];
   currentUserId: string | null;
   disabled?: boolean;
+  /** One pinned model: no order, no extra rows. */
+  single?: boolean;
 }) {
   const { t } = useT("agents");
   const [advanced, setAdvanced] = useState<Set<number>>(new Set());
@@ -61,6 +64,7 @@ export function ModelRowsEditor({
         const online = runtime?.status === "online" && isRuntimeUsableForUser(runtime, currentUserId);
         return (
           <SettingsCard key={index}>
+            {single ? null : (
             <SettingsRow
               label={index === 0 ? t(($) => $.models.row_primary) : t(($) => $.models.row_n, { n: index + 1 })}
             >
@@ -94,6 +98,7 @@ export function ModelRowsEditor({
                 </Button>
               </div>
             </SettingsRow>
+            )}
             <SettingsRow label={t(($) => $.models.runtime)} size="select-wide">
               <RuntimePicker
                 variant="field"
@@ -155,10 +160,12 @@ export function ModelRowsEditor({
           </SettingsCard>
         );
       })}
-      <Button size="sm" variant="outline" disabled={disabled || runtimes.length === 0} onClick={add}>
-        <Plus />
-        {t(($) => $.models.add_row)}
-      </Button>
+      {single && rows.length > 0 ? null : (
+        <Button size="sm" variant="outline" disabled={disabled || runtimes.length === 0} onClick={add}>
+          <Plus />
+          {t(($) => $.models.add_row)}
+        </Button>
+      )}
     </div>
   );
 }

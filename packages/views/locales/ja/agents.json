@@ -182,7 +182,8 @@
     "edit_description_title": "説明を編集",
     "description_placeholder": "このエージェントは何をしますか？",
     "save": "保存",
-    "cancel": "キャンセル"
+    "cancel": "キャンセル",
+    "model_routed": "実行のモデルは下の「モデル」セクションで選ばれます。"
   },
   "overview": {
     "agent_context": "エージェント",
@@ -1017,7 +1018,21 @@
     "state_limited": "on a limit until {{time}}",
     "state_offline": "runtime offline",
     "state_missing": "runtime deleted",
-    "state_not_permitted": "runtime not available to the agent"
+    "state_not_permitted": "runtime not available to the agent",
+    "mode_label": "モデルの決め方",
+    "mode_profile": "プロファイル",
+    "mode_profile_hint": "複数のエージェントで共有するリスト",
+    "mode_chain": "独自チェーン",
+    "mode_chain_hint": "このエージェント専用の予備付きリスト",
+    "mode_single": "単一モデル",
+    "mode_one_hint": "このモデルのみ、予備なし",
+    "mode_fields_hint": "プロファイルも独自モデルもありません。実行は上のフィールドのランタイムとモデルを使います。",
+    "switch_to_profile": "プロファイル「{{name}}」を使う",
+    "profile_unused": "エージェントに独自モデルがある間、プロファイル「{{name}}」は使われません。",
+    "chain_title": "独自チェーン",
+    "one_title": "エージェントのモデル",
+    "one_hint": "予備なし: ランタイムが上限またはオフラインの場合、実行はリセットまで待機し、オーナーに通知されます。",
+    "edit_single": "モデルを変更"
   },
   "model_profiles": {
     "title": "Profiles",
@@ -1167,6 +1182,85 @@
       "key_label": "API キー",
       "done": "ログインしました",
       "failed": "ログインは完了しませんでした。現在の認証情報は変更されていません"
+    },
+    "limited_banner": "エージェント上限に到達: {{titles}}。エージェントはプロファイルの次のモデルに移ります。",
+    "spent_by": "使用元:",
+    "spent_by_none": "ランタイムなし",
+    "groups": {
+      "claude": "Claude",
+      "codex": "Codex",
+      "api": "API キー"
+    },
+    "groups_hint": {
+      "claude": "サブスクリプション、claude setup-token のトークンでサインイン",
+      "codex": "ChatGPT サブスクリプション、リンクとコードでサインイン",
+      "api": "キーごとの課金、新しいキーでサインイン"
+    },
+    "menu": {
+      "open": "「{{title}}」の操作",
+      "caps": "エージェントの上限…",
+      "runtime": "消費順: {{runtime}}…",
+      "rename": "名前を変更…",
+      "rename_title": "サブスクリプション名",
+      "delete": "サブスクリプションを削除…",
+      "delete_confirm": "「{{title}}」を削除しますか？すべてのランタイムから外れます。資格情報ファイルはサーバーに残ります。"
+    },
+    "runtime_dialog": {
+      "agents": "このランタイムをチェーンに持つエージェント: {{names}}。",
+      "no_agents": "このランタイムをチェーンに持つエージェントはいません。",
+      "order_title": "サブスクリプションの順序",
+      "empty": "このランタイムにサブスクリプションがありません。エージェントは起動しません。",
+      "move_up": "上へ: {{name}}",
+      "move_down": "下へ: {{name}}",
+      "remove": "{{name}} を外す",
+      "add": "サブスクリプションを追加",
+      "add_placeholder": "サブスクリプションを選択…",
+      "spend_title": "消費方法",
+      "first_hint": "エージェントにまだ余裕がある最初のサブスクリプション",
+      "balanced_hint": "使用可能なうち今週の使用量が最も少ないもの"
+    },
+    "add": {
+      "open": "サブスクリプションを追加",
+      "title": "サブスクリプションを追加",
+      "description": "アカウントはこのページに表示され、ランタイムに含めるとエージェントが使用します。",
+      "step_kind": "1. 接続するもの",
+      "kind_claude": "Claude",
+      "kind_claude_hint": "Pro / Max サブスクリプション",
+      "kind_codex": "Codex",
+      "kind_codex_hint": "ChatGPT サブスクリプション",
+      "kind_api": "API キー",
+      "kind_api_hint": "z.ai、MiniMax、OpenRouter",
+      "provider": "プロバイダー",
+      "providers": {
+        "zai": "z.ai（GLM、コーディングプラン）",
+        "minimax": "MiniMax（コーディングプラン）",
+        "openrouter": "OpenRouter（従量課金）",
+        "locia": "Lotsia モデル（cisco VPN が必要）"
+      },
+      "step_name": "2. 名前",
+      "name_placeholder": "例: Claude、3 つ目のサブスクリプション",
+      "name_hint": "ID {{id}} と資格情報 {{path}} は自動で作成されます。",
+      "step_login": "3. サインイン",
+      "codex_login": "追加後、カードの「再度サインイン」を押すとリンクとコードが表示されます。",
+      "claude_login": "ブラウザでこの Claude アカウントにサインインしたコンピューターで claude setup-token を実行し、トークンを貼り付けます。",
+      "key_login": "プロバイダーのダッシュボードでキーを作成し、ここに貼り付けます。",
+      "secret_hint": "サーバーの資格情報ファイル（権限 600）に直接保存され、表示されることはありません。空のままにして後でカードからサインインすることもできます。",
+      "step_runtimes": "4. 使用先",
+      "placement": "消費順の位置: {{runtime}}",
+      "placement_last": "最後",
+      "placement_first": "最初",
+      "unpick": "{{runtime}} では使わない",
+      "runtimes_search": "ランタイムを選択（{{provider}}）…",
+      "runtimes_filter": "ランタイムを検索…",
+      "runtimes_none": "このプロバイダーのランタイムはありません",
+      "runtime_empty": "サブスクリプションなし",
+      "runtimes_hint": "このプロバイダーのランタイムのみ表示します。未選択の場合、サブスクリプションは作成されますがエージェントは使用しません。",
+      "step_caps": "5. エージェントへの割り当て",
+      "no_windows": "プロバイダーにクォータ枠がありません。エージェントはプロバイダーの上限まで使えます。",
+      "submit": "追加",
+      "submit_login": "追加してサインイン",
+      "done": "サブスクリプション「{{title}}」を追加しました",
+      "done_codex": "サブスクリプション「{{title}}」を追加しました。カードからサインインしてください"
     }
   }
 }
