@@ -1334,3 +1334,54 @@ func TestConveyorResumeRerunsPeerWhoseBranchMoved(t *testing.T) {
 		t.Fatalf("moved branch, yet the backend was skipped: %+v", view)
 	}
 }
+
+// STT-340: review sent the work back for the frontend only; the coordinator
+// names it, and the backend that already handed in is not run again.
+func TestConveyorResumeAtNamedExecutor(t *testing.T) {
+	r := twoDevRig(t)
+	const back, front = "abcdef1234567", "1234567abcdef"
+	r.pass("dev", back)
+	r.pass("front", front)
+	qa := r.start(r.only("qa"))
+	r.mustSubmit(qa, r.result(ConveyorOutcomeChangesRequested, front))
+	r.complete(qa)
+
+	from := "dev:" + util.UUIDToString(r.agents["front"])
+	view := r.mustApply(ConveyorCommand{Action: ConveyorCmdResume, FromStep: from, ExpectedRevision: r.revision()})
+	if view.CurrentIdx != 1 || view.Status != ConveyorActive {
+		t.Fatalf("resumed at %+v; journal:%s", view, r.dump())
+	}
+	if got := len(r.tasksOf("dev")); got != 1 {
+		t.Fatalf("the backend was run again: %d runs", got)
+	}
+	if got := len(r.tasksOf("front")); got != 2 {
+		t.Fatalf("frontend has %d runs, want 2", got)
+	}
+}
+
+func TestConveyorResumeRejectsExecutorNotOnStep(t *testing.T) {
+	r := twoDevRig(t)
+	r.pass("dev", "abcdef1234567")
+	r.cutFront()
+	// The frontend is a dev executor, not a qa one.
+	from := "qa:" + util.UUIDToString(r.agents["front"])
+	if _, err := r.apply(ConveyorCommand{Action: ConveyorCmdResume, FromStep: from, ExpectedRevision: r.revision()}); err == nil {
+		t.Fatalf("resume at %s was accepted", from)
+	}
+	if _, err := r.apply(ConveyorCommand{Action: ConveyorCmdResume, FromStep: "dev:Нет такого", ExpectedRevision: r.revision()}); err == nil {
+		t.Fatal("resume at an unknown agent was accepted")
+	}
+}
+
+func TestSplitFromStep(t *testing.T) {
+	for in, want := range map[string][2]string{
+		"dev":                   {"dev", ""},
+		" DEV : Фронтенд ":      {"dev", "Фронтенд"},
+		"review:Учёба — Критик": {"review", "Учёба — Критик"},
+		"":                      {"", ""},
+	} {
+		if step, agent := splitFromStep(in); step != want[0] || agent != want[1] {
+			t.Errorf("splitFromStep(%q) = %q, %q", in, step, agent)
+		}
+	}
+}
