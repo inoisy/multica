@@ -146,6 +146,12 @@ func (s *Selector) Due(sub Subscription) bool {
 // ProbeNow measures sub and remembers the result.
 func (s *Selector) ProbeNow(ctx context.Context, sub Subscription) Report {
 	st, err := s.Prober.Probe(ctx, sub)
+	return s.Record(sub, st, err)
+}
+
+// Record remembers a measurement taken outside ProbeNow, such as the check of
+// a pasted token at sign-in, so the probe loop does not repeat it at once.
+func (s *Selector) Record(sub Subscription, st State, err error) Report {
 	s.mu.Lock()
 	if s.measured == nil {
 		s.measured = map[string]State{}
