@@ -51,3 +51,35 @@ func TestQuotaReasonsAndSubsPickWitness(t *testing.T) {
 		t.Fatalf("normalize subs-pick: %s", got)
 	}
 }
+
+// TOON-274: the daemon refused at 20:30:18 with the reset of claude-main,
+// 20:30 the same evening. The reset had just passed; the clock pattern read
+// "20" of the year as an hour and parked the runtime until 20:00 tomorrow.
+func TestQuotaResetPastDateIsNotAClock(t *testing.T) {
+	now := time.Date(2026, 10, 20, 20, 30, 18, 0, time.UTC)
+	text := "usage limit: подписки runtime выше лимита агентам (остаток — резерв людям): claude-second неделя 54% ≥ 50%; claude-main 5ч 97% ≥ 75%, reset at 2026-10-20 20:30 UTC"
+	if got := ParseQuotaReset(text, "Claude · подписки", "claude", now); !got.Equal(now.Add(quotaPastResetWait)) {
+		t.Fatalf("past reset: got %v, want %v", got, now.Add(quotaPastResetWait))
+	}
+	if got := ParseQuotaReset(text, "Claude · подписки", "claude", now.Add(-time.Hour)); !got.Equal(time.Date(2026, 10, 20, 20, 30, 0, 0, time.UTC)) {
+		t.Fatalf("future reset: got %v", got)
+	}
+}
+
+func TestQuotaUnavailableUntilPrefersReported(t *testing.T) {
+	now := time.Date(2026, 10, 20, 20, 0, 0, 0, time.UTC)
+	text := "usage limit: …, reset at 2026-10-21 20:00 UTC"
+	reported := now.Add(30 * time.Minute)
+	if got := QuotaUnavailableUntil(reported, text, "claude", "claude", now); !got.Equal(reported) {
+		t.Fatalf("reported reset wins: %v", got)
+	}
+	if got := QuotaUnavailableUntil(time.Time{}, text, "claude", "claude", now); !got.Equal(time.Date(2026, 10, 21, 20, 0, 0, 0, time.UTC)) {
+		t.Fatalf("no report: the text, got %v", got)
+	}
+	if got := QuotaUnavailableUntil(now.Add(-time.Minute), text, "claude", "claude", now); !got.Equal(time.Date(2026, 10, 21, 20, 0, 0, 0, time.UTC)) {
+		t.Fatalf("past report: the text, got %v", got)
+	}
+	if got := QuotaUnavailableUntil(now.Add(30*24*time.Hour), text, "claude", "claude", now); !got.Equal(now.Add(quotaMaxWait)) {
+		t.Fatalf("far report clamped: %v", got)
+	}
+}

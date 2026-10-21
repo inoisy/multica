@@ -110,3 +110,51 @@ func TestModelOptionCLIReasonLabels(t *testing.T) {
 		t.Fatalf("waits: %s", got)
 	}
 }
+
+// TOON-274: the Critic's run waited for Claude on a cross step while the
+// agent's own preview said Codex. The route run is shown with its step and
+// the preview is marked as the choice outside a route.
+func TestAgentModelsShowsRouteRuns(t *testing.T) {
+	raw := json.RawMessage(`{"profile_name":"Сильная","preview":{"source":"agent_profile","profile_name":"Сильная","reason":"primary","position":1,"runtime_name":"Codex · 1","chosen":{"position":1,"model":"gpt-6.1-sol"},"rows":[]},
+		"route_runs":[{"issue_identifier":"TOON-274","step":"critic","cross":"build","choice":{"source":"agent_profile","profile_name":"Сильная","reason":"all_unavailable","excluded_family":"codex","rows":[]}}]}`)
+	cmd := newAgentModelsCommand()
+	_ = cmd.Flags().Set("output", "table")
+	out, err := captureStdout(t, func() error { return printAgentModels(cmd, raw) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"Off-route:", "Route run:  TOON-274 step critic[cross=build]", "the run waits", "family codex ruled out"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output lacks %q:\n%s", want, out)
+		}
+	}
+	out, _ = captureStdout(t, func() error {
+		return printAgentModels(cmd, json.RawMessage(`{"preview":{"source":"agent_list","reason":"primary","rows":[]},"route_runs":[]}`))
+	})
+	if !strings.Contains(out, "Next run:") || strings.Contains(out, "Route run") {
+		t.Errorf("no route run: %s", out)
+	}
+}
+
+func TestRuntimeUnavailableRecheck(t *testing.T) {
+	var path, method string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path, method = r.URL.Path, r.Method
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"lifted":    []map[string]any{{"runtime_name": "Claude · подписки", "until": "2026-10-21T20:00:00Z", "reason": "usage limit: подписки runtime выше лимита агентам"}},
+			"remaining": []map[string]any{},
+		})
+	}))
+	t.Cleanup(srv.Close)
+	t.Setenv("MULTICA_SERVER_URL", srv.URL)
+	t.Setenv("MULTICA_WORKSPACE_ID", "ws-1")
+	t.Setenv("MULTICA_TOKEN", "test-token")
+	cmd := newRuntimeUnavailableRecheckCommand()
+	out, err := captureStdout(t, func() error { return cmd.RunE(cmd, nil) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if method != "POST" || path != "/api/runtime-unavailable/recheck" || !strings.Contains(out, "Lifted:") || !strings.Contains(out, "Claude · подписки") {
+		t.Fatalf("%s %s:\n%s", method, path, out)
+	}
+}

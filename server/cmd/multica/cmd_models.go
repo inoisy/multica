@@ -60,6 +60,7 @@ type modelChoice struct {
 	RuntimeName       string       `json:"runtime_name"`
 	ExhaustedProfiles []string     `json:"exhausted_profiles"`
 	WaitUntil         *string      `json:"wait_until"`
+	ExcludedFamily    string       `json:"excluded_family"`
 	Rows              []modelRow   `json:"rows"`
 }
 
@@ -294,6 +295,13 @@ func printAgentModels(cmd *cobra.Command, raw json.RawMessage) error {
 			Identifier  string `json:"identifier"`
 			ProfileName string `json:"profile_name"`
 		} `json:"issues"`
+		RouteRuns []struct {
+			IssueIdentifier string       `json:"issue_identifier"`
+			Step            string       `json:"step"`
+			ProfileName     string       `json:"profile_name"`
+			Cross           string       `json:"cross"`
+			Choice          *modelChoice `json:"choice"`
+		} `json:"route_runs"`
 	}
 	if err := json.Unmarshal(raw, &view); err != nil {
 		return err
@@ -307,7 +315,37 @@ func printAgentModels(cmd *cobra.Command, raw json.RawMessage) error {
 		fmt.Print(" (own list differs from the profile)")
 	}
 	fmt.Println()
-	fmt.Printf("Next run:   %s · %s\n", sourceLabel(view.Preview), reasonLabel(view.Preview))
+	// Preview knows nothing of route steps: a run of a step chooses from the
+	// step's profile and may have a model family ruled out (cross).
+	nextLabel := "Next run:  "
+	if len(view.RouteRuns) > 0 {
+		nextLabel = "Off-route: "
+	}
+	fmt.Printf("%s %s · %s\n", nextLabel, sourceLabel(view.Preview), reasonLabel(view.Preview))
+	for _, rr := range view.RouteRuns {
+		if rr.Choice == nil {
+			continue
+		}
+		step := rr.Step
+		var opts []string
+		if rr.ProfileName != "" {
+			opts = append(opts, "profile="+rr.ProfileName)
+		}
+		if rr.Cross != "" {
+			opts = append(opts, "cross="+rr.Cross)
+		}
+		if len(opts) > 0 {
+			step += "[" + strings.Join(opts, ";") + "]"
+		}
+		line := fmt.Sprintf("Route run:  %s step %s · %s · %s", rr.IssueIdentifier, step, sourceLabel(*rr.Choice), reasonLabel(*rr.Choice))
+		if rr.Choice.Chosen != nil {
+			line += fmt.Sprintf(" → %s %s", rr.Choice.RuntimeName, rr.Choice.Chosen.Model)
+		}
+		if rr.Choice.ExcludedFamily != "" {
+			line += " (family " + rr.Choice.ExcludedFamily + " ruled out)"
+		}
+		fmt.Println(line)
+	}
 	if view.Last != nil && view.Last.Choice != nil {
 		on := view.Last.IssueIdentifier
 		if on == "" {
@@ -436,17 +474,63 @@ func newRuntimeUnavailableCommand() *cobra.Command {
 			if outputJSON(cmd) {
 				return cli.PrintJSON(os.Stdout, out)
 			}
-			rows := make([][]string, 0, len(out))
-			for _, r := range out {
-				until := strVal(r, "until")
-				rows = append(rows, []string{strVal(r, "runtime_name"), formatLocal(&until), strVal(r, "reason")})
+			printUnavailableRows(out)
+			return nil
+		},
+	}
+	c.Flags().String("output", "table", "Output format: table or json")
+	c.AddCommand(newRuntimeUnavailableRecheckCommand())
+	return c
+}
+
+func newRuntimeUnavailableRecheckCommand() *cobra.Command {
+	c := &cobra.Command{
+		Use:   "recheck",
+		Short: "Re-apply subscription pools to the latest usage and lift stale refusals",
+		Long: "Lifts a limit a failed run wrote because the daemon refused it on the pool's own agent caps, " +
+			"once the latest usage shows a subscription of the pool usable; the waiting runs start. " +
+			"A provider's own limit stays until its reset. Owners and admins only.",
+		Args: exactArgs(0),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, ctx, cancel, err := modelsClient(cmd)
+			if err != nil {
+				return err
 			}
-			cli.PrintTable(os.Stdout, []string{"RUNTIME", "UNTIL", "REASON"}, rows)
+			defer cancel()
+			var out struct {
+				Lifted    []map[string]any `json:"lifted"`
+				Remaining []map[string]any `json:"remaining"`
+			}
+			if err := client.PostJSON(ctx, "/api/runtime-unavailable/recheck", map[string]any{}, &out); err != nil {
+				return err
+			}
+			if outputJSON(cmd) {
+				return cli.PrintJSON(os.Stdout, out)
+			}
+			if len(out.Lifted) == 0 {
+				fmt.Println("Nothing stale to lift.")
+			} else {
+				fmt.Println("Lifted:")
+				printUnavailableRows(out.Lifted)
+			}
+			if len(out.Remaining) > 0 {
+				fmt.Println("Still unavailable:")
+				printUnavailableRows(out.Remaining)
+			}
 			return nil
 		},
 	}
 	c.Flags().String("output", "table", "Output format: table or json")
 	return c
+}
+
+func printUnavailableRows(list []map[string]any) {
+	rows := make([][]string, 0, len(list))
+	for _, r := range list {
+		until := strVal(r, "until")
+		rows = append(rows, []string{strVal(r, "runtime_name"), formatLocal(&until), strVal(r, "reason")})
+	}
+	cli.PrintTable(os.Stdout, []string{"RUNTIME", "UNTIL", "REASON"}, rows)
 }
 
 func profileRowInputs(rows []modelRow) []map[string]any {

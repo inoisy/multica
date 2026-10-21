@@ -11,6 +11,7 @@ import (
 	"github.com/multica-ai/multica/server/internal/events"
 	"github.com/multica-ai/multica/server/internal/testutil"
 	"github.com/multica-ai/multica/server/internal/util"
+	"github.com/multica-ai/multica/server/pkg/taskfailure"
 	db "github.com/multica-ai/multica/server/pkg/db/generated"
 )
 
@@ -505,5 +506,99 @@ func TestQuotaOnRouteStepRetriesUnderTheSameAction(t *testing.T) {
 	// A manual rerun meanwhile does not add a second successor.
 	if again, err := r.f.svc.TaskSvc.RerunIssue(r.ctx, r.issue, step.ID, pgtype.UUID{}, r.owner, nil); err != nil || again.ID != repeat.ID {
 		t.Fatalf("rerun next to the repeat: %v %v", err, again)
+	}
+}
+
+// The daemon's reported reset parks the runtime, not a time read back from
+// the refusal text; without one, a reset that has just passed holds the
+// runtime minutes, not until the same clock tomorrow (TOON-274).
+func TestQuotaRefusalParksUntilReportedReset(t *testing.T) {
+	r := newModelClaimRig(t)
+	agent := r.agent("models reported reset", r.strong)
+	now := time.Now().UTC()
+	past := now.Add(-time.Minute).Format("2006-01-02 15:04")
+	text := "usage limit: подписки runtime выше лимита агентам (остаток — резерв людям): a неделя 54% ≥ 50%; b 5ч 97% ≥ 75%, reset at " + past + " UTC"
+	until := func() time.Time {
+		var u time.Time
+		r.fx.QueryRow(t, "SELECT until FROM runtime_unavailable WHERE runtime_id=$1 ORDER BY created_at DESC LIMIT 1", r.rt["codex"]).Scan(&u)
+		return u
+	}
+
+	task := r.enqueue(agent, pgtype.UUID{})
+	if r.claim("codex") == nil {
+		t.Fatal("no claim")
+	}
+	reported := now.Add(25 * time.Minute).Truncate(time.Second)
+	if _, _, err := r.svc.FailTaskWithQuotaReset(r.ctx, task.ID, text, "", "", "", "", false, "", "", reported); err != nil {
+		t.Fatal(err)
+	}
+	if got := until(); !got.Equal(reported) {
+		t.Fatalf("until %v, want reported %v", got, reported)
+	}
+
+	r.fx.Exec(t, "DELETE FROM runtime_unavailable WHERE workspace_id=$1", r.ws)
+	r.fx.Exec(t, "UPDATE agent_task_queue SET status='cancelled' WHERE agent_id=$1 AND status IN ('queued','dispatched','running')", agent.ID)
+	task = r.enqueue(agent, pgtype.UUID{})
+	if r.claim("codex") == nil {
+		t.Fatal("no second claim")
+	}
+	if _, err := r.svc.FailTask(r.ctx, task.ID, text, "", "", "", "", false, "", ""); err != nil {
+		t.Fatal(err)
+	}
+	if d := until().Sub(now); d < 4*time.Minute || d > 6*time.Minute {
+		t.Fatalf("past reset in the text: parked %v, want ~5m", d)
+	}
+}
+
+// TOON-275: a run parked by the daemon's refusal on the pool's own caps
+// waits; once that refusal is lifted the very same queued run is handed out
+// — no second run of it. A provider's own limit on the runtime is not lifted
+// with it.
+func TestLocalRefusalLiftWakesTheSameRunOnly(t *testing.T) {
+	r := newModelClaimRig(t)
+	agent := r.agent("models local refusal", r.strong)
+	failed := r.enqueue(agent, pgtype.UUID{})
+	r.fx.Exec(t, "UPDATE agent_task_queue SET status='failed' WHERE id=$1", failed.ID)
+	tomorrow := time.Now().Add(24 * time.Hour)
+	refusal := "agent_provider_quota_limit: usage limit: подписки runtime выше лимита агентам (остаток — резерв людям): a неделя 54% ≥ 50%"
+	r.fx.Exec(t, "INSERT INTO runtime_unavailable (workspace_id, runtime_id, until, reason, task_id) VALUES ($1,$2,$3,$4,$5)", r.ws, r.rt["codex"], tomorrow, refusal, failed.ID)
+	r.limit("claude", tomorrow)
+	r.limit("glm", tomorrow)
+	waiting := r.enqueue(agent, pgtype.UUID{})
+	if c := choiceOf(t, waiting); c.Reason != ModelReasonAllUnavailable {
+		t.Fatalf("all exhausted must wait: %+v", c)
+	}
+	if r.claim("codex") != nil {
+		t.Fatal("parked runtime claimed")
+	}
+
+	lift := func() []db.RuntimeUnavailable {
+		rows, err := r.q.DeleteRuntimeLocalRefusals(r.ctx, db.DeleteRuntimeLocalRefusalsParams{
+			RuntimeID: util.MustParseUUID(r.rt["codex"]), CapsWitness: taskfailure.SubsPickRefusalWitness, DisabledWitness: "подписки среды отключены",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return rows
+	}
+	if rows := lift(); len(rows) != 1 {
+		t.Fatalf("lifted %d refusal rows", len(rows))
+	}
+	if n, err := r.svc.SweepModelRouting(r.ctx); err != nil || n == 0 {
+		t.Fatalf("sweep after the lift changed %d (%v)", n, err)
+	}
+	got := r.claim("codex")
+	if got == nil || got.ID != waiting.ID {
+		t.Fatalf("the waiting run starts: %+v", got)
+	}
+	if n := r.count("SELECT count(*) FROM agent_task_queue WHERE agent_id=$1 AND status IN ('queued','dispatched','running')", agent.ID); n != 1 {
+		t.Fatalf("runs of the agent: %d, want the one", n)
+	}
+
+	// A provider's limit names no pool cap: it stays.
+	r.fx.Exec(t, "INSERT INTO runtime_unavailable (workspace_id, runtime_id, until, reason, task_id) VALUES ($1,$2,$3,$4,$5)", r.ws, r.rt["codex"], tomorrow,
+		"agent_provider_quota_limit: You've hit your usage limit. Try again at 10:44", failed.ID)
+	if rows := lift(); len(rows) != 0 {
+		t.Fatalf("provider limit lifted: %+v", rows)
 	}
 }

@@ -54,8 +54,9 @@ func (s *Selector) interval(sub Subscription) time.Duration {
 }
 
 // StateFor is the freshest trustworthy load of sub: the daemon's own probe or
-// the server's snapshot, whichever is newer and not stale. The credential is
-// checked on disk every time — a missing file must never be spent.
+// the server's snapshot, whichever is newer and not stale, with the windows
+// whose reset has passed zeroed. The credential is checked on disk every
+// time — a missing file must never be spent.
 func (s *Selector) StateFor(sub Subscription) State {
 	check := s.CheckCredentialFunc
 	if check == nil {
@@ -77,7 +78,7 @@ func (s *Selector) StateFor(sub Subscription) State {
 	if cred != CredentialPresent || best.Credential == "" || best.Credential == CredentialUnknown {
 		best.Credential = cred
 	}
-	return best
+	return best.Settle(s.now())
 }
 
 // Choice is the outcome for one run.
@@ -86,6 +87,9 @@ type Choice struct {
 	Marks        []Mark
 	// Blocked is the refusal text for an agent run, or "".
 	Blocked string
+	// BlockedUntil is the earliest reset among the refused pool's
+	// subscriptions; zero when one of them names none.
+	BlockedUntil time.Time
 }
 
 // Choose picks the subscription for a run of pool. agentRun holds back the
@@ -100,6 +104,7 @@ func (s *Selector) Choose(pool Pool, agentRun bool) (Choice, bool) {
 		c := Choice{Subscription: pool.Subscriptions[0]}
 		if agentRun {
 			c.Blocked = DisabledText(pool.Subscriptions)
+			c.BlockedUntil = disabledUntil(pool.Subscriptions)
 		}
 		return c, true
 	}
@@ -115,6 +120,9 @@ func (s *Selector) Choose(pool Pool, agentRun bool) (Choice, bool) {
 	}
 	if agentRun {
 		c.Blocked = Blocked(marks)
+		if c.Blocked != "" {
+			c.BlockedUntil = FreeAt(marks, s.now(), 0)
+		}
 	}
 	return c, true
 }
@@ -164,4 +172,19 @@ func (s *Selector) ProbeDue(ctx context.Context, subs []Subscription) []Report {
 		out = append(out, s.ProbeNow(ctx, sub))
 	}
 	return out
+}
+
+// disabledUntil is the earliest end of the subscriptions' disabling; zero
+// when none names one.
+func disabledUntil(subs []Subscription) time.Time {
+	var earliest time.Time
+	for _, sub := range subs {
+		if sub.DisabledUntil == nil {
+			continue
+		}
+		if t, err := time.Parse(time.RFC3339, *sub.DisabledUntil); err == nil && (earliest.IsZero() || t.Before(earliest)) {
+			earliest = t
+		}
+	}
+	return earliest
 }

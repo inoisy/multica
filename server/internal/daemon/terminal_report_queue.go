@@ -43,19 +43,20 @@ const (
 // untouched and reported on every replay pass; downgrading must never delete a
 // payload merely because the older binary cannot decode it.
 type persistedTerminalTaskReport struct {
-	Version               int       `json:"version"`
-	CreatedAt             time.Time `json:"created_at"`
-	Kind                  string    `json:"kind"`
-	TaskID                string    `json:"task_id"`
-	Output                string    `json:"output,omitempty"`
-	BranchName            string    `json:"branch_name,omitempty"`
-	ErrorMessage          string    `json:"error,omitempty"`
-	SessionID             string    `json:"session_id,omitempty"`
-	WorkDir               string    `json:"work_dir,omitempty"`
-	DurableWorkDir        string    `json:"durable_work_dir,omitempty"`
-	FailureReason         string    `json:"failure_reason,omitempty"`
-	SessionRolloutMissing bool      `json:"session_rollout_missing,omitempty"`
-	RetiredSessionID      string    `json:"retired_session_id,omitempty"`
+	Version               int        `json:"version"`
+	CreatedAt             time.Time  `json:"created_at"`
+	Kind                  string     `json:"kind"`
+	TaskID                string     `json:"task_id"`
+	Output                string     `json:"output,omitempty"`
+	BranchName            string     `json:"branch_name,omitempty"`
+	ErrorMessage          string     `json:"error,omitempty"`
+	SessionID             string     `json:"session_id,omitempty"`
+	WorkDir               string     `json:"work_dir,omitempty"`
+	DurableWorkDir        string     `json:"durable_work_dir,omitempty"`
+	FailureReason         string     `json:"failure_reason,omitempty"`
+	SessionRolloutMissing bool       `json:"session_rollout_missing,omitempty"`
+	RetiredSessionID      string     `json:"retired_session_id,omitempty"`
+	QuotaResetAt          *time.Time `json:"quota_reset_at,omitempty"`
 
 	PermanentRejectionCount   int        `json:"permanent_rejection_count,omitempty"`
 	FirstPermanentRejectionAt *time.Time `json:"first_permanent_rejection_at,omitempty"`
@@ -146,7 +147,15 @@ func persistedTerminalReport(report terminalTaskReport, createdAt time.Time) (pe
 		FailureReason:         report.failureReason,
 		SessionRolloutMissing: report.sessionRolloutMissing,
 		RetiredSessionID:      report.retiredSessionID,
+		QuotaResetAt:          timePtr(report.quotaResetAt),
 	}, nil
+}
+
+func timePtr(t time.Time) *time.Time {
+	if t.IsZero() {
+		return nil
+	}
+	return &t
 }
 
 func (record persistedTerminalTaskReport) terminalReport() (terminalTaskReport, error) {
@@ -177,7 +186,15 @@ func (record persistedTerminalTaskReport) terminalReport() (terminalTaskReport, 
 		failureReason:         record.FailureReason,
 		sessionRolloutMissing: record.SessionRolloutMissing,
 		retiredSessionID:      record.RetiredSessionID,
+		quotaResetAt:          derefTime(record.QuotaResetAt),
 	}, nil
+}
+
+func derefTime(t *time.Time) time.Time {
+	if t == nil {
+		return time.Time{}
+	}
+	return *t
 }
 
 func (s *terminalReportStore) ensureDir() error {

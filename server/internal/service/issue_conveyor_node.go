@@ -163,6 +163,8 @@ func (n ConveyorNode) backRounds() int32 {
 type conveyorRunModel struct {
 	ProfileID     pgtype.UUID
 	ExcludeFamily string
+	// Node is the step the run serves; nil for a run outside a route.
+	Node *ConveyorNode
 }
 
 // RunModel reads the options of the node a run serves. The family to avoid is
@@ -198,6 +200,7 @@ func (s *IssueConveyorService) RunModel(ctx context.Context, q *db.Queries, task
 	if node == nil {
 		return out, nil
 	}
+	out.Node = node
 	if node.ProfileID != "" {
 		out.ProfileID, _ = util.ParseUUID(node.ProfileID)
 	}
