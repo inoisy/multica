@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -188,6 +189,8 @@ func (d *Daemon) handleSubscriptionLogin(ctx context.Context, runtimeID string, 
 	}
 	defer subscriptionLogins.Delete(p.Key)
 	log := d.logger.With("subscription", p.Key, "login_id", p.ID, "auth", p.Auth)
+	sub := subscriptions.Subscription{Key: p.Key, Provider: p.Provider, Auth: p.Auth, CredentialPath: p.CredentialPath}
+	var probe subscriptions.Report
 	switch p.Auth {
 	case "codex_auth":
 		codexPath := "codex"
@@ -209,23 +212,75 @@ func (d *Daemon) handleSubscriptionLogin(ctx context.Context, runtimeID string, 
 			d.reportSubscriptionLogin(ctx, runtimeID, p.ID, "failed", nil, nil, err.Error())
 			return
 		}
+		probeCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		probe = d.subscriptionSelector().ProbeNow(probeCtx, sub)
+		cancel()
 	case "claude_oauth", "api_key":
 		value, err := subscriptions.ValidateSecret(p.Auth, p.Token)
 		if err != nil {
 			d.reportSubscriptionLogin(ctx, runtimeID, p.ID, "failed", nil, nil, err.Error())
 			return
 		}
-		if err := subscriptions.WriteCredential(p.CredentialPath, []byte(value+"\n")); err != nil {
-			log.Warn("subscription credential write failed", "error", err)
-			d.reportSubscriptionLogin(ctx, runtimeID, p.ID, "failed", nil, nil, "не удалось записать учётку: "+err.Error())
+		rep, err := d.replaceCredential(ctx, sub, value)
+		if err != nil {
+			log.Warn("subscription credential not replaced", "error", err)
+			d.reportSubscriptionLogin(ctx, runtimeID, p.ID, "failed", nil, nil, err.Error())
 			return
 		}
+		probe = rep
 	default:
 		d.reportSubscriptionLogin(ctx, runtimeID, p.ID, "failed", nil, nil, "этот тип учётки не входит через multica")
 		return
 	}
-	log.Info("subscription signed in")
+	log.Info("subscription signed in", "credential", probe.Credential, "load_known", probe.State.Known())
+	d.sendLoginReport(ctx, probe)
 	d.reportSubscriptionLogin(ctx, runtimeID, p.ID, "done", nil, nil, "вошли")
+}
+
+// replaceCredential checks a pasted token or key before it replaces the
+// credential file, the way gh and docker refuse a bad token at login: the
+// value goes to a sibling file, the provider is probed with it, and only a
+// value the provider did not refuse is renamed over the credential. A probe
+// that could not reach the provider does not block the sign-in.
+func (d *Daemon) replaceCredential(ctx context.Context, sub subscriptions.Subscription, value string) (subscriptions.Report, error) {
+	target := subscriptions.ExpandPath(sub.CredentialPath)
+	candidate := target + ".login-check"
+	if err := subscriptions.WriteCredential(candidate, []byte(value+"\n")); err != nil {
+		return subscriptions.Report{}, fmt.Errorf("не удалось записать учётку: %w", err)
+	}
+	defer os.Remove(candidate)
+	sel := d.subscriptionSelector()
+	check := sub
+	check.CredentialPath = candidate
+	probeCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	st, err := sel.Prober.Probe(probeCtx, check)
+	cancel()
+	if st.Credential == subscriptions.CredentialRevoked {
+		return subscriptions.Report{}, errors.New("провайдер не принял токен, прежняя учётка не тронута")
+	}
+	if err := os.Rename(candidate, target); err != nil {
+		return subscriptions.Report{}, fmt.Errorf("не удалось записать учётку: %w", err)
+	}
+	return sel.Record(sub, st, err), nil
+}
+
+// sendLoginReport puts a sign-in's probe on the subscription card at once
+// instead of waiting for the probe loop, which measures Claude every 30
+// minutes. One workspace that spends the subscription is enough: the card
+// is the instance's.
+func (d *Daemon) sendLoginReport(ctx context.Context, rep subscriptions.Report) {
+	for _, ws := range d.workspaceIDs() {
+		subs, err := d.client.GetWorkspaceSubscriptions(ctx, ws)
+		if err != nil {
+			continue
+		}
+		for _, s := range subs {
+			if s.Key == rep.Key {
+				d.sendSubscriptionReports(ctx, ws, []subscriptions.Report{rep})
+				return
+			}
+		}
+	}
 }
 
 func (d *Daemon) reportSubscriptionLogin(ctx context.Context, runtimeID, loginID, state string, url, code *string, message string) {
