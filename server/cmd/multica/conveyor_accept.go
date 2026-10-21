@@ -36,6 +36,11 @@ type acceptConfig struct {
 	// DiffGuard lists regular expressions an added line must not match; nil
 	// keeps the default list, an empty list turns the guard off.
 	DiffGuard *[]string `json:"diff_guard"`
+	// Retries is how many times a failed command is run again before the
+	// acceptance is red; nil means defaultAcceptRetries. A full check on a
+	// loaded server fails on timeouts in a different test each run (STT-366),
+	// while a real regression fails every time.
+	Retries *int `json:"retries"`
 }
 
 var defaultDiffGuard = []string{`: any\b`, `as unknown as`, `@ts-(?:ignore|expect-error)`, `eslint-disable`}
@@ -45,6 +50,8 @@ const (
 	defaultAcceptWaitPoll = 60 * time.Second
 	defaultAcceptWaitMax  = 7200 * time.Second
 	acceptPushAttempts    = 3
+	defaultAcceptRetries  = 1
+	maxAcceptRetries      = 3
 	acceptTailLines       = 60
 )
 
@@ -154,8 +161,15 @@ func runAcceptance(ctx context.Context, spec acceptSpec) acceptOutcome {
 			return out
 		}
 		out.Checks = append(out.Checks, acceptCheck{Name: "merge onto " + base, OK: true})
+		var flaky []string
 		for _, command := range cfg.Commands {
 			ok, busy, tail := runAcceptCommand(ctx, spec, cfg, env, command)
+			for try := 1; !ok && busy == "" && try <= cfg.retries(); try++ {
+				fmt.Fprintf(spec.Log, "command failed, running it again (%d/%d)\n", try, cfg.retries())
+				if ok, busy, tail = runAcceptCommand(ctx, spec, cfg, env, command); ok {
+					flaky = append(flaky, clipName(command))
+				}
+			}
 			out.Checks = append(out.Checks, acceptCheck{Name: clipName(command), Command: clipCommand(command), OK: ok})
 			if busy != "" {
 				out.Outcome, out.Reason, out.Tail = "blocked", busy, tail
@@ -174,6 +188,9 @@ func runAcceptance(ctx context.Context, spec acceptSpec) acceptOutcome {
 		if err == nil {
 			out.Outcome, out.Merged = "pass", merged
 			out.Reason = fmt.Sprintf("%s merged into %s as %s", short(sha), base, short(merged))
+			if len(flaky) > 0 {
+				out.Reason += "; red on the first run, green on a retry: " + strings.Join(flaky, ", ")
+			}
 			return out
 		}
 		if !pushRaced(err) {
@@ -182,6 +199,14 @@ func runAcceptance(ctx context.Context, spec acceptSpec) acceptOutcome {
 		fmt.Fprintf(spec.Log, "%s moved while checking; checking again on the new base (%d/%d)\n", base, attempt, acceptPushAttempts)
 	}
 	return coordinator(fmt.Sprintf("%s kept moving during %d checks", base, acceptPushAttempts))
+}
+
+// retries is how many times a failed command runs again.
+func (c acceptConfig) retries() int {
+	if c.Retries == nil {
+		return defaultAcceptRetries
+	}
+	return min(max(*c.Retries, 0), maxAcceptRetries)
 }
 
 func coordinator(reason string) acceptOutcome {
