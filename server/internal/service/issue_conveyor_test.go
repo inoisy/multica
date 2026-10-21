@@ -418,7 +418,7 @@ func TestConveyorEnableValidation(t *testing.T) {
 }
 
 func TestConveyorEscalation(t *testing.T) {
-	const commit, other = "abcdef1234567", "1234567abcdef"
+	const commit = "abcdef1234567"
 	type setup func(r *conveyorRig)
 	cases := map[string]struct {
 		play   setup
@@ -444,12 +444,6 @@ func TestConveyorEscalation(t *testing.T) {
 		"completed without a result": {func(r *conveyorRig) {
 			r.complete(r.start(r.only("dev")))
 		}, "without handing in a result"},
-		"qa judged another commit": {func(r *conveyorRig) {
-			r.pass("dev", commit)
-			task := r.start(r.only("qa"))
-			r.mustSubmit(task, r.result(ConveyorOutcomePass, other))
-			r.complete(task)
-		}, "accepted one"},
 		"failed run": {func(r *conveyorRig) {
 			r.fail(r.start(r.only("dev")), "agent_error", "the agent crashed")
 		}, "the agent crashed"},
@@ -1209,11 +1203,11 @@ func TestConveyorRouteStartedAtQAPinsTheFirstCommit(t *testing.T) {
 	if view := r.view(); view.AcceptedCommit != "abcdef1234567" {
 		t.Fatalf("accepted commit %q", view.AcceptedCommit)
 	}
-	// The reviewer's own commit goes back to qa, not to the coordinator.
+	// The reviewer's own commit becomes the accepted one and the route goes on.
 	task := r.start(r.only("review"))
 	r.mustSubmit(task, r.result(ConveyorOutcomePass, "1234567abcdef"))
 	r.complete(task)
-	if view := r.view(); view.Status != ConveyorActive || view.Step != "qa" || view.AcceptedCommit != "1234567abcdef" {
+	if view := r.view(); view.Status != ConveyorCompleted || view.AcceptedCommit != "1234567abcdef" || len(r.tasksOf("qa")) != 1 {
 		t.Fatalf("review of another commit: %s at %s, accepted %q", view.Status, view.Step, view.AcceptedCommit)
 	}
 }
