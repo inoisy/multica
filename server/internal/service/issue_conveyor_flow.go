@@ -35,6 +35,20 @@ func isQuotaFailure(task db.AgentTaskQueue) bool {
 	return reason == taskfailure.ReasonAgentProviderQuotaLimit || reason == taskfailure.ReasonAgentProviderCapacityOrRateLimit
 }
 
+// isInfraFailure reports whether the run was cut short by something other
+// than its work: the daemon stopped or restarted (cancelled), the runtime went
+// away, the provider failed on its side. Such a step is worth starting again;
+// a person's cancel (user_cancelled) is not.
+func isInfraFailure(task db.AgentTaskQueue) bool {
+	switch taskfailure.Reason(strings.TrimSpace(task.FailureReason.String)) {
+	case "cancelled", "idle_watchdog",
+		taskfailure.ReasonRuntimeOffline, taskfailure.ReasonRuntimeReconnectTimeout, taskfailure.ReasonRuntimeRecovery,
+		taskfailure.ReasonQueuedExpired, taskfailure.ReasonAgentProviderServerError, taskfailure.ReasonAgentProviderNetwork:
+		return true
+	}
+	return false
+}
+
 // conveyorVerdict is what the route decides about a run that ended.
 type conveyorVerdict struct {
 	action string
@@ -45,7 +59,7 @@ type conveyorVerdict struct {
 
 // judge decides, from facts only, what the end of the current run means.
 // A failed run never advances the route, whatever result it handed in.
-func judge(cv db.IssueConveyor, node ConveyorNode, task db.AgentTaskQueue, res *ConveyorResultInput) conveyorVerdict {
+func judge(cv db.IssueConveyor, route []ConveyorNode, node ConveyorNode, task db.AgentTaskQueue, res *ConveyorResultInput) conveyorVerdict {
 	if task.Status == "failed" {
 		if isQuotaFailure(task) {
 			return conveyorVerdict{action: conveyorDecisionWaitProvider, reason: "provider limit: " + clip(task.FailureReason.String, 200)}
@@ -75,6 +89,12 @@ func judge(cv db.IssueConveyor, node ConveyorNode, task db.AgentTaskQueue, res *
 		return conveyorVerdict{action: conveyorDecisionAdvance, commit: commit}
 	case conveyorStepQA, conveyorStepReview, conveyorStepAccept:
 		accepted := cv.AcceptedCommit.String
+		// A later verifier that fixed the work itself (the reviewer committed on
+		// top of what QA passed) hands in its own commit: the earlier verifiers
+		// judge it again, the coordinator is not needed for that.
+		if accepted != "" && commit != "" && commit != accepted && node.Step != conveyorStepAccept && firstVerifierBefore(route, node.Idx) >= 0 {
+			return conveyorVerdict{action: conveyorDecisionRecheck, reason: fmt.Sprintf("%s handed in its own commit %q instead of %q", node.Step, commit, accepted), report: clip(res.Report, 4000), commit: commit}
+		}
 		if accepted != "" && commit != accepted {
 			return conveyorVerdict{action: conveyorDecisionEscalate, reason: fmt.Sprintf("%s judged commit %q, the accepted one is %q", node.Step, commit, accepted), report: clip(res.Report, 1500)}
 		}
@@ -170,7 +190,60 @@ func (s *IssueConveyorService) OnTaskTerminal(ctx context.Context, q *db.Queries
 	} else if !errors.Is(rerr, pgx.ErrNoRows) {
 		return rerr
 	}
-	v := judge(cv, *node, task, res)
+	v := judge(cv, route, *node, task, res)
+
+	// A run infrastructure cut short is started again by itself while the
+	// node's retries last: a daemon restart must not cost a coordinator run.
+	if v.action == conveyorDecisionEscalate && task.Status == "failed" && isInfraFailure(task) {
+		retried, err := s.revisionDecisions(ctx, q, cv, conveyorDecisionRetry, node.Idx)
+		if err != nil {
+			return err
+		}
+		if int32(len(retried)) < node.retries() {
+			cv.Round, cv.Status, cv.CurTaskID, cv.WaitingReason = cv.Round+1, ConveyorActive, pgtype.UUID{}, pgtype.Text{}
+			if _, err = q.SaveIssueConveyor(ctx, saveParams(cv)); err != nil {
+				return err
+			}
+			why := fmt.Sprintf("the run of %s was cut short (%s): round %d starts it again", node.Step, task.FailureReason.String, cv.Round)
+			owed, err := s.owe(ctx, q, cv, conveyorActionRunStep, cv.CurIdx, why, map[string]any{"source_task_id": util.UUIDToString(task.ID)})
+			if err != nil {
+				return err
+			}
+			return decide(conveyorDecisionRetry, why, map[string]any{"action_id": util.UUIDToString(owed.ID), "to_idx": cv.CurIdx})
+		}
+		v.reason = fmt.Sprintf("%s; %d retr(ies) spent", v.reason, node.retries())
+	}
+
+	// A later verifier's own commit goes back to the first verifier; the
+	// verifier that made it is passed over on the way (it judged its fix).
+	if v.action == conveyorDecisionRecheck {
+		rechecks, err := s.revisionDecisions(ctx, q, cv, conveyorDecisionRecheck, -1)
+		if err != nil {
+			return err
+		}
+		if len(rechecks) >= conveyorMaxRechecks {
+			v.action, v.reason = conveyorDecisionEscalate, fmt.Sprintf("%s; %d re-check(s) spent", v.reason, conveyorMaxRechecks)
+		} else {
+			first := firstVerifierBefore(route, cv.CurIdx)
+			author := cv.CurIdx
+			cv.AcceptedCommit = pgtype.Text{String: v.commit, Valid: true}
+			cv.CurIdx, cv.Round = first, cv.Round+1
+			cv.Status, cv.CurTaskID, cv.WaitingReason = ConveyorActive, pgtype.UUID{}, pgtype.Text{}
+			if _, err = q.SaveIssueConveyor(ctx, saveParams(cv)); err != nil {
+				return err
+			}
+			why := fmt.Sprintf("step %s committed %s itself: round %d checks it again from %s", node.Step, clip(v.commit, 9), cv.Round, route[first].Step)
+			owed, err := s.owe(ctx, q, cv, conveyorActionRunStep, first, why, map[string]any{
+				"report": v.report, "recheck_by": node.Step, "source_task_id": util.UUIDToString(task.ID),
+			})
+			if err != nil {
+				return err
+			}
+			return decide(conveyorDecisionRecheck, why, map[string]any{
+				"action_id": util.UUIDToString(owed.ID), "to_idx": first, "author_idx": author, "commit": v.commit, "round": cv.Round,
+			})
+		}
+	}
 
 	// A verifier that asked for changes returns the work by itself when its
 	// node says where to, while rounds are left; the coordinator is woken
@@ -227,6 +300,13 @@ func (s *IssueConveyorService) OnTaskTerminal(ctx context.Context, q *db.Queries
 	}
 	next := cv.CurIdx + 1
 	verdict, owedAction, why := conveyorDecisionAdvance, conveyorActionRunStep, "step "+node.Step+" passed"
+	// The verifier whose own commit this round re-checks judged it already.
+	if author, ok, err := s.recheckAuthor(ctx, q, cv); err != nil {
+		return err
+	} else if ok && author == next && int(next) < len(route)-1 {
+		next++
+		why = fmt.Sprintf("step %s passed; %s made this commit and is passed over", node.Step, route[author].Step)
+	}
 	cv.CurIdx, cv.CurTaskID, cv.WaitingReason = next, pgtype.UUID{}, pgtype.Text{}
 	if int(next) == len(route)-1 {
 		verdict, owedAction, why = conveyorDecisionComplete, conveyorActionNotifyCoordinator, "every step passed"
@@ -1039,4 +1119,63 @@ func (s *IssueConveyorService) autoCloseSummary(ctx context.Context, q *db.Queri
 		fmt.Fprintf(&b, "\n\n%s", acceptReport)
 	}
 	return b.String(), nil
+}
+
+// conveyorMaxRechecks bounds how many times one revision of a route sends a
+// verifier's own commit back to the first verifier.
+const conveyorMaxRechecks = 2
+
+// firstVerifierBefore is the first of the verifiers (qa, review) that judge
+// the same work before idx: the run of them that ends at idx, after the last
+// work step. -1 when the node at idx is the first one.
+func firstVerifierBefore(route []ConveyorNode, idx int32) int32 {
+	first := int32(-1)
+	for i := idx - 1; i >= 0; i-- {
+		n := conveyorNodeAt(route, i)
+		if n == nil || (n.Step != conveyorStepQA && n.Step != conveyorStepReview) {
+			break
+		}
+		first = i
+	}
+	return first
+}
+
+// revisionDecisions lists the decisions of this kind in the route's current
+// revision, at idx (any node when idx < 0).
+func (s *IssueConveyorService) revisionDecisions(ctx context.Context, q *db.Queries, cv db.IssueConveyor, action string, idx int32) ([]db.IssueConveyorEvent, error) {
+	var out []db.IssueConveyorEvent
+	after := int64(0)
+	for {
+		page, err := q.ListIssueConveyorEvents(ctx, db.ListIssueConveyorEventsParams{ConveyorID: cv.ID, AfterSeq: pgtype.Int8{Int64: after, Valid: true}, PageSize: 500})
+		if err != nil {
+			return nil, err
+		}
+		for _, e := range page {
+			after = max(after, e.Seq.Int64)
+			if e.Kind == conveyorEventDecision && e.Action.String == action && e.Revision.Int64 == cv.Revision && (idx < 0 || e.Idx.Int32 == idx) {
+				out = append(out, e)
+			}
+		}
+		if len(page) < 500 {
+			return out, nil
+		}
+	}
+}
+
+// recheckAuthor is the node whose own commit the current round re-checks, if
+// the round was opened by a recheck and still judges that commit.
+func (s *IssueConveyorService) recheckAuthor(ctx context.Context, q *db.Queries, cv db.IssueConveyor) (int32, bool, error) {
+	rechecks, err := s.revisionDecisions(ctx, q, cv, conveyorDecisionRecheck, -1)
+	if err != nil || len(rechecks) == 0 {
+		return 0, false, err
+	}
+	var d struct {
+		AuthorIdx int32  `json:"author_idx"`
+		Commit    string `json:"commit"`
+		Round     int32  `json:"round"`
+	}
+	if json.Unmarshal(rechecks[len(rechecks)-1].Details, &d) != nil || d.Round != cv.Round || d.Commit != cv.AcceptedCommit.String {
+		return 0, false, nil
+	}
+	return d.AuthorIdx, true, nil
 }
