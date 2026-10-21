@@ -265,7 +265,7 @@ func (s *IssueConveyorService) resolveRoute(ctx context.Context, q *db.Queries, 
 		}
 		entries = entries[start:]
 	}
-	if entries, agents, err = withImplicitAccept(ctx, q, issue.WorkspaceID, agents, entries); err != nil {
+	if entries, agents, err = withImplicitAccept(ctx, q, issue, agents, entries); err != nil {
 		return nil, err
 	}
 	route := make([]ConveyorNode, 0, len(entries))
@@ -903,31 +903,35 @@ func (s *IssueConveyorService) Events(ctx context.Context, issueID pgtype.UUID, 
 	return s.q().ListIssueConveyorEvents(ctx, db.ListIssueConveyorEventsParams{ConveyorID: cv.ID, AfterSeq: pgtype.Int8{Int64: after, Valid: true}, PageSize: limit})
 }
 
-// acceptPlacementError enforces where the accept step may stand: at most once,
-// right before close, after a review of the same route. It merges what the
-// route accepted, so nothing may change the commit after it and a review must
-// have judged that commit first.
-// withImplicitAccept adds acceptance to a reviewed route: nobody writes
-// accept into routes, the server puts it right before close whenever the
-// route has a review and no accept of its own. It runs on the workspace's
-// hidden accept agent (acceptAgent); a workspace whose daemons offer no
-// accept runtime keeps the route as written. Acceptance passes without a
-// merge when the repository has no .multica/acceptance.json, so reviewed
-// work in a repository merged by people goes on to close as before.
-func withImplicitAccept(ctx context.Context, q *db.Queries, workspaceID pgtype.UUID, agents []db.Agent, entries []ConveyorRouteEntry) ([]ConveyorRouteEntry, []db.Agent, error) {
-	review := false
+// withImplicitAccept adds acceptance to a route that has none of its own:
+// nobody writes accept into routes, the server puts it right before close.
+// metadata.accept on the issue decides: false keeps the route as written,
+// true adds accept to any route, unset adds it whenever a verifier (qa or
+// review) judges the work, so code checked only by QA merges too and review
+// stays for risky work (metadata.risky). It runs on the workspace's hidden
+// accept agent (acceptAgent); a workspace whose daemons offer no accept
+// runtime keeps the route as written. Acceptance passes without a merge when
+// the repository has no .multica/acceptance.json, so work in a repository
+// merged by people goes on to close as before.
+func withImplicitAccept(ctx context.Context, q *db.Queries, issue db.Issue, agents []db.Agent, entries []ConveyorRouteEntry) ([]ConveyorRouteEntry, []db.Agent, error) {
+	want := false
 	for _, e := range entries {
 		switch e.Step {
 		case conveyorStepAccept:
 			return entries, agents, nil
-		case conveyorStepReview:
-			review = true
+		case conveyorStepQA, conveyorStepReview:
+			want = true
 		}
 	}
-	if !review || len(entries) < 2 || entries[len(entries)-1].Step != conveyorStepClose {
+	var meta map[string]any
+	_ = json.Unmarshal(issue.Metadata, &meta)
+	if v, ok := meta["accept"].(bool); ok {
+		want = v
+	}
+	if !want || len(entries) < 2 || entries[len(entries)-1].Step != conveyorStepClose {
 		return entries, agents, nil
 	}
-	agent, created, err := acceptAgent(ctx, q, workspaceID, agents)
+	agent, created, err := acceptAgent(ctx, q, issue.WorkspaceID, agents)
 	if err != nil || agent == nil {
 		return entries, agents, err
 	}
@@ -1012,19 +1016,20 @@ func acceptAgent(ctx context.Context, q *db.Queries, workspaceID pgtype.UUID, ag
 	return fallback, false, nil
 }
 
+// acceptPlacementError enforces where the accept step may stand: at most once,
+// right before close, after the work it merges. It merges what the route
+// accepted, so nothing may change the commit after it; which steps judge that
+// commit first is the route's business (metadata.risky asks for a review).
 func acceptPlacementError(entries []ConveyorRouteEntry) error {
-	review := false
 	for i, e := range entries {
-		switch e.Step {
-		case conveyorStepReview:
-			review = true
-		case conveyorStepAccept:
-			if i != len(entries)-2 {
-				return conveyorErr(ErrConveyorInvalid, "accept is only allowed once, right before close")
-			}
-			if !review {
-				return conveyorErr(ErrConveyorInvalid, "accept needs a review step before it")
-			}
+		if e.Step != conveyorStepAccept {
+			continue
+		}
+		if i != len(entries)-2 {
+			return conveyorErr(ErrConveyorInvalid, "accept is only allowed once, right before close")
+		}
+		if i == 0 {
+			return conveyorErr(ErrConveyorInvalid, "accept needs a step before it to hand in the work")
 		}
 	}
 	return nil

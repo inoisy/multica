@@ -111,7 +111,7 @@ func runIssueConveyorAccept(cmd *cobra.Command, args []string) error {
 		// it, and passing would close the issue with nothing merged.
 		outcome = coordinator("the route has a dev step but no accepted commit")
 	case view.AcceptedCommit == "":
-		// The server adds acceptance to every reviewed route; work without a
+		// The server adds acceptance to every verified route; work without a
 		// commit (a plan, docs) simply has nothing to merge.
 		outcome = nothingToAccept("no earlier step handed in a commit")
 	case err != nil:
