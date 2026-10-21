@@ -31,6 +31,7 @@ func conveyorHandoffNote(issue db.Issue, cv db.IssueConveyor, action db.IssueCon
 		Report     string `json:"report"`
 		Detail     string `json:"reason"`
 		ReturnedBy string `json:"returned_by"`
+		RecheckBy  string `json:"recheck_by"`
 	}
 	_ = json.Unmarshal(action.Details, &d)
 
@@ -57,6 +58,9 @@ func conveyorHandoffNote(issue db.Issue, cv db.IssueConveyor, action db.IssueCon
 		return b.String()
 	}
 	fmt.Fprintf(&b, "Задача ведётся по маршруту: ваш шаг «%s», раунд %d. Сделайте его и сдайте результат командой:\n\n", step, action.Round.Int32)
+	if d.RecheckBy != "" {
+		fmt.Fprintf(&b, "Шаг «%s» сам поправил работу своим коммитом поверх проверенного — проверьте этот коммит заново:\n\n%s\n\n", d.RecheckBy, d.Report)
+	}
 	if d.ReturnedBy != "" {
 		fmt.Fprintf(&b, "Работу вернул шаг «%s» — исправьте то, что он нашёл, остальное не трогайте:\n\n%s\n\n", d.ReturnedBy, d.Report)
 	}
@@ -74,6 +78,9 @@ func conveyorHandoffNote(issue db.Issue, cv db.IssueConveyor, action db.IssueCon
 			fmt.Fprintf(&b, " %s", cv.AcceptedCommit.String)
 		}
 		b.WriteString(" и укажите его в artifact.commit.\n")
+		if firstVerifierBefore(route, action.Idx.Int32) >= 0 {
+			b.WriteString("Мелкую ошибку можно поправить самому: коммит поверх принятого, `pass` с новым коммитом в artifact.commit — сервер сам отдаст его на повторную проверку предыдущим проверяющим.\n")
+		}
 	}
 	b.WriteString("Статус задачи не меняйте и подзадач не заводите — это делает маршрут: сервер отклонит смену статуса, пока маршрут ведёт задачу.\n")
 	b.WriteString("Не упоминайте следующего исполнителя и координатора, не ставьте будильники на свой ран: следующий шаг запустит сервер после того, как этот ран завершится.\n")
