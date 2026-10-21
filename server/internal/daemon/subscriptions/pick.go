@@ -133,6 +133,10 @@ func statusOf(m Mark) status {
 	return statusYes
 }
 
+// Usable reports whether m is measured and below every agent cap with a
+// credential: a run may spend it now.
+func Usable(m Mark) bool { return statusOf(m) == statusYes }
+
 func usableCredential(m Mark) bool {
 	return m.State.Credential != CredentialMissing && m.State.Credential != CredentialRevoked
 }
@@ -195,11 +199,85 @@ func windowName(key string) string {
 	return key
 }
 
+// Settle zeroes the windows whose reset has already passed: a snapshot taken
+// before the reset still says 97% while the provider has started a fresh
+// window. Refusing a run on it parks the whole runtime for nothing.
+func (s State) Settle(now time.Time) State {
+	if len(s.Windows) == 0 {
+		return s
+	}
+	out := s
+	out.Windows = make([]Window, len(s.Windows))
+	for i, w := range s.Windows {
+		if w.ResetAt != nil && !w.ResetAt.After(now) {
+			w.Used, w.Limit, w.ResetAt = 0, false, nil
+		}
+		out.Windows[i] = w
+	}
+	return out
+}
+
+// freeAt is when m is usable again: the latest reset among the windows that
+// hold it back. ok is false when one of them names no reset.
+func freeAt(m Mark) (time.Time, bool) {
+	var latest time.Time
+	held := false
+	for _, w := range m.State.Windows {
+		cap, capped := m.Sub.EffectiveCaps[w.Key]
+		if !w.Limit && !(capped && w.Used >= float64(cap)) {
+			continue
+		}
+		held = true
+		if w.ResetAt == nil {
+			return time.Time{}, false
+		}
+		if w.ResetAt.After(latest) {
+			latest = *w.ResetAt
+		}
+	}
+	if !held {
+		return time.Time{}, false
+	}
+	return latest, true
+}
+
+// FreeAt is the earliest moment one of the blocked subscriptions is usable
+// again — the runtime is free as soon as any of them is. A subscription whose
+// reset is unknown counts as free after unknown; with unknown zero FreeAt is
+// zero then, and the caller has no reset to report.
+func FreeAt(marks []Mark, now time.Time, unknown time.Duration) time.Time {
+	var earliest time.Time
+	for _, m := range marks {
+		t, ok := freeAt(m)
+		if !ok {
+			if unknown <= 0 {
+				return time.Time{}
+			}
+			t = now.Add(unknown)
+		}
+		if earliest.IsZero() || t.Before(earliest) {
+			earliest = t
+		}
+	}
+	return earliest
+}
+
+// BlockedError is the refusal of an agent run: Text is the run's error, Until
+// the earliest reset of the runtime's subscriptions (zero when unknown), sent
+// to the server apart from the text so it does not have to read it back.
+type BlockedError struct {
+	Text  string
+	Until time.Time
+}
+
+func (e *BlockedError) Error() string { return e.Text }
+
 // Blocked returns why an agent run must not start, or "": only when every
 // subscription's load is known (at least one measured) and each one sits at an
 // agent cap, a provider refusal or has no credential. Unknown load never
 // blocks. The text is the run's error: "usage limit" makes the server treat it
-// as a quota failure and move on, "reset at … UTC" says until when.
+// as a quota failure and move on, "reset at … UTC" says until when — the
+// earliest moment any subscription frees up. Marks must be settled.
 func Blocked(marks []Mark) string {
 	measured := false
 	for _, m := range marks {
@@ -214,16 +292,12 @@ func Blocked(marks []Mark) string {
 		return ""
 	}
 	parts := make([]string, 0, len(marks))
-	var frees []time.Time
-	allReset := true
 	for _, m := range marks {
 		if !m.State.Known() {
 			parts = append(parts, fmt.Sprintf("%s %s", m.Sub.Key, m.State.Credential))
-			allReset = false
 			continue
 		}
 		var over []string
-		var resets []time.Time
 		keys := make([]string, 0, len(m.Sub.EffectiveCaps))
 		for k := range m.Sub.EffectiveCaps {
 			keys = append(keys, k)
@@ -232,45 +306,17 @@ func Blocked(marks []Mark) string {
 		for _, k := range keys {
 			if w, ok := m.State.window(k); ok && w.Used >= float64(m.Sub.EffectiveCaps[k]) {
 				over = append(over, fmt.Sprintf("%s %d%% ≥ %d%%", windowName(k), int(math.Round(w.Used)), m.Sub.EffectiveCaps[k]))
-				if w.ResetAt != nil {
-					resets = append(resets, *w.ResetAt)
-				} else {
-					allReset = false
-				}
 			}
 		}
 		if len(over) == 0 {
 			parts = append(parts, m.Sub.Key+" отказ провайдера")
-			for _, w := range m.State.Windows {
-				if w.Limit && w.ResetAt != nil {
-					resets = append(resets, *w.ResetAt)
-				}
-			}
-			if len(resets) == 0 {
-				allReset = false
-			}
 		} else {
 			parts = append(parts, m.Sub.Key+" "+strings.Join(over, ", "))
 		}
-		if len(resets) > 0 {
-			latest := resets[0]
-			for _, r := range resets[1:] {
-				if r.After(latest) {
-					latest = r
-				}
-			}
-			frees = append(frees, latest)
-		}
 	}
 	text := "usage limit: подписки runtime выше лимита агентам (остаток — резерв людям): " + strings.Join(parts, "; ")
-	if allReset && len(frees) == len(marks) && len(frees) > 0 {
-		earliest := frees[0]
-		for _, f := range frees[1:] {
-			if f.Before(earliest) {
-				earliest = f
-			}
-		}
-		text += ", reset at " + earliest.UTC().Format("2006-01-02 15:04") + " UTC"
+	if until := FreeAt(marks, time.Time{}, 0); !until.IsZero() {
+		text += ", reset at " + until.UTC().Format("2006-01-02 15:04") + " UTC"
 	}
 	return text
 }
@@ -286,6 +332,10 @@ func Active(subs []Subscription) []Subscription {
 	return out
 }
 
+// DisabledWitness is the part of DisabledText the server recognises a
+// refusal by.
+const DisabledWitness = "подписки среды отключены"
+
 // DisabledText is the refusal when every subscription of a runtime is disabled.
 func DisabledText(subs []Subscription) string {
 	until := ""
@@ -294,7 +344,7 @@ func DisabledText(subs []Subscription) string {
 			until = *s.DisabledUntil
 		}
 	}
-	return "usage limit: подписки среды отключены до " + until
+	return "usage limit: " + DisabledWitness + " до " + until
 }
 
 // StateFromUsage turns the server's latest snapshots into a State.

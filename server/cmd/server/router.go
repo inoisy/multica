@@ -2378,6 +2378,7 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 				})
 			})
 			r.Get("/api/runtime-unavailable", h.ListRuntimeUnavailable)
+			r.Post("/api/runtime-unavailable/recheck", h.RecheckRuntimeUnavailable)
 
 			// Runtimes
 			r.Route("/api/runtimes", func(r chi.Router) {

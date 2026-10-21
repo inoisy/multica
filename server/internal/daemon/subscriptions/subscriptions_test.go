@@ -307,3 +307,75 @@ func TestCodexDeviceLogin(t *testing.T) {
 		t.Fatal("a failed login must not touch the working credential")
 	}
 }
+
+// TOON-274, 20.10.2026 20:30:18 UTC: claude-second over its week cap until
+// tomorrow, claude-main's 5h snapshot at 97% taken before its 20:30 reset.
+// The snapshot was stale the moment the run was claimed: the run must start
+// on claude-main, and had both been held, the runtime frees at the earliest
+// reset, not the latest.
+func TestSettledWindowsAndEarliestReset(t *testing.T) {
+	now := time.Date(2026, 10, 20, 20, 30, 18, 0, time.UTC)
+	at := func(t time.Time) *string { s := t.Format(time.RFC3339); return &s }
+	observed := now.Add(-4 * time.Minute)
+	weekReset := time.Date(2026, 10, 21, 20, 0, 0, 0, time.UTC)
+	mainReset := time.Date(2026, 10, 20, 20, 30, 0, 0, time.UTC)
+	second := Subscription{Key: "claude-second", Family: "claude", Auth: "claude_oauth", EffectiveCaps: map[string]int{"5h": 50, "week": 50},
+		Usage: []Usage{{Window: "5h", UsedPercent: 0, ObservedAt: observed.Format(time.RFC3339)}, {Window: "week", UsedPercent: 54, ResetsAt: at(weekReset), ObservedAt: observed.Format(time.RFC3339)}}}
+	main := Subscription{Key: "claude-main", Family: "claude", Auth: "claude_oauth", EffectiveCaps: map[string]int{"5h": 75, "week": 76},
+		Usage: []Usage{{Window: "5h", UsedPercent: 97, ResetsAt: at(mainReset), ObservedAt: observed.Format(time.RFC3339)}, {Window: "week", UsedPercent: 63, ResetsAt: at(weekReset), ObservedAt: observed.Format(time.RFC3339)}}}
+	s := &Selector{Interval: time.Minute, ClaudeInterval: 30 * time.Minute, Now: func() time.Time { return now },
+		CheckCredentialFunc: func(Subscription) CredentialState { return CredentialPresent }}
+	pool := Pool{SpendOrder: "first", Subscriptions: []Subscription{second, main}}
+
+	c, _ := s.Choose(pool, true)
+	if c.Blocked != "" || c.Subscription.Key != "claude-main" {
+		t.Fatalf("reset passed: the run goes to claude-main, got %q blocked=%q", c.Subscription.Key, c.Blocked)
+	}
+	if w, _ := c.Marks[1].State.window("5h"); w.Used != 0 || w.ResetAt != nil {
+		t.Fatalf("settled 5h window: %+v", w)
+	}
+
+	// A minute earlier both were held: the runtime frees at 20:30, not at
+	// claude-second's weekly reset.
+	now = mainReset.Add(-time.Minute)
+	c, _ = s.Choose(pool, true)
+	if c.Blocked == "" {
+		t.Fatal("both over cap must block")
+	}
+	if !c.BlockedUntil.Equal(mainReset) || !strings.Contains(c.Blocked, "reset at 2026-10-20 20:30 UTC") {
+		t.Fatalf("until %v, text %q", c.BlockedUntil, c.Blocked)
+	}
+	if c, _ := s.Choose(pool, false); c.Blocked != "" {
+		t.Fatal("a person's run keeps the reserve the caps hold back")
+	}
+
+	// One held subscription with no reset: no reset to report.
+	main.Usage[0].ResetsAt = nil
+	c, _ = s.Choose(Pool{SpendOrder: "first", Subscriptions: []Subscription{second, main}}, true)
+	if c.Blocked == "" || !c.BlockedUntil.IsZero() || strings.Contains(c.Blocked, "reset at") {
+		t.Fatalf("unknown reset: until %v, text %q", c.BlockedUntil, c.Blocked)
+	}
+
+	// All disabled: free when the first comes back.
+	soon, later := "2026-10-21T08:00:00Z", "2026-10-22T08:00:00Z"
+	c, _ = s.Choose(Pool{Subscriptions: []Subscription{{Key: "a", Disabled: true, DisabledUntil: &later}, {Key: "b", Disabled: true, DisabledUntil: &soon}}}, true)
+	if want, _ := time.Parse(time.RFC3339, soon); !c.BlockedUntil.Equal(want) {
+		t.Fatalf("disabled until %v", c.BlockedUntil)
+	}
+}
+
+func TestFreeAtUnknownWait(t *testing.T) {
+	now := time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC)
+	reset := now.Add(3 * time.Hour)
+	held := Mark{sub("a", map[string]int{"week": 50}), State{Credential: CredentialPresent, Windows: []Window{{Key: "week", Used: 60, ResetAt: &reset}}}}
+	noReset := Mark{sub("b", map[string]int{"week": 50}), State{Credential: CredentialPresent, Windows: []Window{{Key: "week", Used: 60}}}}
+	if got := FreeAt([]Mark{held, noReset}, now, time.Hour); !got.Equal(now.Add(time.Hour)) {
+		t.Fatalf("unknown counts as free after the wait: %v", got)
+	}
+	if got := FreeAt([]Mark{held, noReset}, now, 0); !got.IsZero() {
+		t.Fatalf("no wait: zero, got %v", got)
+	}
+	if got := FreeAt([]Mark{held}, now, 0); !got.Equal(reset) {
+		t.Fatalf("held: %v", got)
+	}
+}

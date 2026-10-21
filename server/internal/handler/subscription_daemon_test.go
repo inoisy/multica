@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/multica-ai/multica/server/internal/testutil"
 )
 
 // poolFixture: a claude pool in the test workspace spending one subscription,
@@ -163,4 +165,124 @@ func TestSubscriptionDiscrepancies(t *testing.T) {
 func subtestJSON(v any) string {
 	b, _ := json.Marshal(v)
 	return string(b)
+}
+
+// TOON-274: a runtime of two subscriptions is parked until the first of them
+// frees up, and a window whose reset has passed does not park it at all.
+// twoSubscriptionPool is the pool of TOON-274: "second" (agents up to 50%
+// of 5h and week) then "main" (75% / 76%). report sends a fresh snapshot:
+// second at 54% of its week, main at main5h% of 5h resetting at main5hReset.
+func twoSubscriptionPool(t *testing.T, h *Handler, suffix string) (runtimeID string, report func(main5h float64, main5hReset time.Time)) {
+	t.Helper()
+	ctx := context.Background()
+	second, main := "subtest-second"+suffix, "subtest-main"+suffix
+	createSubtestSubscription(t, h, map[string]any{"key": second, "provider": "claude", "caps": map[string]int{"5h": 50, "week": 50}})
+	createSubtestSubscription(t, h, map[string]any{"key": main, "provider": "claude", "caps": map[string]int{"5h": 75, "week": 76}})
+	created := callSubscription(t, h.CreateRuntimePool, newRequest("POST", "/api/runtime-pools", map[string]any{
+		"display_name": "Subtest pool two" + suffix, "runtime_type": "claude", "subscriptions": []string{second, main}, "workspace_ids": []string{testWorkspaceID},
+	}), http.StatusCreated)
+	profileID := created["runtime_profiles"].([]any)[0].(map[string]any)["id"].(string)
+	runtimeID = insertProfileRuntimeFixture(t, ctx, profileID, "Subtest pool two runtime"+suffix, "claude")
+	t.Cleanup(func() {
+		testPool.Exec(ctx, `DELETE FROM runtime_unavailable WHERE runtime_id = $1`, runtimeID)
+		testPool.Exec(ctx, `DELETE FROM subscription_host_state WHERE daemon_id = 'subtest-daemon'`)
+	})
+	weekReset := time.Now().UTC().Add(23 * time.Hour).Format(time.RFC3339)
+	report = func(main5h float64, main5hReset time.Time) {
+		callSubscription(t, h.DaemonReportSubscriptionUsage, withURLParam(newDaemonTokenRequest("POST", "/x", map[string]any{
+			"daemon_id": "subtest-daemon", "device_name": "host-1",
+			"reports": []map[string]any{
+				{"key": second, "credential_state": "present", "windows": []map[string]any{
+					{"window": "5h", "used_percent": 0}, {"window": "week", "used_percent": 54, "resets_at": weekReset}}},
+				{"key": main, "credential_state": "present", "windows": []map[string]any{
+					{"window": "5h", "used_percent": main5h, "resets_at": main5hReset.Format(time.RFC3339)}, {"window": "week", "used_percent": 63, "resets_at": weekReset}}},
+			},
+		}, testWorkspaceID, "subtest-daemon"), "workspaceId", testWorkspaceID), http.StatusOK)
+	}
+	return runtimeID, report
+}
+
+func TestDaemonUsageParksTwoSubscriptionPoolUntilEarliestReset(t *testing.T) {
+	h := subscriptionTestHandler(t)
+	ctx := context.Background()
+	runtimeID, report := twoSubscriptionPool(t, h, "")
+	now := time.Now().UTC().Truncate(time.Second)
+	parkedUntil := func() (int, time.Time) {
+		var n int
+		var until time.Time
+		testPool.QueryRow(ctx, `SELECT count(*), coalesce(max(until), 'epoch') FROM runtime_unavailable WHERE runtime_id = $1 AND until > now()`, runtimeID).Scan(&n, &until)
+		return n, until
+	}
+
+	mainReset := now.Add(30 * time.Minute)
+	report(97, mainReset)
+	if n, until := parkedUntil(); n != 1 || !until.Equal(mainReset) {
+		t.Fatalf("both over cap: parked %d until %v, want %v (claude-main's 5h reset, not the week)", n, until, mainReset)
+	}
+	report(97, now.Add(-10*time.Second))
+	if n, _ := parkedUntil(); n != 0 {
+		t.Fatalf("main's 5h reset has passed: the runtime is free, still %d parked", n)
+	}
+}
+
+func TestTaskFailRequestDecodesQuotaReset(t *testing.T) {
+	var req TaskFailRequest
+	if err := json.Unmarshal([]byte(`{"error":"usage limit","quota_reset_at":"2026-10-20T20:30:00Z"}`), &req); err != nil {
+		t.Fatal(err)
+	}
+	if req.QuotaResetAt == nil || !req.QuotaResetAt.Equal(time.Date(2026, 10, 20, 20, 30, 0, 0, time.UTC)) {
+		t.Fatalf("quota_reset_at: %v", req.QuotaResetAt)
+	}
+	req = TaskFailRequest{}
+	json.Unmarshal([]byte(`{"error":"x"}`), &req)
+	if req.QuotaResetAt != nil {
+		t.Fatal("older daemons send none")
+	}
+}
+
+// TOON-275: the refusal a failed run wrote on the pool's own caps parks the
+// runtime until tomorrow. A fresh snapshot with one subscription usable lifts
+// it — a week over its cap on the other one does not hold the pool — and a
+// provider's own limit stays. recheck does the same on demand.
+func TestFreshUsageLiftsStaleLocalRefusal(t *testing.T) {
+	h := subscriptionTestHandler(t)
+	ctx := context.Background()
+	runtimeID, report := twoSubscriptionPool(t, h, "-lift")
+	agentID := dbfx.Agent(t, "subtest refusal agent", runtimeID)
+	taskID := dbfx.Task(t, agentID, testutil.Cols{"runtime_id": runtimeID, "status": "failed"})
+	tomorrow := time.Now().Add(24 * time.Hour)
+	refuse := func() {
+		testPool.Exec(ctx, `INSERT INTO runtime_unavailable (workspace_id, runtime_id, until, reason, task_id) VALUES ($1,$2,$3,$4,$5)`, testWorkspaceID, runtimeID, tomorrow,
+			"agent_provider_quota_limit: usage limit: подписки runtime выше лимита агентам (остаток — резерв людям): subtest-second неделя 54% ≥ 50%; subtest-main 5ч 97% ≥ 75%", taskID)
+	}
+	refusals := func() int {
+		var n int
+		testPool.QueryRow(ctx, `SELECT count(*) FROM runtime_unavailable WHERE runtime_id = $1 AND task_id IS NOT NULL AND until > now()`, runtimeID).Scan(&n)
+		return n
+	}
+
+	refuse()
+	report(97, time.Now().Add(30*time.Minute))
+	if n := refusals(); n != 1 {
+		t.Fatalf("every subscription over its cap: the refusal holds, got %d", n)
+	}
+	report(0, time.Now().Add(5*time.Hour))
+	if n := refusals(); n != 0 {
+		t.Fatalf("main is usable: the stale refusal is lifted, still %d", n)
+	}
+
+	testPool.Exec(ctx, `INSERT INTO runtime_unavailable (workspace_id, runtime_id, until, reason, task_id) VALUES ($1,$2,$3,$4,$5)`, testWorkspaceID, runtimeID, tomorrow,
+		"agent_provider_quota_limit: You've hit your usage limit · resets 10:44", taskID)
+	refuse()
+	var out struct {
+		Lifted    []map[string]any `json:"lifted"`
+		Remaining []map[string]any `json:"remaining"`
+	}
+	testutil.Call(t, h.RecheckRuntimeUnavailable, newRequest("POST", "/api/runtime-unavailable/recheck", nil)).Want(http.StatusOK).JSON(&out)
+	if len(out.Lifted) != 1 || !strings.Contains(out.Lifted[0]["reason"].(string), "выше лимита агентам") {
+		t.Fatalf("recheck lifted: %v", out.Lifted)
+	}
+	if n := refusals(); n != 1 {
+		t.Fatalf("the provider's own limit stays: %d", n)
+	}
 }

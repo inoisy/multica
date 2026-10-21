@@ -468,6 +468,18 @@ type AgentModelsResponse struct {
 	// Waiting are the agent's unclaimed runs whose every model is
 	// unavailable: "every model on a limit until HH:MM — the run waits".
 	Waiting []AgentModelChoiceEntry `json:"waiting"`
+	// RouteRuns are the agent's unclaimed runs of a route step with the
+	// choice each would get now: the step's profile and the family a cross
+	// step rules out apply to them, not Preview.
+	RouteRuns []AgentRouteRunEntry `json:"route_runs"`
+}
+
+// AgentRouteRunEntry is a queued run of a route step and its model now.
+type AgentRouteRunEntry struct {
+	AgentModelChoiceEntry
+	Step        string `json:"step"`
+	ProfileName string `json:"profile_name,omitempty"`
+	Cross       string `json:"cross,omitempty"`
 }
 
 // ModelRefWithProfile is an open issue of the agent with its own profile.
@@ -600,6 +612,31 @@ func (h *Handler) writeAgentModels(w http.ResponseWriter, r *http.Request, agent
 		}
 		resp.Waiting = append(resp.Waiting, entry)
 	}
+	resp.RouteRuns = []AgentRouteRunEntry{}
+	routeRuns, err := h.Queries.ListAgentQueuedRouteTasks(ctx, agent.ID)
+	if err != nil {
+		writeModelProfileError(w, err)
+		return
+	}
+	for _, t := range routeRuns {
+		choice, node, err := service.RouteRunChoice(ctx, h.Queries, t, now)
+		if err != nil {
+			writeModelProfileError(w, err)
+			return
+		}
+		if node == nil {
+			continue
+		}
+		entry := AgentRouteRunEntry{
+			AgentModelChoiceEntry: AgentModelChoiceEntry{TaskID: util.UUIDToString(t.ID), Status: t.Status, IssueID: uuidToPtr(t.IssueID), Position: choice.Position, Choice: &choice, CreatedAt: timestampToString(t.CreatedAt)},
+			Step:                  node.Step, ProfileName: node.ProfileName, Cross: node.Cross,
+		}
+		if issue, err := h.Queries.GetIssue(ctx, t.IssueID); err == nil {
+			entry.IssueIdentifier = service.IssueIdentifier(m.prefix, issue.Number)
+			entry.IssueTitle = issue.Title
+		}
+		resp.RouteRuns = append(resp.RouteRuns, entry)
+	}
 	if len(resp.Journal) > 0 {
 		last := resp.Journal[0]
 		resp.Last = &last
@@ -726,6 +763,48 @@ func (h *Handler) ListRuntimeUnavailable(w http.ResponseWriter, r *http.Request)
 	out := runtimeUnavailableResponses(world)
 	sort.SliceStable(out, func(i, j int) bool { return out[i].Until < out[j].Until })
 	writeJSON(w, http.StatusOK, out)
+}
+
+// RecheckRuntimeUnavailableResponse is what a recheck lifted and what still
+// holds in the workspace.
+type RecheckRuntimeUnavailableResponse struct {
+	Lifted    []RuntimeUnavailableResponse `json:"lifted"`
+	Remaining []RuntimeUnavailableResponse `json:"remaining"`
+}
+
+// RecheckRuntimeUnavailable handles POST /api/runtime-unavailable/recheck:
+// re-applies the subscription pools to the latest snapshots now, as a usage
+// report would. A refusal the daemon wrote on the pool's own caps is lifted
+// when a fresh snapshot shows a subscription of the pool usable; a provider's
+// own limit stays. The waiting runs are handed out at once.
+func (h *Handler) RecheckRuntimeUnavailable(w http.ResponseWriter, r *http.Request) {
+	wsID, _, ok := h.modelAdmin(w, r)
+	if !ok {
+		return
+	}
+	ctx := r.Context()
+	lifted := h.refreshSubscriptionAvailability(ctx)
+	if h.TaskService != nil {
+		if _, err := h.TaskService.SweepModelRouting(ctx); err != nil {
+			slog.Warn("runtime unavailable recheck: model routing sweep", "error", err)
+		}
+	}
+	world, err := service.LoadModelWorld(ctx, h.Queries, wsID, time.Now())
+	if err != nil {
+		writeModelProfileError(w, err)
+		return
+	}
+	resp := RecheckRuntimeUnavailableResponse{Lifted: []RuntimeUnavailableResponse{}, Remaining: runtimeUnavailableResponses(world)}
+	for _, rec := range lifted {
+		if rec.WorkspaceID != wsID {
+			continue
+		}
+		resp.Lifted = append(resp.Lifted, RuntimeUnavailableResponse{
+			RuntimeID: util.UUIDToString(rec.RuntimeID), RuntimeName: world.Runtimes[util.UUIDToString(rec.RuntimeID)].Name,
+			Until: timestampToString(rec.Until), Reason: rec.Reason, TaskID: uuidToPtr(rec.TaskID), CreatedAt: timestampToString(rec.CreatedAt),
+		})
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // ImportModelProfilesRequest is the import document plus the dry-run switch.

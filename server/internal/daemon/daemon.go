@@ -251,6 +251,11 @@ type terminalTaskReport struct {
 	// run on the issue or chat can select it again, however many clean rows
 	// still reference it.
 	retiredSessionID string
+	// quotaResetAt is when the runtime's subscriptions free up, for a run the
+	// daemon refused because all of them sit at their agent caps. The server
+	// parks the runtime until then instead of reading the time back from the
+	// error text.
+	quotaResetAt time.Time
 }
 
 type terminalReportSendFunc func(context.Context, terminalTaskReport, []time.Duration) error
@@ -5938,6 +5943,7 @@ func (d *Daemon) handleTask(ctx context.Context, task Task, slot int) {
 			workDir:        result.WorkDir,
 			durableWorkDir: result.DurableWorkDir,
 			failureReason:  taskRunFailureReason(err),
+			quotaResetAt:   quotaResetAt(err),
 		}); failErr != nil {
 			taskLog.Error("fail task callback failed", "error", failErr)
 		}
@@ -6036,6 +6042,15 @@ func (e *environmentSetupError) Unwrap() error { return e.err }
 // failure. The message is untouched, so the wrapper is invisible to everything
 // except taskRunFailureReason.
 func asEnvironmentSetupFailure(err error) error { return &environmentSetupError{err: err} }
+
+// quotaResetAt is the reset a subscription refusal names, or zero.
+func quotaResetAt(err error) time.Time {
+	var blocked *subscriptions.BlockedError
+	if errors.As(err, &blocked) {
+		return blocked.Until
+	}
+	return time.Time{}
+}
 
 func taskRunFailureReason(err error) string {
 	if errors.Is(err, errInvalidTaskIdentity) {
@@ -6444,7 +6459,7 @@ func (d *Daemon) sendTerminalTaskReport(ctx context.Context, report terminalTask
 	case terminalTaskReportComplete:
 		return d.client.completeTaskWithRetrySchedule(ctx, report.taskID, report.output, report.branchName, report.sessionID, report.workDir, report.sessionRolloutMissing, report.retiredSessionID, report.durableWorkDir, schedule)
 	case terminalTaskReportFail:
-		return d.client.failTaskWithRetrySchedule(ctx, report.taskID, report.errorMessage, report.sessionID, report.workDir, report.branchName, report.failureReason, report.sessionRolloutMissing, report.retiredSessionID, report.durableWorkDir, schedule)
+		return d.client.failTaskReportWithRetrySchedule(ctx, report.taskID, report.errorMessage, report.sessionID, report.workDir, report.branchName, report.failureReason, report.sessionRolloutMissing, report.retiredSessionID, report.durableWorkDir, report.quotaResetAt, schedule)
 	default:
 		return fmt.Errorf("unsupported terminal task report kind %d", report.kind)
 	}
