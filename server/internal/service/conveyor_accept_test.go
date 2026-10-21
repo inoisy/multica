@@ -17,7 +17,7 @@ func (r *conveyorRig) withAcceptAgent() {
 	r.agents["accept"] = parseTestUUID(r.t, r.f.privateAgentOwnedBy(r.t, util.UUIDToString(r.owner), "accept"))
 }
 
-func TestConveyorAcceptStandsRightBeforeCloseAfterReview(t *testing.T) {
+func TestConveyorAcceptStandsRightBeforeClose(t *testing.T) {
 	r := newConveyorRig(t)
 	r.withAcceptAgent()
 	a := func(step string) string { return step + ":" + util.UUIDToString(r.agents[routeAgent(step)]) }
@@ -31,20 +31,23 @@ func TestConveyorAcceptStandsRightBeforeCloseAfterReview(t *testing.T) {
 		return err
 	}
 	for name, steps := range map[string][]string{
-		"without review":      {"dev", "qa", "accept", "close"},
-		"before review":       {"dev", "qa", "accept", "review", "close"},
-		"twice":               {"dev", "qa", "review", "accept", "accept", "close"},
-		"review only in from": {"accept", "close"},
+		"before review": {"dev", "qa", "accept", "review", "close"},
+		"twice":         {"dev", "qa", "review", "accept", "accept", "close"},
+		"first":         {"accept", "close"},
 	} {
 		if err := enable(steps...); !errors.Is(err, ErrConveyorInvalid) {
 			t.Errorf("%s: got %v, want invalid", name, err)
 		}
 	}
-	if _, err := NormalizeSquadRouteTemplate(r.ctx, r.f.q, parseTestUUID(t, r.f.WorkspaceID), a("dev")+","+a("qa")+","+a("accept")+","+a("close")); !errors.Is(err, ErrConveyorInvalid) {
-		t.Errorf("squad template without review before accept: %v", err)
+	if _, err := NormalizeSquadRouteTemplate(r.ctx, r.f.q, parseTestUUID(t, r.f.WorkspaceID), a("accept")+","+a("close")); !errors.Is(err, ErrConveyorInvalid) {
+		t.Errorf("squad template with accept first: %v", err)
 	}
-	if err := enable("dev", "qa", "review", "accept", "close"); err != nil {
-		t.Fatalf("a valid route with accept: %v", err)
+	// QA alone may hand work to acceptance: review is for risky work.
+	if _, err := NormalizeSquadRouteTemplate(r.ctx, r.f.q, parseTestUUID(t, r.f.WorkspaceID), a("dev")+","+a("qa")+","+a("accept")+","+a("close")); err != nil {
+		t.Errorf("squad template with accept after qa: %v", err)
+	}
+	if err := enable("dev", "qa", "accept", "close"); err != nil {
+		t.Fatalf("accept after qa: %v", err)
 	}
 }
 
@@ -173,7 +176,7 @@ func TestConveyorAddsAcceptBeforeCloseOfAReviewedRoute(t *testing.T) {
 	}
 }
 
-func TestConveyorLeavesRoutesWithoutReviewOrAcceptAgentAsWritten(t *testing.T) {
+func TestConveyorLeavesRoutesWithoutVerifierOrAcceptAgentAsWritten(t *testing.T) {
 	r := newConveyorRig(t)
 	r.withAcceptAgent()
 	// The agent exists, but its runtime is not an accept runtime.
@@ -184,8 +187,35 @@ func TestConveyorLeavesRoutesWithoutReviewOrAcceptAgentAsWritten(t *testing.T) {
 	other := newConveyorRig(t)
 	other.withAcceptAgent()
 	other.onAcceptRuntime()
-	if got := steps(other.enable("dev", "qa", "close").Route); got != "dev,qa,close" {
-		t.Fatalf("no review: route %s", got)
+	other.agents["plan"] = other.agents["dev"]
+	if got := steps(other.enable("plan", "close").Route); got != "plan,close" {
+		t.Fatalf("no verifier: route %s", got)
+	}
+}
+
+// A route checked only by QA merges through acceptance too, and the issue's
+// metadata.accept overrides the rule both ways.
+func TestConveyorAddsAcceptByVerifierOrIssueMetadata(t *testing.T) {
+	r := newConveyorRig(t)
+	r.withAcceptAgent()
+	r.onAcceptRuntime()
+	r.f.Exec(t, "UPDATE agent_runtime SET status = 'online' WHERE id = (SELECT runtime_id FROM agent WHERE id = $1)", r.agents["accept"])
+	r.f.Cleanup(t, "DELETE FROM agent WHERE workspace_id = $1 AND system_key = 'accept'", r.f.WorkspaceID)
+	if got := steps(r.enable("dev", "qa", "close").Route); got != "dev,qa,accept,close" {
+		t.Fatalf("qa route %s, want accept before close", got)
+	}
+
+	off := newConveyorRigIn(t, r)
+	off.f.Exec(t, `UPDATE issue SET metadata='{"accept":false}'::jsonb WHERE id=$1`, off.issue)
+	if got := steps(off.enable("dev", "qa", "review", "close").Route); got != "dev,qa,review,close" {
+		t.Fatalf("metadata.accept=false: route %s", got)
+	}
+
+	on := newConveyorRigIn(t, r)
+	on.agents["build"], on.agents["critic"] = on.agents["dev"], on.agents["review"]
+	on.f.Exec(t, `UPDATE issue SET metadata='{"accept":true}'::jsonb WHERE id=$1`, on.issue)
+	if got := steps(on.enable("build", "critic", "close").Route); got != "build,critic,accept,close" {
+		t.Fatalf("metadata.accept=true: route %s", got)
 	}
 }
 
