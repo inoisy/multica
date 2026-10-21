@@ -91,13 +91,15 @@ RETURNING *;
 -- no model, prompt or owner choices. `kind = 'system'` keeps it out of agent
 -- lists and pickers; migration 172's index makes (workspace, owner, runtime,
 -- system_key) unique, so a concurrent create fails and the caller re-reads.
+-- One run at a time: parallel full checks on one host time out each other's
+-- tests (STT-366, 22.10.2026: three accepts of one repository at once).
 INSERT INTO agent (
     workspace_id, name, description, runtime_mode, runtime_config, runtime_id,
     visibility, permission_mode, max_concurrent_tasks, owner_id, instructions,
     custom_env, custom_args, kind, system_key
 ) VALUES (
     @workspace_id, @name, '', @runtime_mode, '{}'::jsonb, @runtime_id,
-    'private', 'private', 4, @owner_id, '',
+    'private', 'private', 1, @owner_id, '',
     '{}'::jsonb, '[]'::jsonb, 'system', 'accept'
 )
 RETURNING *;
