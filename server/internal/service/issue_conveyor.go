@@ -73,9 +73,6 @@ const (
 	// conveyorDecisionRetry starts the step again after infrastructure cut its
 	// run short (the daemon stopped, the runtime went offline).
 	conveyorDecisionRetry = "retry"
-	// conveyorDecisionRecheck sends a later verifier's own commit back to the
-	// first verifier: the reviewer fixed the work, QA must judge the fix.
-	conveyorDecisionRecheck = "recheck"
 )
 
 const (
