@@ -78,9 +78,7 @@ func conveyorHandoffNote(issue db.Issue, cv db.IssueConveyor, action db.IssueCon
 			fmt.Fprintf(&b, " %s", cv.AcceptedCommit.String)
 		}
 		b.WriteString(" и укажите его в artifact.commit.\n")
-		if firstVerifierBefore(route, action.Idx.Int32) >= 0 {
-			b.WriteString("Мелкую ошибку можно поправить самому: коммит поверх принятого, `pass` с новым коммитом в artifact.commit — сервер сам отдаст его на повторную проверку предыдущим проверяющим.\n")
-		}
+		b.WriteString("Мелкую ошибку можно поправить самому: коммит поверх принятого и `pass` с ним в artifact.commit — он станет принятым, и маршрут пойдёт дальше; слияние проверит приёмка.\n")
 	}
 	b.WriteString("Статус задачи не меняйте и подзадач не заводите — это делает маршрут: сервер отклонит смену статуса, пока маршрут ведёт задачу.\n")
 	b.WriteString("Не упоминайте следующего исполнителя и координатора, не ставьте будильники на свой ран: следующий шаг запустит сервер после того, как этот ран завершится.\n")
