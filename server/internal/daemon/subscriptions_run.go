@@ -58,7 +58,7 @@ func (d *Daemon) prepareSubscriptionRun(ctx context.Context, task Task, codexHom
 		"candidates", describeMarks(choice.Marks),
 		"blocked", choice.Blocked != "")
 	if choice.Blocked != "" {
-		return nil, fmt.Errorf("%s", choice.Blocked)
+		return nil, &subscriptions.BlockedError{Text: choice.Blocked, Until: choice.BlockedUntil}
 	}
 	launch, err := subscriptions.Prepare(choice.Subscription, codexHome)
 	if err != nil {

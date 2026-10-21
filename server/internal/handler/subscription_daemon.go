@@ -321,30 +321,15 @@ func poolVerdict(p db.RuntimeProfile, byKey map[string]db.Subscription, usage ma
 			st = subscriptions.State{}
 		}
 		st.Credential = subscriptions.CredentialPresent
-		marks = append(marks, subscriptions.Mark{Sub: s, State: st})
+		// A window whose reset has passed is fresh, whatever the snapshot says.
+		marks = append(marks, subscriptions.Mark{Sub: s, State: st.Settle(now)})
 	}
 	text := subscriptions.Blocked(marks)
 	if text == "" {
 		return "", time.Time{}
 	}
 	// Earliest moment any subscription frees up; unknown resets wait an hour.
-	until := time.Time{}
-	for _, m := range marks {
-		latest := time.Time{}
-		for _, win := range m.State.Windows {
-			cap, capped := m.Sub.EffectiveCaps[win.Key]
-			if (win.Limit || (capped && win.Used >= float64(cap))) && win.ResetAt != nil && win.ResetAt.After(latest) {
-				latest = *win.ResetAt
-			}
-		}
-		if latest.IsZero() {
-			latest = now.Add(time.Hour)
-		}
-		if until.IsZero() || latest.Before(until) {
-			until = latest
-		}
-	}
-	return text, until
+	return text, subscriptions.FreeAt(marks, now, time.Hour)
 }
 
 func toDaemonSubscription(s SubscriptionResponse) subscriptions.Subscription {

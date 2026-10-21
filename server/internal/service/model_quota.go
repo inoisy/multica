@@ -18,6 +18,12 @@ import (
 // names no reset.
 const quotaDefaultWait = 60 * time.Minute
 
+// quotaPastResetWait is how long a runtime stays unavailable when the error
+// names a reset that has already passed: the limit lifted by its own words,
+// the load the refusal read was taken before the reset. A short pause lets
+// the next measurement catch up.
+const quotaPastResetWait = 5 * time.Minute
+
 // quotaMaxWait bounds a parsed reset: a weekly window is the longest any
 // provider reports, and a typo must not park a runtime for a year.
 const quotaMaxWait = 8 * 24 * time.Hour
@@ -45,7 +51,8 @@ func isZai(runtimeName, provider, text string) bool {
 // Durations ("try again in 2h 13m"), epoch seconds, dates and wall-clock
 // times ("resets 3pm (Europe/Moscow)") are understood; a wall-clock time
 // without a zone is UTC, or UTC+8 for z.ai. No reset in the text, or one that
-// is not in the future: now + 60 minutes.
+// is not in the future: now + 60 minutes. A full date that has passed is
+// the reset the error meant, not a wall-clock time: now + 5 minutes.
 func ParseQuotaReset(text, runtimeName, provider string, now time.Time) time.Time {
 	fallback := now.Add(quotaDefaultWait)
 	accept := func(t time.Time) (time.Time, bool) {
@@ -112,6 +119,9 @@ func ParseQuotaReset(text, runtimeName, provider string, now time.Time) time.Tim
 			if t, ok := accept(t); ok {
 				return t
 			}
+			// The clock pattern below would read the year's first digits as
+			// an hour ("reset at 2026-…" → 20:00 tomorrow).
+			return now.Add(quotaPastResetWait)
 		}
 	}
 	if m := quotaClockRe.FindStringSubmatch(text); m != nil {
@@ -164,14 +174,27 @@ func quotaRetryEligible(t db.AgentTaskQueue) bool {
 	return !t.AutopilotRunID.Valid && !IsTriageTask(t) && (t.IssueID.Valid || t.ChatSessionID.Valid)
 }
 
+// QuotaUnavailableUntil is until when a runtime stays unavailable after a
+// quota failure: the reset the daemon reported apart from the text when it is
+// ahead (bounded by quotaMaxWait), otherwise the reset the error text names.
+func QuotaUnavailableUntil(reported time.Time, errMsg, runtimeName, provider string, now time.Time) time.Time {
+	if reported.After(now) {
+		if reported.Sub(now) > quotaMaxWait {
+			return now.Add(quotaMaxWait)
+		}
+		return reported
+	}
+	return ParseQuotaReset(errMsg, runtimeName, provider, now)
+}
+
 // markRuntimeUnavailable records the limit of the run's runtime until the
-// reset its error names.
-func markRuntimeUnavailable(ctx context.Context, q *db.Queries, t db.AgentTaskQueue, errMsg string, now time.Time) error {
+// reset the daemon reported or, without one, the reset its error names.
+func markRuntimeUnavailable(ctx context.Context, q *db.Queries, t db.AgentTaskQueue, errMsg string, reported, now time.Time) error {
 	rt, err := q.GetAgentRuntime(ctx, t.RuntimeID)
 	if err != nil {
 		return err
 	}
-	until := ParseQuotaReset(errMsg, runtimeDisplayName(rt), rt.Provider, now)
+	until := QuotaUnavailableUntil(reported, errMsg, runtimeDisplayName(rt), rt.Provider, now)
 	_, err = q.InsertRuntimeUnavailable(ctx, db.InsertRuntimeUnavailableParams{
 		WorkspaceID: rt.WorkspaceID, RuntimeID: rt.ID,
 		Until:  pgtype.Timestamptz{Time: until, Valid: true},
