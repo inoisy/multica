@@ -2301,6 +2301,22 @@ WHERE issue_id = $1 AND agent_id = $2
   )
   AND comment_thread_id IS NOT DISTINCT FROM comment_thread_root_id(sqlc.narg('thread_comment_id')::uuid);
 
+-- name: GetLatestRerunSourceTask :one
+-- The run an issue-level rerun (no task named) continues from: the agent's
+-- newest run on this issue that recorded a work_dir. Runs that ended before
+-- claiming a directory (a queued comment run refused at the quota gate) are
+-- skipped so they cannot hide the run that actually did the work. A run still
+-- executing qualifies: the rerun queues behind it, and the claim handler reads
+-- the source's session and directory only when the rerun is claimed, after it
+-- has finished. Triage runs are not execution runs and never a source
+-- (MUL-7189 §5.6).
+SELECT * FROM agent_task_queue
+WHERE issue_id = $1 AND agent_id = $2
+  AND work_dir IS NOT NULL AND work_dir <> ''
+  AND (context IS NULL OR context->>'type' IS DISTINCT FROM 'triage')
+ORDER BY created_at DESC
+LIMIT 1;
+
 -- name: GetLatestTaskRoleForIssueAndAgent :one
 -- Returns the role markers from the agent's most recent task on this issue.
 -- Used by the squad-leader self-trigger guard to tell apart leader tasks,

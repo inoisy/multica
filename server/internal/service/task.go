@@ -5702,7 +5702,10 @@ func transferPendingSourceContextToRetry(ctx context.Context, q *db.Queries, par
 //     a generic issue run that no longer carries the original comment.
 //   - sourceTaskID empty: fall back to the issue's current assignee (agent
 //     or squad leader). This preserves the CLI / API contract for callers
-//     that have an issue ID but no specific task to target.
+//     that have an issue ID but no specific task to target. The agent's last
+//     run on the issue with a recorded workdir becomes the rerun lineage
+//     (GetLatestRerunSourceTask), so the run continues in that directory and
+//     session exactly as a rerun naming it would.
 //
 // A retry ALWAYS reuses the source task's workdir when it still exists on
 // disk (MUL-4869): a transient failure — network, provider 5xx/rate-limit,
@@ -5844,6 +5847,24 @@ func (s *TaskService) rerunIssue(ctx context.Context, issueID pgtype.UUID, sourc
 			squadID = issue.AssigneeID
 		default:
 			return nil, fmt.Errorf("issue is not assigned to an agent or squad")
+		}
+		// Naming no run still means "continue": the new run takes the agent's
+		// last run on this issue as its rerun lineage, so the claim handler
+		// reuses that run's directory and resumes its session under the same
+		// rules as a named rerun. Without a lineage the row carried only
+		// force_fresh_session, and the claim handler gave it neither — an agent
+		// rerun after a quota stop redid from scratch what the stopped run had
+		// already left on disk (STT-357). Only the lineage is taken: the target
+		// agent and the generic issue prompt stay those of an issue-level rerun.
+		src, err := s.Queries.GetLatestRerunSourceTask(ctx, db.GetLatestRerunSourceTaskParams{
+			IssueID: issue.ID,
+			AgentID: agentID,
+		})
+		switch {
+		case err == nil:
+			sourceTaskID = src.ID
+		case !errors.Is(err, pgx.ErrNoRows):
+			return nil, fmt.Errorf("load rerun source: %w", err)
 		}
 	}
 
