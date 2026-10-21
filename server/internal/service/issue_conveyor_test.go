@@ -55,8 +55,13 @@ func newConveyorRig(t *testing.T) *conveyorRig {
 
 func (r *conveyorRig) route(steps ...string) string {
 	parts := make([]string, len(steps))
+	// A step may carry node options: "qa[back=none]".
 	for i, s := range steps {
-		parts[i] = s + ":" + util.UUIDToString(r.agents[routeAgent(s)])
+		name, opts, _ := strings.Cut(s, "[")
+		if opts != "" {
+			opts = "[" + opts
+		}
+		parts[i] = name + ":" + util.UUIDToString(r.agents[routeAgent(name)]) + opts
 	}
 	return strings.Join(parts, ",")
 }
@@ -419,6 +424,7 @@ func TestConveyorEscalation(t *testing.T) {
 		play   setup
 		reason string
 	}{
+		// qa goes back to dev by itself unless its node says back=none.
 		"changes_requested": {func(r *conveyorRig) {
 			r.pass("dev", commit)
 			task := r.start(r.only("qa"))
@@ -460,10 +466,11 @@ func TestConveyorEscalation(t *testing.T) {
 			r.complete(task)
 		}, `check "lint" failed`},
 	}
+	routes := map[string][]string{"changes_requested": {"dev", "qa[back=none]", "review", "close"}}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			r := newConveyorRig(t)
-			r.enable()
+			r.enable(routes[name]...)
 			tc.play(r)
 			view := r.view()
 			if view.Status != ConveyorAwaitingCoordinator {
@@ -1202,11 +1209,12 @@ func TestConveyorRouteStartedAtQAPinsTheFirstCommit(t *testing.T) {
 	if view := r.view(); view.AcceptedCommit != "abcdef1234567" {
 		t.Fatalf("accepted commit %q", view.AcceptedCommit)
 	}
+	// The reviewer's own commit goes back to qa, not to the coordinator.
 	task := r.start(r.only("review"))
 	r.mustSubmit(task, r.result(ConveyorOutcomePass, "1234567abcdef"))
 	r.complete(task)
-	if view := r.view(); view.Status != ConveyorAwaitingCoordinator {
-		t.Fatalf("review of another commit: %s", view.Status)
+	if view := r.view(); view.Status != ConveyorActive || view.Step != "qa" || view.AcceptedCommit != "1234567abcdef" {
+		t.Fatalf("review of another commit: %s at %s, accepted %q", view.Status, view.Step, view.AcceptedCommit)
 	}
 }
 
@@ -1221,12 +1229,14 @@ func twoDevRig(t *testing.T) *conveyorRig {
 func devPeersRig(t *testing.T, peers ...string) *conveyorRig {
 	t.Helper()
 	r := newConveyorRig(t)
-	route := r.route("dev")
+	route := r.route("dev[retries=0]")
 	for _, name := range peers {
 		r.agents[name] = parseTestUUID(t, r.f.privateAgentOwnedBy(t, util.UUIDToString(r.owner), name))
-		route += ",dev:" + util.UUIDToString(r.agents[name])
+		// retries=0: these tests play the coordinator's resume after a cut run.
+		route += ",dev:" + util.UUIDToString(r.agents[name]) + "[retries=0]"
 	}
-	raw, _ := json.Marshal(route + "," + r.route("qa", "close"))
+	// back=none: these tests play the coordinator's resume after qa's changes.
+	raw, _ := json.Marshal(route + "," + r.route("qa[back=none]", "close"))
 	r.mustApply(ConveyorCommand{Action: ConveyorCmdEnable, Route: raw})
 	return r
 }

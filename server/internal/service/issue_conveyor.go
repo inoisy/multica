@@ -70,6 +70,12 @@ const (
 	conveyorDecisionHeld         = "held"
 	// conveyorDecisionBack opens a new round at the node's back step.
 	conveyorDecisionBack = "back"
+	// conveyorDecisionRetry starts the step again after infrastructure cut its
+	// run short (the daemon stopped, the runtime went offline).
+	conveyorDecisionRetry = "retry"
+	// conveyorDecisionRecheck sends a later verifier's own commit back to the
+	// first verifier: the reviewer fixed the work, QA must judge the fix.
+	conveyorDecisionRecheck = "recheck"
 )
 
 const (
@@ -108,6 +114,9 @@ type ConveyorNode struct {
 	Cross       string `json:"cross,omitempty"`
 	Back        string `json:"back,omitempty"`
 	Rounds      int32  `json:"rounds,omitempty"`
+	// Retries is how many times a run cut short by infrastructure is started
+	// again by itself; 0 means the default (conveyorDefaultRetries).
+	Retries int32 `json:"retries,omitempty"`
 }
 
 // ConveyorRouteEntry is a route position as an operator writes it; Agent is a
@@ -119,6 +128,7 @@ type ConveyorRouteEntry struct {
 	Cross   string `json:"cross,omitempty"`
 	Back    string `json:"back,omitempty"`
 	Rounds  int32  `json:"rounds,omitempty"`
+	Retries int32  `json:"retries,omitempty"`
 }
 
 // ConveyorCommand is the body of PUT /api/issues/{id}/conveyor. Route is
@@ -170,7 +180,7 @@ func conveyorNodeAt(route []ConveyorNode, idx int32) *ConveyorNode {
 }
 
 // ParseConveyorRouteSpec reads the metadata form "step:Agent,step:Agent";
-// a node may add options: "step:Agent[profile=…;cross=…;back=…;rounds=N]".
+// a node may add options: "step:Agent[profile=…;cross=…;back=…;rounds=N;retries=N]".
 func ParseConveyorRouteSpec(spec string) ([]ConveyorRouteEntry, error) {
 	var out []ConveyorRouteEntry
 	for _, part := range strings.Split(spec, ",") {
@@ -286,7 +296,7 @@ func (s *IssueConveyorService) resolveRoute(ctx context.Context, q *db.Queries, 
 		if !isAcceptCarrier(agent) && !CanMemberInvokeAgent(ctx, q, agent, invoker, issue.WorkspaceID) {
 			return nil, conveyorErr(ErrConveyorForbidden, "you may not invoke agent %q", agent.Name)
 		}
-		node := ConveyorNode{Idx: int32(i), Step: e.Step, AgentID: util.UUIDToString(agent.ID), Cross: e.Cross, Back: e.Back, Rounds: e.Rounds}
+		node := ConveyorNode{Idx: int32(i), Step: e.Step, AgentID: util.UUIDToString(agent.ID), Cross: e.Cross, Back: e.Back, Rounds: e.Rounds, Retries: e.Retries}
 		if e.Profile != "" {
 			p, err := resolveNodeProfile(ctx, q, issue.WorkspaceID, e.Profile)
 			if err != nil {
@@ -312,6 +322,9 @@ func (s *IssueConveyorService) resolveRoute(ctx context.Context, q *db.Queries, 
 	}
 	if err := validateNodeRefs(entries); err != nil {
 		return nil, err
+	}
+	for i := range route {
+		route[i].Back = defaultBack(entries, i)
 	}
 	var meta map[string]any
 	_ = json.Unmarshal(issue.Metadata, &meta)

@@ -20,16 +20,26 @@ import (
 //
 // profile — the model profile of this step's runs (wins over the issue's);
 // cross   — run on another model family than the run that passed that step;
-// back    — changes_requested opens a new round at that step by itself;
-// rounds  — how many rounds the route may reach through back (default 2).
+// back    — changes_requested opens a new round at that step by itself; a
+//           verifier (qa, review, accept) without it goes back to the closest
+//           earlier work step, back=none sends its changes to the coordinator;
+// rounds  — how many rounds the route may reach through back (default 2);
+// retries — how many times a run cut short by infrastructure (the daemon
+//           stopped, the runtime went offline, the provider failed) starts
+//           again by itself before the coordinator is woken (default 2, 0..5).
 const (
 	conveyorOptProfile = "profile"
 	conveyorOptCross   = "cross"
 	conveyorOptBack    = "back"
 	conveyorOptRounds  = "rounds"
+	conveyorOptRetries = "retries"
+
+	conveyorBackNone = "none"
 
 	conveyorDefaultBackRounds = 2
 	conveyorMaxBackRounds     = 5
+	conveyorDefaultRetries    = 2
+	conveyorMaxRetries        = 5
 )
 
 // splitNodeOptions parses "Agent[k=v;k=v]" into the agent and its options.
@@ -66,8 +76,18 @@ func splitNodeOptions(agent string) (string, ConveyorRouteEntry, error) {
 				return "", e, conveyorErr(ErrConveyorInvalid, "route node %q: rounds must be a number", name)
 			}
 			e.Rounds = int32(n)
+		case conveyorOptRetries:
+			n, err := strconv.Atoi(v)
+			if err != nil || n < 0 || n > conveyorMaxRetries {
+				return "", e, conveyorErr(ErrConveyorInvalid, "route node %q: retries must be 0..%d", name, conveyorMaxRetries)
+			}
+			// 0 is stored as -1: the zero value means "default".
+			e.Retries = int32(n)
+			if n == 0 {
+				e.Retries = -1
+			}
 		default:
-			return "", e, conveyorErr(ErrConveyorInvalid, "route node %q: unknown option %q (profile, cross, back, rounds)", name, k)
+			return "", e, conveyorErr(ErrConveyorInvalid, "route node %q: unknown option %q (profile, cross, back, rounds, retries)", name, k)
 		}
 	}
 	return name, e, nil
@@ -88,6 +108,9 @@ func (e ConveyorRouteEntry) spec() string {
 	if e.Rounds != 0 {
 		opts = append(opts, conveyorOptRounds+"="+strconv.Itoa(int(e.Rounds)))
 	}
+	if e.Retries != 0 {
+		opts = append(opts, conveyorOptRetries+"="+strconv.Itoa(max(int(e.Retries), 0)))
+	}
 	if len(opts) == 0 {
 		return e.Step + ":" + e.Agent
 	}
@@ -106,16 +129,16 @@ func validateNodeRefs(entries []ConveyorRouteEntry) error {
 			}
 			return false
 		}
-		if e.Step == conveyorStepClose && (e.Profile != "" || e.Cross != "" || e.Back != "" || e.Rounds != 0) {
+		if e.Step == conveyorStepClose && (e.Profile != "" || e.Cross != "" || e.Back != "" || e.Rounds != 0 || e.Retries != 0) {
 			return conveyorErr(ErrConveyorInvalid, "close takes no options")
 		}
 		if e.Cross != "" && !earlier(e.Cross) {
 			return conveyorErr(ErrConveyorInvalid, "step %s: cross=%s must name an earlier step", e.Step, e.Cross)
 		}
-		if e.Back != "" && !earlier(e.Back) {
+		if e.Back != "" && e.Back != conveyorBackNone && !earlier(e.Back) {
 			return conveyorErr(ErrConveyorInvalid, "step %s: back=%s must name an earlier step", e.Step, e.Back)
 		}
-		if e.Rounds != 0 && e.Back == "" {
+		if e.Rounds != 0 && (e.Back == conveyorBackNone || (e.Back == "" && !isConveyorVerifier(e.Step))) {
 			return conveyorErr(ErrConveyorInvalid, "step %s: rounds needs back", e.Step)
 		}
 		if e.Rounds < 0 || e.Rounds > conveyorMaxBackRounds || (e.Back != "" && e.Rounds == 1) {
@@ -138,6 +161,42 @@ func resolveNodeProfile(ctx context.Context, q *db.Queries, workspaceID pgtype.U
 		return p, conveyorErr(ErrConveyorInvalid, "model profile %q not found", ref)
 	}
 	return p, err
+}
+
+// isConveyorVerifier reports whether the step judges work an earlier step did.
+func isConveyorVerifier(step string) bool {
+	return step == conveyorStepQA || step == conveyorStepReview || step == conveyorStepAccept
+}
+
+// defaultBack is where the node's changes_requested goes: the back it names,
+// else, for a verifier, the closest earlier step that is not a verifier
+// (dev,qa,review,accept: dev). "" sends changes to the coordinator.
+func defaultBack(entries []ConveyorRouteEntry, i int) string {
+	e := entries[i]
+	switch {
+	case e.Back == conveyorBackNone:
+		return ""
+	case e.Back != "" || !isConveyorVerifier(e.Step):
+		return e.Back
+	}
+	for j := i - 1; j >= 0; j-- {
+		if !isConveyorVerifier(entries[j].Step) {
+			return entries[j].Step
+		}
+	}
+	return ""
+}
+
+// retries is how many times the route starts a run of this node again after
+// infrastructure cut it short.
+func (n ConveyorNode) retries() int32 {
+	switch {
+	case n.Retries < 0:
+		return 0
+	case n.Retries > 0:
+		return n.Retries
+	}
+	return conveyorDefaultRetries
 }
 
 // stepIdxBefore is the index of the last node named step before idx, -1 if none.
