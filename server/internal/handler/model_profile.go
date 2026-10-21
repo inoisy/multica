@@ -765,6 +765,48 @@ func (h *Handler) ListRuntimeUnavailable(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, out)
 }
 
+// RecheckRuntimeUnavailableResponse is what a recheck lifted and what still
+// holds in the workspace.
+type RecheckRuntimeUnavailableResponse struct {
+	Lifted    []RuntimeUnavailableResponse `json:"lifted"`
+	Remaining []RuntimeUnavailableResponse `json:"remaining"`
+}
+
+// RecheckRuntimeUnavailable handles POST /api/runtime-unavailable/recheck:
+// re-applies the subscription pools to the latest snapshots now, as a usage
+// report would. A refusal the daemon wrote on the pool's own caps is lifted
+// when a fresh snapshot shows a subscription of the pool usable; a provider's
+// own limit stays. The waiting runs are handed out at once.
+func (h *Handler) RecheckRuntimeUnavailable(w http.ResponseWriter, r *http.Request) {
+	wsID, _, ok := h.modelAdmin(w, r)
+	if !ok {
+		return
+	}
+	ctx := r.Context()
+	lifted := h.refreshSubscriptionAvailability(ctx)
+	if h.TaskService != nil {
+		if _, err := h.TaskService.SweepModelRouting(ctx); err != nil {
+			slog.Warn("runtime unavailable recheck: model routing sweep", "error", err)
+		}
+	}
+	world, err := service.LoadModelWorld(ctx, h.Queries, wsID, time.Now())
+	if err != nil {
+		writeModelProfileError(w, err)
+		return
+	}
+	resp := RecheckRuntimeUnavailableResponse{Lifted: []RuntimeUnavailableResponse{}, Remaining: runtimeUnavailableResponses(world)}
+	for _, rec := range lifted {
+		if rec.WorkspaceID != wsID {
+			continue
+		}
+		resp.Lifted = append(resp.Lifted, RuntimeUnavailableResponse{
+			RuntimeID: util.UUIDToString(rec.RuntimeID), RuntimeName: world.Runtimes[util.UUIDToString(rec.RuntimeID)].Name,
+			Until: timestampToString(rec.Until), Reason: rec.Reason, TaskID: uuidToPtr(rec.TaskID), CreatedAt: timestampToString(rec.CreatedAt),
+		})
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
 // ImportModelProfilesRequest is the import document plus the dry-run switch.
 type ImportModelProfilesRequest struct {
 	DryRun   *bool                       `json:"dry_run"`

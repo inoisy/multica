@@ -345,6 +345,9 @@ func TestSettledWindowsAndEarliestReset(t *testing.T) {
 	if !c.BlockedUntil.Equal(mainReset) || !strings.Contains(c.Blocked, "reset at 2026-10-20 20:30 UTC") {
 		t.Fatalf("until %v, text %q", c.BlockedUntil, c.Blocked)
 	}
+	if c, _ := s.Choose(pool, false); c.Blocked != "" {
+		t.Fatal("a person's run keeps the reserve the caps hold back")
+	}
 
 	// One held subscription with no reset: no reset to report.
 	main.Usage[0].ResetsAt = nil

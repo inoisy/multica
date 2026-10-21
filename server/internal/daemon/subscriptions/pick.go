@@ -133,6 +133,10 @@ func statusOf(m Mark) status {
 	return statusYes
 }
 
+// Usable reports whether m is measured and below every agent cap with a
+// credential: a run may spend it now.
+func Usable(m Mark) bool { return statusOf(m) == statusYes }
+
 func usableCredential(m Mark) bool {
 	return m.State.Credential != CredentialMissing && m.State.Credential != CredentialRevoked
 }
@@ -328,6 +332,10 @@ func Active(subs []Subscription) []Subscription {
 	return out
 }
 
+// DisabledWitness is the part of DisabledText the server recognises a
+// refusal by.
+const DisabledWitness = "подписки среды отключены"
+
 // DisabledText is the refusal when every subscription of a runtime is disabled.
 func DisabledText(subs []Subscription) string {
 	until := ""
@@ -336,7 +344,7 @@ func DisabledText(subs []Subscription) string {
 			until = *s.DisabledUntil
 		}
 	}
-	return "usage limit: подписки среды отключены до " + until
+	return "usage limit: " + DisabledWitness + " до " + until
 }
 
 // StateFromUsage turns the server's latest snapshots into a State.
