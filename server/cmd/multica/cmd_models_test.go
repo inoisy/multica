@@ -135,3 +135,26 @@ func TestAgentModelsShowsRouteRuns(t *testing.T) {
 		t.Errorf("no route run: %s", out)
 	}
 }
+
+func TestRuntimeUnavailableRecheck(t *testing.T) {
+	var path, method string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path, method = r.URL.Path, r.Method
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"lifted":    []map[string]any{{"runtime_name": "Claude · подписки", "until": "2026-10-21T20:00:00Z", "reason": "usage limit: подписки runtime выше лимита агентам"}},
+			"remaining": []map[string]any{},
+		})
+	}))
+	t.Cleanup(srv.Close)
+	t.Setenv("MULTICA_SERVER_URL", srv.URL)
+	t.Setenv("MULTICA_WORKSPACE_ID", "ws-1")
+	t.Setenv("MULTICA_TOKEN", "test-token")
+	cmd := newRuntimeUnavailableRecheckCommand()
+	out, err := captureStdout(t, func() error { return cmd.RunE(cmd, nil) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if method != "POST" || path != "/api/runtime-unavailable/recheck" || !strings.Contains(out, "Lifted:") || !strings.Contains(out, "Claude · подписки") {
+		t.Fatalf("%s %s:\n%s", method, path, out)
+	}
+}

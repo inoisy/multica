@@ -17,6 +17,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/multica-ai/multica/server/internal/daemon/subscriptions"
 	db "github.com/multica-ai/multica/server/pkg/db/generated"
+	"github.com/multica-ai/multica/server/pkg/taskfailure"
 	"github.com/multica-ai/multica/server/pkg/protocol"
 )
 
@@ -222,22 +223,29 @@ const subscriptionUsageMaxAge = time.Hour
 // subscriptions are all at their agent caps (or disabled) until the earliest
 // reset, and lifts the park once one of them is usable again. Runs after usage
 // arrives and after an admin changes caps or disables a subscription.
-func (h *Handler) refreshSubscriptionAvailability(ctx context.Context) {
+//
+// A run the daemon refused on those same caps parked the runtime too, through
+// the quota failure path, until the reset it named. Once a fresh snapshot
+// shows a subscription of the pool usable that row is stale and is lifted
+// here as well; the model routing sweep then hands the waiting runs out. A
+// provider's own limit ("You've hit your usage limit …") is not the pool's
+// verdict and stays until its reset. Returns the lifted refusal rows.
+func (h *Handler) refreshSubscriptionAvailability(ctx context.Context) []db.RuntimeUnavailable {
 	profiles, err := h.Queries.ListRuntimeProfilesWithSubscriptions(ctx)
 	if err != nil {
 		slog.Warn("subscription availability: list profiles failed", "error", err)
-		return
+		return nil
 	}
 	if len(profiles) == 0 {
-		return
+		return nil
 	}
 	subs, err := h.Queries.ListSubscriptions(ctx)
 	if err != nil {
-		return
+		return nil
 	}
 	usage, err := h.latestUsageBySubscription(ctx)
 	if err != nil {
-		return
+		return nil
 	}
 	byKey := map[string]db.Subscription{}
 	for _, s := range subs {
@@ -249,20 +257,14 @@ func (h *Handler) refreshSubscriptionAvailability(ctx context.Context) {
 	}
 	runtimes, err := h.Queries.ListAgentRuntimesByProfiles(ctx, ids)
 	if err != nil {
-		return
+		return nil
 	}
 	now := time.Now()
-	verdict := map[string]struct {
-		text  string
-		until time.Time
-	}{}
+	verdict := map[string]poolState{}
 	for _, p := range profiles {
-		text, until := poolVerdict(p, byKey, usage, now)
-		verdict[uuidToString(p.ID)] = struct {
-			text  string
-			until time.Time
-		}{text, until}
+		verdict[uuidToString(p.ID)] = poolVerdict(p, byKey, usage, now)
 	}
+	var lifted []db.RuntimeUnavailable
 	for _, rt := range runtimes {
 		v := verdict[uuidToString(rt.ProfileID)]
 		if err := h.Queries.DeleteRuntimeUnavailableByReasonPrefix(ctx, db.DeleteRuntimeUnavailableByReasonPrefixParams{
@@ -272,6 +274,18 @@ func (h *Handler) refreshSubscriptionAvailability(ctx context.Context) {
 			continue
 		}
 		if v.text == "" {
+			if v.usable {
+				rows, err := h.Queries.DeleteRuntimeLocalRefusals(ctx, db.DeleteRuntimeLocalRefusalsParams{
+					RuntimeID: rt.ID, CapsWitness: taskfailure.SubsPickRefusalWitness, DisabledWitness: subscriptions.DisabledWitness,
+				})
+				if err != nil {
+					slog.Warn("subscription availability: lift refusal failed", "error", err, "runtime_id", uuidToString(rt.ID))
+				}
+				for _, row := range rows {
+					slog.Info("subscription availability: stale refusal lifted", "runtime_id", uuidToString(rt.ID), "until", row.Until.Time, "reason", row.Reason)
+				}
+				lifted = append(lifted, rows...)
+			}
 			continue
 		}
 		if _, err := h.Queries.InsertRuntimeUnavailable(ctx, db.InsertRuntimeUnavailableParams{
@@ -282,11 +296,20 @@ func (h *Handler) refreshSubscriptionAvailability(ctx context.Context) {
 			slog.Warn("subscription availability: park failed", "error", err, "runtime_id", uuidToString(rt.ID))
 		}
 	}
+	return lifted
+}
+
+// poolState is the pool's verdict: text and until when it is held back;
+// usable when a fresh snapshot shows a subscription a run may spend now.
+type poolState struct {
+	text   string
+	until  time.Time
+	usable bool
 }
 
 // poolVerdict applies the daemon's own rule (subscriptions.Blocked) to the
-// server's fresh snapshots. It returns "" while any subscription may be used.
-func poolVerdict(p db.RuntimeProfile, byKey map[string]db.Subscription, usage map[string][]db.SubscriptionUsage, now time.Time) (string, time.Time) {
+// server's fresh snapshots. Its text is "" while any subscription may be used.
+func poolVerdict(p db.RuntimeProfile, byKey map[string]db.Subscription, usage map[string][]db.SubscriptionUsage, now time.Time) poolState {
 	var pool []subscriptions.Subscription
 	for _, k := range decodeStringList(p.Subscriptions) {
 		s, ok := byKey[k]
@@ -297,7 +320,7 @@ func poolVerdict(p db.RuntimeProfile, byKey map[string]db.Subscription, usage ma
 		pool = append(pool, toDaemonSubscription(resp))
 	}
 	if len(pool) == 0 {
-		return "", time.Time{}
+		return poolState{}
 	}
 	active := subscriptions.Active(pool)
 	if len(active) == 0 {
@@ -312,7 +335,7 @@ func poolVerdict(p db.RuntimeProfile, byKey map[string]db.Subscription, usage ma
 		if earliest.IsZero() {
 			earliest = now.Add(time.Hour)
 		}
-		return subscriptions.DisabledText(pool), earliest
+		return poolState{text: subscriptions.DisabledText(pool), until: earliest}
 	}
 	marks := make([]subscriptions.Mark, 0, len(active))
 	for _, s := range active {
@@ -326,10 +349,14 @@ func poolVerdict(p db.RuntimeProfile, byKey map[string]db.Subscription, usage ma
 	}
 	text := subscriptions.Blocked(marks)
 	if text == "" {
-		return "", time.Time{}
+		usable := false
+		for _, m := range marks {
+			usable = usable || subscriptions.Usable(m)
+		}
+		return poolState{usable: usable}
 	}
 	// Earliest moment any subscription frees up; unknown resets wait an hour.
-	return text, subscriptions.FreeAt(marks, now, time.Hour)
+	return poolState{text: text, until: subscriptions.FreeAt(marks, now, time.Hour)}
 }
 
 func toDaemonSubscription(s SubscriptionResponse) subscriptions.Subscription {
