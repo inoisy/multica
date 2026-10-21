@@ -55,31 +55,82 @@ func TestPrepareSubscriptionRun(t *testing.T) {
 	}
 }
 
+// A pasted token is probed before it replaces the credential: a live one is
+// written and its load reaches the card before the sign-in is reported done;
+// one the provider refuses fails the sign-in and leaves the old file alone.
 func TestHandleSubscriptionLoginWritesCredential(t *testing.T) {
 	var mu sync.Mutex
-	var reports []map[string]any
+	var events []string
+	var logins []map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/v1/messages":
+			if r.Header.Get("Authorization") != "Bearer sk-ant-oat01-new" {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			w.Header().Set("anthropic-ratelimit-unified-5h-utilization", "0.12")
+			w.Header().Set("anthropic-ratelimit-unified-7d-utilization", "0.3")
+			w.Write([]byte(`{}`))
+			return
+		case r.URL.Path == "/api/daemon/workspaces/ws-1/subscriptions":
+			w.Write([]byte(`{"subscriptions":[{"key":"claude-3","auth":"claude_oauth"}]}`))
+			return
+		}
 		var body map[string]any
 		json.NewDecoder(r.Body).Decode(&body)
 		mu.Lock()
-		reports = append(reports, body)
-		mu.Unlock()
+		defer mu.Unlock()
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/subscription-usage"):
+			events = append(events, "usage")
+			rep := body["reports"].([]any)[0].(map[string]any)
+			if rep["credential_state"] != "present" || len(rep["windows"].([]any)) != 2 {
+				t.Errorf("usage report: %v", rep)
+			}
+		case strings.Contains(r.URL.Path, "/subscription-logins/"):
+			events = append(events, "login:"+body["state"].(string))
+			logins = append(logins, body)
+		}
 		w.Write([]byte(`{"ok":true}`))
 	}))
 	defer srv.Close()
 	d := freshDaemon(srv.URL)
-	cred := filepath.Join(t.TempDir(), "claude-3", "token")
+	d.workspaces["ws-1"] = &workspaceState{}
+	d.subs = &subscriptions.Selector{
+		Prober:   &subscriptions.Prober{HTTP: srv.Client(), Now: time.Now, Endpoints: subscriptions.Endpoints{Anthropic: srv.URL}},
+		Interval: time.Hour, ClaudeInterval: time.Hour, Now: time.Now,
+	}
+	dir := filepath.Join(t.TempDir(), "claude-3")
+	cred := filepath.Join(dir, "token")
+
 	d.handleSubscriptionLogin(context.Background(), "rt-1", &PendingSubscriptionLogin{
 		ID: "login-1", Key: "claude-3", Auth: "claude_oauth", CredentialPath: cred, Token: "sk-ant-oat01-new"})
 	if data, _ := os.ReadFile(cred); string(data) != "sk-ant-oat01-new\n" {
 		t.Fatalf("credential = %q", data)
 	}
+	if d.subs.Due(subscriptions.Subscription{Key: "claude-3", Auth: "claude_oauth"}) {
+		t.Error("the sign-in probe counts as the subscription's probe")
+	}
+
+	d.handleSubscriptionLogin(context.Background(), "rt-1", &PendingSubscriptionLogin{
+		ID: "login-2", Key: "claude-3", Auth: "claude_oauth", CredentialPath: cred, Token: "sk-ant-oat01-dead"})
+	if data, _ := os.ReadFile(cred); string(data) != "sk-ant-oat01-new\n" {
+		t.Fatalf("a refused token replaced the credential: %q", data)
+	}
+	if left, _ := filepath.Glob(filepath.Join(dir, "*")); len(left) != 1 {
+		t.Fatalf("files left: %v", left)
+	}
+
 	mu.Lock()
 	defer mu.Unlock()
-	if len(reports) != 1 || reports[0]["state"] != "done" {
-		t.Fatalf("reports: %v", reports)
+	if got := strings.Join(events, ","); got != "usage,login:done,login:failed" {
+		t.Fatalf("events: %s", got)
 	}
-	for _, r := range reports {
+	if msg := logins[1]["message"].(string); !strings.Contains(msg, "не принял") {
+		t.Fatalf("refusal message: %q", msg)
+	}
+	for _, r := range logins {
 		if strings.Contains(r["message"].(string), "sk-ant") {
 			t.Fatal("the token must not be reported back")
 		}
