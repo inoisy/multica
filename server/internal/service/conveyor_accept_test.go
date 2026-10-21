@@ -67,11 +67,12 @@ func TestConveyorAcceptStepFlow(t *testing.T) {
 	if got := len(r.tasksOf("lead")); got != 0 {
 		t.Fatalf("lead woken before accept (%d runs)", got)
 	}
+	// A red accept goes back to dev by itself: accept's default back.
 	task := r.start(r.only("accept"))
 	r.mustSubmit(task, r.result(ConveyorOutcomeChangesRequested, commit))
 	r.complete(task)
-	if view := r.view(); view.Status != ConveyorAwaitingCoordinator || len(r.tasksOf("lead")) != 1 {
-		t.Fatalf("a red accept: status %s, lead runs %d", view.Status, len(r.tasksOf("lead")))
+	if view := r.view(); view.Status != ConveyorActive || view.Step != "dev" || len(r.tasksOf("lead")) != 0 {
+		t.Fatalf("a red accept: status %s at %s, lead runs %d", view.Status, view.Step, len(r.tasksOf("lead")))
 	}
 }
 
