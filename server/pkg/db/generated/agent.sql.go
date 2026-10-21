@@ -3118,7 +3118,7 @@ INSERT INTO agent (
     custom_env, custom_args, kind, system_key
 ) VALUES (
     $1, $2, '', $3, '{}'::jsonb, $4,
-    'private', 'private', 4, $5, '',
+    'private', 'private', 1, $5, '',
     '{}'::jsonb, '[]'::jsonb, 'system', 'accept'
 )
 RETURNING id, workspace_id, name, avatar_url, runtime_mode, runtime_config, visibility, status, max_concurrent_tasks, owner_id, created_at, updated_at, description, runtime_id, instructions, archived_at, archived_by, custom_env, custom_args, mcp_config, model, thinking_level, composio_toolkit_allowlist, permission_mode, kind, system_key, disabled_runtime_skills, service_tier, conversation_starters, model_profile_id, disallowed_tools
@@ -3137,6 +3137,8 @@ type CreateSystemAcceptAgentParams struct {
 // no model, prompt or owner choices. `kind = 'system'` keeps it out of agent
 // lists and pickers; migration 172's index makes (workspace, owner, runtime,
 // system_key) unique, so a concurrent create fails and the caller re-reads.
+// One run at a time: parallel full checks on one host time out each other's
+// tests (STT-366, 22.10.2026: three accepts of one repository at once).
 func (q *Queries) CreateSystemAcceptAgent(ctx context.Context, arg CreateSystemAcceptAgentParams) (Agent, error) {
 	row := q.db.QueryRow(ctx, createSystemAcceptAgent,
 		arg.WorkspaceID,
