@@ -507,3 +507,44 @@ func TestQuotaOnRouteStepRetriesUnderTheSameAction(t *testing.T) {
 		t.Fatalf("rerun next to the repeat: %v %v", err, again)
 	}
 }
+
+// The daemon's reported reset parks the runtime, not a time read back from
+// the refusal text; without one, a reset that has just passed holds the
+// runtime minutes, not until the same clock tomorrow (TOON-274).
+func TestQuotaRefusalParksUntilReportedReset(t *testing.T) {
+	r := newModelClaimRig(t)
+	agent := r.agent("models reported reset", r.strong)
+	now := time.Now().UTC()
+	past := now.Add(-time.Minute).Format("2006-01-02 15:04")
+	text := "usage limit: подписки runtime выше лимита агентам (остаток — резерв людям): a неделя 54% ≥ 50%; b 5ч 97% ≥ 75%, reset at " + past + " UTC"
+	until := func() time.Time {
+		var u time.Time
+		r.fx.QueryRow(t, "SELECT until FROM runtime_unavailable WHERE runtime_id=$1 ORDER BY created_at DESC LIMIT 1", r.rt["codex"]).Scan(&u)
+		return u
+	}
+
+	task := r.enqueue(agent, pgtype.UUID{})
+	if r.claim("codex") == nil {
+		t.Fatal("no claim")
+	}
+	reported := now.Add(25 * time.Minute).Truncate(time.Second)
+	if _, _, err := r.svc.FailTaskWithQuotaReset(r.ctx, task.ID, text, "", "", "", "", false, "", "", reported); err != nil {
+		t.Fatal(err)
+	}
+	if got := until(); !got.Equal(reported) {
+		t.Fatalf("until %v, want reported %v", got, reported)
+	}
+
+	r.fx.Exec(t, "DELETE FROM runtime_unavailable WHERE workspace_id=$1", r.ws)
+	r.fx.Exec(t, "UPDATE agent_task_queue SET status='cancelled' WHERE agent_id=$1 AND status IN ('queued','dispatched','running')", agent.ID)
+	task = r.enqueue(agent, pgtype.UUID{})
+	if r.claim("codex") == nil {
+		t.Fatal("no second claim")
+	}
+	if _, err := r.svc.FailTask(r.ctx, task.ID, text, "", "", "", "", false, "", ""); err != nil {
+		t.Fatal(err)
+	}
+	if d := until().Sub(now); d < 4*time.Minute || d > 6*time.Minute {
+		t.Fatalf("past reset in the text: parked %v, want ~5m", d)
+	}
+}

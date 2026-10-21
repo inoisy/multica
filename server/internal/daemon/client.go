@@ -660,7 +660,16 @@ func (c *Client) FailTask(ctx context.Context, taskID, errMsg, sessionID, workDi
 }
 
 func (c *Client) failTaskWithRetrySchedule(ctx context.Context, taskID, errMsg, sessionID, workDir, branchName, failureReason string, sessionRolloutMissing bool, retiredSessionID, durableWorkDir string, schedule []time.Duration) error {
+	return c.failTaskReportWithRetrySchedule(ctx, taskID, errMsg, sessionID, workDir, branchName, failureReason, sessionRolloutMissing, retiredSessionID, durableWorkDir, time.Time{}, schedule)
+}
+
+// failTaskReportWithRetrySchedule also sends quota_reset_at: when a refused
+// run's subscriptions free up, so the server need not parse the error text.
+func (c *Client) failTaskReportWithRetrySchedule(ctx context.Context, taskID, errMsg, sessionID, workDir, branchName, failureReason string, sessionRolloutMissing bool, retiredSessionID, durableWorkDir string, quotaResetAt time.Time, schedule []time.Duration) error {
 	body := map[string]any{"error": errMsg}
+	if !quotaResetAt.IsZero() {
+		body["quota_reset_at"] = quotaResetAt.UTC().Format(time.RFC3339)
+	}
 	if sessionID != "" {
 		body["session_id"] = sessionID
 	}

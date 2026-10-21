@@ -4296,6 +4296,10 @@ type TaskCompleteRequest struct {
 	// to report" — this says "never hand this id to a later run". Older
 	// daemons omit it, which is exactly the pre-fix behaviour.
 	RetiredSessionID string `json:"retired_session_id,omitempty"`
+	// QuotaResetAt: the daemon refused the run because every subscription of
+	// the runtime sits at its agent cap; this is when the first frees up. It
+	// wins over the reset read from the error text. Older daemons omit it.
+	QuotaResetAt *time.Time `json:"quota_reset_at,omitempty"`
 }
 
 // sanitizeTaskCompleteRequest / sanitizeTaskFailRequest scrub every
@@ -5058,6 +5062,10 @@ type TaskFailRequest struct {
 	// to report" — this says "never hand this id to a later run". Older
 	// daemons omit it, which is exactly the pre-fix behaviour.
 	RetiredSessionID string `json:"retired_session_id,omitempty"`
+	// QuotaResetAt: the daemon refused the run because every subscription of
+	// the runtime sits at its agent cap; this is when the first frees up. It
+	// wins over the reset read from the error text. Older daemons omit it.
+	QuotaResetAt *time.Time `json:"quota_reset_at,omitempty"`
 }
 
 func (h *Handler) FailTask(w http.ResponseWriter, r *http.Request) {
@@ -5093,7 +5101,11 @@ func (h *Handler) failTask(w http.ResponseWriter, r *http.Request, taskID, works
 	// keep a stale mid-flight pin) and flagging the row in the same commit that
 	// creates and wakes the auto-retry, so the retry can never claim the withheld
 	// pointer or miss the continuity gap.
-	task, transitioned, err := h.TaskService.FailTaskWithTransition(r.Context(), parseUUID(taskID), req.Error, req.SessionID, req.WorkDir, req.BranchName, req.FailureReason, req.SessionRolloutMissing, req.RetiredSessionID, req.DurableWorkDir)
+	var quotaResetAt time.Time
+	if req.QuotaResetAt != nil {
+		quotaResetAt = *req.QuotaResetAt
+	}
+	task, transitioned, err := h.TaskService.FailTaskWithQuotaReset(r.Context(), parseUUID(taskID), req.Error, req.SessionID, req.WorkDir, req.BranchName, req.FailureReason, req.SessionRolloutMissing, req.RetiredSessionID, req.DurableWorkDir, quotaResetAt)
 	if err != nil {
 		// A FailTask error is an infrastructure failure (the terminal
 		// transaction that also clears the withheld session, writes the

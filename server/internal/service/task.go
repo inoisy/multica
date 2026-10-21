@@ -4861,6 +4861,13 @@ func (s *TaskService) FailTask(ctx context.Context, taskID pgtype.UUID, errMsg, 
 // CompleteTaskWithTransition. The bool is false for an idempotent replay that
 // observed an already-terminal row.
 func (s *TaskService) FailTaskWithTransition(ctx context.Context, taskID pgtype.UUID, errMsg, sessionID, workDir, branchName, failureReason string, sessionRolloutMissing bool, retiredSessionID, durableWorkDir string) (*db.AgentTaskQueue, bool, error) {
+	return s.FailTaskWithQuotaReset(ctx, taskID, errMsg, sessionID, workDir, branchName, failureReason, sessionRolloutMissing, retiredSessionID, durableWorkDir, time.Time{})
+}
+
+// FailTaskWithQuotaReset is FailTaskWithTransition with the reset the daemon
+// reported for a refused run: a quota repeat parks the runtime until then
+// rather than until a time read from the error text. Zero: read the text.
+func (s *TaskService) FailTaskWithQuotaReset(ctx context.Context, taskID pgtype.UUID, errMsg, sessionID, workDir, branchName, failureReason string, sessionRolloutMissing bool, retiredSessionID, durableWorkDir string, quotaResetAt time.Time) (*db.AgentTaskQueue, bool, error) {
 	// Strip bytes PostgreSQL cannot store before anything else reads errMsg, so
 	// the classifier, the transaction and every downstream consumer see the one
 	// text we will actually persist (GH #7098). Kept at the service boundary
@@ -5054,7 +5061,7 @@ func (s *TaskService) FailTaskWithTransition(ctx context.Context, taskID pgtype.
 		// can never abort this transaction — which also carries the parent's
 		// failed status.
 		if quotaRetry {
-			if err := markRuntimeUnavailable(ctx, qtx, t, errMsg, time.Now()); err != nil {
+			if err := markRuntimeUnavailable(ctx, qtx, t, errMsg, quotaResetAt, time.Now()); err != nil {
 				return fmt.Errorf("mark runtime unavailable: %w", err)
 			}
 		}

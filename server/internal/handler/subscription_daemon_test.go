@@ -164,3 +164,66 @@ func subtestJSON(v any) string {
 	b, _ := json.Marshal(v)
 	return string(b)
 }
+
+// TOON-274: a runtime of two subscriptions is parked until the first of them
+// frees up, and a window whose reset has passed does not park it at all.
+func TestDaemonUsageParksTwoSubscriptionPoolUntilEarliestReset(t *testing.T) {
+	h := subscriptionTestHandler(t)
+	ctx := context.Background()
+	createSubtestSubscription(t, h, map[string]any{"key": "subtest-second", "provider": "claude", "caps": map[string]int{"5h": 50, "week": 50}})
+	createSubtestSubscription(t, h, map[string]any{"key": "subtest-main", "provider": "claude", "caps": map[string]int{"5h": 75, "week": 76}})
+	created := callSubscription(t, h.CreateRuntimePool, newRequest("POST", "/api/runtime-pools", map[string]any{
+		"display_name": "Subtest pool two", "runtime_type": "claude", "subscriptions": []string{"subtest-second", "subtest-main"}, "workspace_ids": []string{testWorkspaceID},
+	}), http.StatusCreated)
+	profileID := created["runtime_profiles"].([]any)[0].(map[string]any)["id"].(string)
+	runtimeID := insertProfileRuntimeFixture(t, ctx, profileID, "Subtest pool two runtime", "claude")
+	t.Cleanup(func() {
+		testPool.Exec(ctx, `DELETE FROM runtime_unavailable WHERE runtime_id = $1`, runtimeID)
+		testPool.Exec(ctx, `DELETE FROM subscription_host_state WHERE daemon_id = 'subtest-daemon'`)
+	})
+
+	now := time.Now().UTC().Truncate(time.Second)
+	weekReset := now.Add(23 * time.Hour).Format(time.RFC3339)
+	report := func(main5h float64, main5hReset time.Time) {
+		callSubscription(t, h.DaemonReportSubscriptionUsage, withURLParam(newDaemonTokenRequest("POST", "/x", map[string]any{
+			"daemon_id": "subtest-daemon", "device_name": "host-1",
+			"reports": []map[string]any{
+				{"key": "subtest-second", "credential_state": "present", "windows": []map[string]any{
+					{"window": "5h", "used_percent": 0}, {"window": "week", "used_percent": 54, "resets_at": weekReset}}},
+				{"key": "subtest-main", "credential_state": "present", "windows": []map[string]any{
+					{"window": "5h", "used_percent": main5h, "resets_at": main5hReset.Format(time.RFC3339)}, {"window": "week", "used_percent": 63, "resets_at": weekReset}}},
+			},
+		}, testWorkspaceID, "subtest-daemon"), "workspaceId", testWorkspaceID), http.StatusOK)
+	}
+	parkedUntil := func() (int, time.Time) {
+		var n int
+		var until time.Time
+		testPool.QueryRow(ctx, `SELECT count(*), coalesce(max(until), 'epoch') FROM runtime_unavailable WHERE runtime_id = $1 AND until > now()`, runtimeID).Scan(&n, &until)
+		return n, until
+	}
+
+	mainReset := now.Add(30 * time.Minute)
+	report(97, mainReset)
+	if n, until := parkedUntil(); n != 1 || !until.Equal(mainReset) {
+		t.Fatalf("both over cap: parked %d until %v, want %v (claude-main's 5h reset, not the week)", n, until, mainReset)
+	}
+	report(97, now.Add(-10*time.Second))
+	if n, _ := parkedUntil(); n != 0 {
+		t.Fatalf("main's 5h reset has passed: the runtime is free, still %d parked", n)
+	}
+}
+
+func TestTaskFailRequestDecodesQuotaReset(t *testing.T) {
+	var req TaskFailRequest
+	if err := json.Unmarshal([]byte(`{"error":"usage limit","quota_reset_at":"2026-10-20T20:30:00Z"}`), &req); err != nil {
+		t.Fatal(err)
+	}
+	if req.QuotaResetAt == nil || !req.QuotaResetAt.Equal(time.Date(2026, 10, 20, 20, 30, 0, 0, time.UTC)) {
+		t.Fatalf("quota_reset_at: %v", req.QuotaResetAt)
+	}
+	req = TaskFailRequest{}
+	json.Unmarshal([]byte(`{"error":"x"}`), &req)
+	if req.QuotaResetAt != nil {
+		t.Fatal("older daemons send none")
+	}
+}
