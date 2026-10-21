@@ -16,12 +16,23 @@ setup() {
   printf '#!/bin/sh\necho "$*" >>%s/systemctl.log\n' "$T" >"$T/systemctl"
   # The fake daemon offers accept only when it runs the new binary.
   printf '#!/bin/sh\nif grep -q new %s/bin/multica; then echo "{\\"agents\\":[\\"codex\\",\\"%s\\"]}"; else echo "{\\"agents\\":[\\"codex\\"]}"; fi\n' "$T" "${2:-accept}" >"$T/curl"
-  chmod 755 "$T/pgrep" "$T/systemctl" "$T/curl"
+  printf '#!/bin/sh\necho %s\n' "${3:-0}" >"$T/runs"
+  chmod 755 "$T/pgrep" "$T/systemctl" "$T/curl" "$T/runs"
 }
 run() {
-  PROC=$T/proc BACKUPS=$T/backups SYSTEMCTL=$T/systemctl CURL=$T/curl PGREP=$T/pgrep WAIT=2 \
+  PROC=$T/proc BACKUPS=$T/backups SYSTEMCTL=$T/systemctl CURL=$T/curl PGREP=$T/pgrep RUNS=$T/runs WAIT=2 \
     bash "$HERE/daemon-install.sh" --binary "$T/pkg/multica" "$@"
 }
+
+# Going runs stop the install: a restart would cut them.
+setup multica-agents.service accept 3
+rc=0; out=$(run 2>&1) || rc=$?
+[[ $rc == 4 && $out == *'идут раны (3)'* ]] || fail "busy: rc=$rc $out"
+grep -q old "$T/bin/multica" || fail 'busy install replaced the binary'
+[[ ! -s $T/systemctl.log ]] || fail 'busy install restarted the daemon'
+FORCE_RESTART=1 run >/dev/null || fail 'FORCE_RESTART=1 did not install'
+grep -q new "$T/bin/multica" || fail 'FORCE_RESTART=1 kept the old binary'
+pass=$((pass + 1))
 
 # --check changes nothing.
 setup
@@ -64,4 +75,4 @@ set +e; run >/dev/null 2>&1; code=$?; set -e
 [[ $code == 1 ]] && grep -q old "$T/bin/multica" || fail 'tampered package was installed'
 pass=$((pass + 1))
 
-echo "ok: $pass/5"
+echo "ok: $pass/6"
