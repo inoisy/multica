@@ -126,9 +126,14 @@ func runIssueConveyorAccept(cmd *cobra.Command, args []string) error {
 			break
 		}
 		fmt.Fprintf(os.Stdout, "accepting %s from %s (%s) in %s\n", short(commit), repo, artifact.Artifact.Branch, checkout.Path)
+		sources, serr := carrySources(ctx, client, base, view, firstNonEmpty(os.Getenv("MULTICA_TASK_ID"), view.CurrentTaskID))
+		if serr != nil {
+			outcome = coordinator("cannot read the route journal: " + serr.Error())
+			break
+		}
 		outcome = runAcceptance(ctx, acceptSpec{
 			Dir: checkout.Path, Repo: repo, Commit: commit, Branch: artifact.Artifact.Branch,
-			Issue: issue.Identifier, Log: os.Stdout,
+			Issue: issue.Identifier, Log: os.Stdout, Carry: sources,
 		})
 	}
 	fmt.Fprintf(os.Stdout, "accept: %s — %s\n", outcome.Outcome, outcome.Reason)
@@ -180,6 +185,68 @@ func acceptedArtifact(ctx context.Context, client *cli.APIClient, base, commit s
 	return *found, nil
 }
 
+// carrySources lists the verdicts acceptance must check before it merges: the
+// latest result of each verifier before accept since the route was enabled.
+// Only an accept run the route owed on the way from a commit its verifiers
+// may not have judged checks them; any other accepts as before.
+func carrySources(ctx context.Context, client *cli.APIClient, base string, view acceptRouteView, taskID string) ([]carrySource, error) {
+	type event struct {
+		Kind    string  `json:"kind"`
+		Idx     *int32  `json:"idx"`
+		Action  *string `json:"action"`
+		TaskID  *string `json:"task_id"`
+		Details struct {
+			Carry    bool `json:"carry"`
+			Artifact struct {
+				Commit string `json:"commit"`
+			} `json:"artifact"`
+		} `json:"details"`
+	}
+	latest := map[int32]carrySource{}
+	owedCarry := false
+	cursor := "0"
+	for page := 0; page < 50; page++ {
+		var p struct {
+			Events     []event `json:"events"`
+			NextCursor string  `json:"next_cursor"`
+		}
+		if err := getJSON(ctx, client, base+"/conveyor/events?limit=200&cursor="+url.QueryEscape(cursor), &p); err != nil {
+			return nil, err
+		}
+		for _, e := range p.Events {
+			action := ""
+			if e.Action != nil {
+				action = *e.Action
+			}
+			switch {
+			case e.Kind == "state" && action == "enable":
+				latest = map[int32]carrySource{}
+			case e.Kind == "action" && e.TaskID != nil && *e.TaskID == taskID:
+				owedCarry = e.Details.Carry
+			case e.Kind == "result" && e.Idx != nil && int(*e.Idx) < len(view.Route):
+				latest[*e.Idx] = carrySource{Step: view.Route[*e.Idx].Step, Commit: strings.ToLower(e.Details.Artifact.Commit), Pass: action == "pass"}
+			}
+		}
+		if len(p.Events) == 0 || p.NextCursor == cursor {
+			break
+		}
+		cursor = p.NextCursor
+	}
+	if !owedCarry {
+		return nil, nil
+	}
+	var sources []carrySource
+	for i, n := range view.Route {
+		if n.Step == "accept" {
+			break
+		}
+		if src, ok := latest[int32(i)]; ok && (n.Step == "qa" || n.Step == "review") {
+			sources = append(sources, src)
+		}
+	}
+	return sources, nil
+}
+
 // acceptResult is the step's result: the accepted commit, each check, and a
 // report a person can act on.
 func acceptResult(o acceptOutcome, repo, commit string) map[string]any {
@@ -208,12 +275,44 @@ func acceptResult(o acceptOutcome, repo, commit string) map[string]any {
 		}
 		fmt.Fprintf(&report, "\n\n```\n%s\n```", tail)
 	}
-	branch := o.Base
-	return map[string]any{
+	result := map[string]any{
 		"schema_version": 1,
 		"outcome":        o.Outcome,
-		"artifact":       map[string]string{"repo": repo, "branch": branch, "commit": strings.ToLower(commit)},
+		"artifact":       map[string]string{"repo": repo, "branch": o.Base, "commit": strings.ToLower(commit)},
 		"checks":         checks,
-		"report":         report.String(),
 	}
+	if c := o.Carry; c != nil {
+		carried := make([]map[string]any, 0, len(c.Carried))
+		for _, v := range c.Carried {
+			files := v.Files
+			if files == nil {
+				files = []string{}
+			}
+			carried = append(carried, map[string]any{"step": v.Step, "from": v.From, "files": files})
+			fmt.Fprintf(&report, "\n\nВердикт %s перенесён с %s: %s.", v.Step, short(v.From), carriedFiles(v.Files))
+		}
+		carry := map[string]any{}
+		if len(c.Paths) > 0 {
+			carry["paths"] = c.Paths
+		}
+		if len(carried) > 0 {
+			carry["carried"] = carried
+		}
+		if c.Reverify != "" {
+			carry["reverify"], carry["files"] = c.Reverify, c.Files
+		}
+		result["carry"] = carry
+	}
+	result["report"] = report.String()
+	return result
+}
+
+func carriedFiles(files []string) string {
+	if len(files) == 0 {
+		return "то же дерево"
+	}
+	if len(files) > 10 {
+		return strings.Join(files[:10], ", ") + fmt.Sprintf(" и ещё %d", len(files)-10)
+	}
+	return strings.Join(files, ", ")
 }
