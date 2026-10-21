@@ -41,10 +41,6 @@ type acceptConfig struct {
 	// loaded server fails on timeouts in a different test each run (STT-366),
 	// while a real regression fails every time.
 	Retries *int `json:"retries"`
-	// VerdictCarryPaths are glob patterns (docs/**, *.md): a commit that
-	// differs from the one qa and review judged only in these paths keeps
-	// their verdicts. Empty keeps the verdicts to the commit they were given on.
-	VerdictCarryPaths []string `json:"verdict_carry_paths"`
 }
 
 var defaultDiffGuard = []string{`: any\b`, `as unknown as`, `@ts-(?:ignore|expect-error)`, `eslint-disable`}
@@ -68,30 +64,6 @@ type acceptSpec struct {
 	Issue  string // issue identifier, for the merge message
 	Log    io.Writer
 	Sleep  func(context.Context, time.Duration) error
-	// Carry lists the verdicts to check when the route accepted a commit its
-	// verifiers may not all have judged, in route order.
-	Carry []carrySource
-}
-
-// carrySource is a verifier's latest verdict on the route.
-type carrySource struct {
-	Step   string
-	Commit string
-	Pass   bool
-}
-
-// acceptCarry is what acceptance found about verdicts given on other commits.
-type acceptCarry struct {
-	Paths    []string
-	Carried  []carriedVerdict
-	Reverify string
-	Files    []string
-}
-
-type carriedVerdict struct {
-	Step  string
-	From  string
-	Files []string
 }
 
 // acceptCheck is one line of the result: a guard or a command.
@@ -113,13 +85,12 @@ type acceptOutcome struct {
 	Checks  []acceptCheck
 	Reason  string
 	Tail    string
-	Carry   *acceptCarry
 }
 
 // runAcceptance merges the accepted commit onto the current base, checks the
 // result with the repository's own commands and pushes exactly the checked
 // merge. A base that moved meanwhile is fetched and checked again.
-func runAcceptance(ctx context.Context, spec acceptSpec) (res acceptOutcome) {
+func runAcceptance(ctx context.Context, spec acceptSpec) acceptOutcome {
 	if spec.Sleep == nil {
 		spec.Sleep = sleepCtx
 	}
@@ -134,18 +105,6 @@ func runAcceptance(ctx context.Context, spec acceptSpec) (res acceptOutcome) {
 	if err != nil {
 		return coordinator(fmt.Sprintf("commit %s is not in the repository", spec.Commit))
 	}
-	carry := &acceptCarry{}
-	defer func() {
-		if res.Carry == nil && (len(carry.Paths) > 0 || len(carry.Carried) > 0) {
-			res.Carry = carry
-		}
-	}()
-	if len(spec.Carry) > 0 {
-		var back *acceptOutcome
-		if carry.Carried, back = checkCarry(ctx, g, sha, spec.Carry); back != nil {
-			return *back
-		}
-	}
 	raw, err := g.run(ctx, "show", sha+":"+acceptanceFile)
 	if err != nil {
 		// A repository without the file is merged by people (MR): the step passes and merges nothing.
@@ -158,7 +117,6 @@ func runAcceptance(ctx context.Context, spec acceptSpec) (res acceptOutcome) {
 	if len(cfg.Commands) == 0 {
 		return coordinator(acceptanceFile + " lists no commands")
 	}
-	carry.Paths = cfg.VerdictCarryPaths
 	base := strings.TrimSpace(cfg.Base)
 	if base == "" {
 		base = g.defaultBranch(ctx)
@@ -249,120 +207,6 @@ func (c acceptConfig) retries() int {
 		return defaultAcceptRetries
 	}
 	return min(max(*c.Retries, 0), maxAcceptRetries)
-}
-
-// checkCarry decides whether each verdict given on another commit holds for
-// sha: the diff between the two touches only the verdict_carry_paths of the
-// judged commit (the accepted one may not widen its own list), or nothing.
-// The first verdict that does not hold sends the commit back to its step.
-func checkCarry(ctx context.Context, g gitIn, sha string, sources []carrySource) ([]carriedVerdict, *acceptOutcome) {
-	var carried []carriedVerdict
-	back := func(step, reason string, files []string) *acceptOutcome {
-		return &acceptOutcome{Outcome: "changes_requested", Reason: reason, Tail: strings.Join(files, "\n"),
-			Checks: []acceptCheck{{Name: "verdict of " + step + " carries", OK: false}},
-			Carry:  &acceptCarry{Reverify: step, Files: files}}
-	}
-	for _, src := range sources {
-		if src.Commit == "" {
-			continue
-		}
-		from, err := g.run(ctx, "rev-parse", "--verify", src.Commit+"^{commit}")
-		if err != nil {
-			return nil, back(src.Step, fmt.Sprintf("%s judged %s, which is not in the repository", src.Step, short(src.Commit)), nil)
-		}
-		if from == sha {
-			continue
-		}
-		if !src.Pass {
-			return nil, back(src.Step, fmt.Sprintf("the last verdict of %s, on %s, is not a pass", src.Step, short(from)), nil)
-		}
-		// Without renames a file moved out of code shows its old path too.
-		out, err := g.run(ctx, "diff", "--no-renames", "--name-only", "-z", from, sha)
-		if err != nil {
-			return nil, back(src.Step, "diff failed: "+err.Error(), nil)
-		}
-		files := splitNUL(out)
-		var outside []string
-		if len(files) > 0 {
-			patterns := carryPathsAt(ctx, g, from)
-			for _, f := range files {
-				if !matchesAny(patterns, f) {
-					outside = append(outside, f)
-				}
-			}
-		}
-		if len(outside) > 0 {
-			return nil, back(src.Step, fmt.Sprintf("the verdict of %s on %s does not carry to %s: %d file(s) outside verdict_carry_paths", src.Step, short(from), short(sha), len(outside)), outside)
-		}
-		carried = append(carried, carriedVerdict{Step: src.Step, From: from, Files: files})
-	}
-	return carried, nil
-}
-
-// carryPathsAt reads verdict_carry_paths from the acceptance file of commit.
-func carryPathsAt(ctx context.Context, g gitIn, commit string) []string {
-	raw, err := g.run(ctx, "show", commit+":"+acceptanceFile)
-	if err != nil {
-		return nil
-	}
-	var cfg acceptConfig
-	if json.Unmarshal([]byte(raw), &cfg) != nil {
-		return nil
-	}
-	return cfg.VerdictCarryPaths
-}
-
-func matchesAny(patterns []string, file string) bool {
-	for _, p := range patterns {
-		if matchCarryPath(p, file) {
-			return true
-		}
-	}
-	return false
-}
-
-// matchCarryPath matches a repository path against a glob: * and ? stay
-// inside one directory, ** crosses directories ("docs/**", "**/*.md").
-func matchCarryPath(pattern, file string) bool {
-	pattern = strings.TrimPrefix(strings.TrimSpace(pattern), "/")
-	if pattern == "" {
-		return false
-	}
-	var re strings.Builder
-	re.WriteString("^")
-	for i := 0; i < len(pattern); i++ {
-		switch c := pattern[i]; c {
-		case '*':
-			if i+1 < len(pattern) && pattern[i+1] == '*' {
-				i++
-				if i+1 < len(pattern) && pattern[i+1] == '/' {
-					i++
-					re.WriteString("(?:.*/)?")
-				} else {
-					re.WriteString(".*")
-				}
-			} else {
-				re.WriteString("[^/]*")
-			}
-		case '?':
-			re.WriteString("[^/]")
-		default:
-			re.WriteString(regexp.QuoteMeta(string(c)))
-		}
-	}
-	re.WriteString("$")
-	ok, _ := regexp.MatchString(re.String(), file)
-	return ok
-}
-
-func splitNUL(s string) []string {
-	var out []string
-	for _, l := range strings.Split(s, "\x00") {
-		if l = strings.TrimSpace(l); l != "" {
-			out = append(out, l)
-		}
-	}
-	return out
 }
 
 func coordinator(reason string) acceptOutcome {

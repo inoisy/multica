@@ -1,9 +1,12 @@
 package service
 
 import (
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/multica-ai/multica/server/internal/util"
 )
 
 // STT-368: a daemon restart cut the dev run, and the coordinator spent a run
@@ -41,47 +44,110 @@ func TestConveyorDoesNotRetryWorkFailures(t *testing.T) {
 	}
 }
 
-// STT-368: the reviewer fixed a regression itself (3a29349 on top of the
-// d9d89b5 QA passed). The route sends the reviewer's commit to QA and, once QA
-// passes it, goes on without running the reviewer again.
-func TestConveyorRechecksAVerifiersOwnCommit(t *testing.T) {
+// STT-364: the reviewer fixed the work itself (f57b2f7 on top of the 71b7e42
+// QA passed). The reviewer's commit becomes the accepted one and the route
+// goes on: no new round through dev, no second qa, no coordinator.
+func TestConveyorVerifiersOwnCommitAdvancesTheRoute(t *testing.T) {
 	const dev, fix = "abcdef1234567", "1234567abcdef"
 	r := newConveyorRig(t)
-	r.enable("dev", "qa", "review", "close")
+	r.withAcceptAgent()
+	r.enable("dev", "qa", "review", "accept", "close")
 	r.pass("dev", dev)
 	r.pass("qa", dev)
 	r.pass("review", fix)
 	view := r.view()
-	if view.Status != ConveyorActive || view.Step != "qa" || view.AcceptedCommit != fix || len(r.tasksOf("lead")) != 0 {
-		t.Fatalf("after the reviewer's fix: %s at %s, accepted %q, lead runs %d; journal:%s", view.Status, view.Step, view.AcceptedCommit, len(r.tasksOf("lead")), r.dump())
+	if view.Status != ConveyorActive || view.Step != "accept" || view.AcceptedCommit != fix || len(r.tasksOf("lead")) != 0 || len(r.tasksOf("qa")) != 1 {
+		t.Fatalf("after the reviewer's fix: %s at %s, accepted %q, qa runs %d, lead runs %d; journal:%s", view.Status, view.Step, view.AcceptedCommit, len(r.tasksOf("qa")), len(r.tasksOf("lead")), r.dump())
 	}
-	qa := r.tasksOf("qa")
-	if len(qa) != 2 || !strings.Contains(qa[1].HandoffNote.String, "сам поправил") || !strings.Contains(qa[1].HandoffNote.String, fix) {
-		t.Fatalf("qa re-check run %d, note:\n%s", len(qa), qa[len(qa)-1].HandoffNote.String)
+	if d := r.decisionFor(r.only("review")); d.Action.String != conveyorDecisionAdvance || d.Reason.String != "accepted commit advanced by review: abcdef123 → 1234567ab" {
+		t.Fatalf("review decision %s %q", d.Action.String, d.Reason.String)
 	}
-	r.pass("qa", fix)
-	if view := r.view(); view.Status != ConveyorCompleted || len(r.tasksOf("review")) != 1 {
-		t.Fatalf("after qa passed the fix: %s, review runs %d; journal:%s", view.Status, len(r.tasksOf("review")), r.dump())
+	r.pass("accept", fix)
+	if view := r.view(); view.Status != ConveyorCompleted {
+		t.Fatalf("after accept: %s; journal:%s", view.Status, r.dump())
 	}
 }
 
-// The re-checks of one revision are bounded: reviewers that keep rewriting
-// the work end at the coordinator.
-func TestConveyorRechecksAreBounded(t *testing.T) {
+// qa's own commit moves the route on just the same.
+func TestConveyorFirstVerifiersOwnCommitAdvancesTheRoute(t *testing.T) {
 	r := newConveyorRig(t)
-	r.enable("dev", "qa", "review", "review", "close")
+	r.enable("dev", "qa", "review", "close")
+	r.pass("dev", "c000000000000")
+	r.pass("qa", "c111111111111")
+	if view := r.view(); view.Step != "review" || view.AcceptedCommit != "c111111111111" {
+		t.Fatalf("after qa's fix: at %s, accepted %q; journal:%s", view.Step, view.AcceptedCommit, r.dump())
+	}
+}
+
+// STT-354: acceptance found the ADR number taken. dev renames it and the fix
+// goes straight back to accept, not through qa and review again; changes
+// asked by qa or review still go dev → qa → review.
+func TestConveyorFixForARedAcceptGoesStraightToAccept(t *testing.T) {
+	const first, fix = "abcdef1234567", "1234567abcdef"
+	r := newConveyorRig(t)
+	r.withAcceptAgent()
+	r.enable("dev", "qa", "review", "accept", "close")
+	for _, step := range []string{"dev", "qa", "review"} {
+		r.pass(step, first)
+	}
+	task := r.start(r.only("accept"))
+	r.mustSubmit(task, r.result(ConveyorOutcomeChangesRequested, first))
+	r.complete(task)
+	if view := r.view(); view.Step != "dev" {
+		t.Fatalf("red accept: at %s; journal:%s", view.Step, r.dump())
+	}
+	r.pass("dev", fix)
+	view := r.view()
+	if view.Step != "accept" || view.AcceptedCommit != fix || len(r.tasksOf("qa")) != 1 || len(r.tasksOf("review")) != 1 {
+		t.Fatalf("after the fix: at %s, accepted %q, qa runs %d, review runs %d; journal:%s", view.Step, view.AcceptedCommit, len(r.tasksOf("qa")), len(r.tasksOf("review")), r.dump())
+	}
+	devs := r.tasksOf("dev")
+	if d := r.decisionFor(devs[len(devs)-1]); d.Reason.String != "accept retry: dev → accept" {
+		t.Fatalf("dev decision %q", d.Reason.String)
+	}
+	r.pass("accept", fix)
+	if view := r.view(); view.Status != ConveyorCompleted {
+		t.Fatalf("after accept: %s", view.Status)
+	}
+}
+
+// Both executors of a shared dev step fix a red acceptance before accept runs.
+func TestConveyorAcceptRetryPassesThroughDevPeers(t *testing.T) {
+	r := newConveyorRig(t)
+	r.withAcceptAgent()
+	r.agents["front"] = parseTestUUID(t, r.f.privateAgentOwnedBy(t, util.UUIDToString(r.owner), "front"))
+	raw, _ := json.Marshal(r.route("dev") + ",dev:" + util.UUIDToString(r.agents["front"]) + "," + r.route("qa", "accept", "close"))
+	r.mustApply(ConveyorCommand{Action: ConveyorCmdEnable, Route: raw})
+	r.pass("dev", "c000000000000")
+	r.pass("front", "c000000000000")
+	r.pass("qa", "c000000000000")
+	task := r.start(r.only("accept"))
+	r.mustSubmit(task, r.result(ConveyorOutcomeChangesRequested, "c000000000000"))
+	r.complete(task)
+	view := r.view()
+	if view.Step != "dev" {
+		t.Fatalf("red accept: at %s", view.Step)
+	}
+	// back=dev opens the round at the last dev node: the frontend.
+	r.pass("front", "c111111111111")
+	if view := r.view(); view.Step != "accept" || len(r.tasksOf("qa")) != 1 {
+		t.Fatalf("after the frontend's fix: at %s, qa runs %d; journal:%s", view.Step, len(r.tasksOf("qa")), r.dump())
+	}
+}
+
+// qa's changes_requested still runs the whole way again: dev → qa → review.
+func TestConveyorVerifierChangesStillGoThroughQA(t *testing.T) {
+	r := newConveyorRig(t)
+	r.withAcceptAgent()
+	r.enable("dev", "qa", "review", "accept", "close")
 	r.pass("dev", "c000000000000")
 	r.pass("qa", "c000000000000")
-	r.pass("review", "c111111111111") // first review: re-check 1
-	r.pass("qa", "c111111111111")     // the first review is passed over
-	r.pass("review", "c222222222222") // second review: re-check 2
-	r.pass("qa", "c222222222222")
-	if view := r.view(); view.Step != "review" || view.CurrentIdx != 2 {
-		t.Fatalf("after re-check 2: at %s (%d); journal:%s", view.Step, view.CurrentIdx, r.dump())
-	}
-	r.pass("review", "c333333333333") // a third rewrite goes to the coordinator
-	if view := r.view(); view.Status != ConveyorAwaitingCoordinator {
-		t.Fatalf("after %d re-checks: %s; journal:%s", conveyorMaxRechecks+1, view.Status, r.dump())
+	task := r.start(r.only("review"))
+	r.mustSubmit(task, r.result(ConveyorOutcomeChangesRequested, "c000000000000"))
+	r.complete(task)
+	r.pass("dev", "c111111111111")
+	if view := r.view(); view.Step != "qa" {
+		t.Fatalf("after dev's fix for review: at %s; journal:%s", view.Step, r.dump())
 	}
 }
 

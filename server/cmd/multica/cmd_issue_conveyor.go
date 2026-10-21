@@ -7,8 +7,6 @@ import (
 	"io"
 	"net/url"
 	"os"
-	"path/filepath"
-	"regexp"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -177,7 +175,6 @@ func runIssueConveyorResult(cmd *cobra.Command, args []string) error {
 	if err := json.Unmarshal(raw, &body); err != nil {
 		return fmt.Errorf("result is not valid JSON: %w", err)
 	}
-	body = withCarryHint(context.Background(), body)
 	client, err := newAPIClient(cmd)
 	if err != nil {
 		return err
@@ -194,37 +191,3 @@ func runIssueConveyorResult(cmd *cobra.Command, args []string) error {
 	}
 	return cli.PrintJSON(os.Stdout, out)
 }
-
-// withCarryHint adds the repository's verdict_carry_paths, read from the
-// handed-in commit in the run's checkout, so the route knows it may send new
-// work straight to acceptance. Acceptance checks the diff itself; a result
-// without the hint, or one the checkout cannot read, goes the usual way.
-func withCarryHint(ctx context.Context, body json.RawMessage) json.RawMessage {
-	var in map[string]any
-	if json.Unmarshal(body, &in) != nil || in["carry"] != nil {
-		return body
-	}
-	artifact, _ := in["artifact"].(map[string]any)
-	commit, _ := artifact["commit"].(string)
-	if !conveyorHexCommit.MatchString(commit) {
-		return body
-	}
-	dir, _ := os.Getwd()
-	if repo, _ := artifact["repo"].(string); filepath.IsAbs(repo) {
-		if info, err := os.Stat(repo); err == nil && info.IsDir() {
-			dir = repo
-		}
-	}
-	paths := carryPathsAt(ctx, gitIn{dir: dir, log: io.Discard}, commit)
-	if len(paths) == 0 {
-		return body
-	}
-	in["carry"] = map[string]any{"paths": paths}
-	out, err := json.Marshal(in)
-	if err != nil {
-		return body
-	}
-	return out
-}
-
-var conveyorHexCommit = regexp.MustCompile(`^[0-9a-fA-F]{7,64}$`)
