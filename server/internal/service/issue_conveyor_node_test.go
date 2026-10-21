@@ -201,3 +201,34 @@ func TestConveyorNodeRunModel(t *testing.T) {
 		t.Fatalf("unknown profile: %v", err)
 	}
 }
+
+// A queued run of a cross step is listed with its step, and its choice rules
+// out the author's family — what `agent models` shows instead of the agent's
+// plain preview (TOON-274).
+func TestRouteRunChoiceOfQueuedStep(t *testing.T) {
+	r := newConveyorRig(t)
+	route := "dev:" + util.UUIDToString(r.agents["dev"]) +
+		",qa:" + util.UUIDToString(r.agents["qa"]) + "[cross=dev]" +
+		",close:" + util.UUIDToString(r.agents["lead"])
+	raw, _ := json.Marshal(route)
+	r.mustApply(ConveyorCommand{Action: ConveyorCmdEnable, Route: raw})
+	dev := r.only("dev")
+	choice, _ := json.Marshal(ModelChoice{Provider: "codex", Chosen: &ModelOption{Model: "gpt-6.1-sol"}})
+	r.f.Exec(t, "UPDATE agent_task_queue SET model_choice=$2 WHERE id=$1", dev.ID, choice)
+	r.pass("dev", "abcdef1234567")
+
+	queued, err := r.f.q.ListAgentQueuedRouteTasks(r.ctx, r.agents["qa"])
+	if err != nil || len(queued) != 1 {
+		t.Fatalf("queued route runs of qa: %d %v", len(queued), err)
+	}
+	got, node, err := RouteRunChoice(r.ctx, r.f.q, queued[0], time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if node == nil || node.Step != "qa" || node.Cross != "dev" || got.ExcludedFamily != "openai" {
+		t.Fatalf("route run: node %+v, excluded %q", node, got.ExcludedFamily)
+	}
+	if devRuns, _ := r.f.q.ListAgentQueuedRouteTasks(r.ctx, r.agents["dev"]); len(devRuns) != 0 {
+		t.Fatalf("finished dev run is not queued: %d", len(devRuns))
+	}
+}
