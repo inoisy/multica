@@ -55,6 +55,8 @@ type conveyorVerdict struct {
 	reason string
 	report string
 	commit string
+	// judgedOwn: a verifier passed on the commit it made itself.
+	judgedOwn bool
 }
 
 // judge decides, from facts only, what the end of the current run means.
@@ -214,8 +216,45 @@ func (s *IssueConveyorService) OnTaskTerminal(ctx context.Context, q *db.Queries
 		v.reason = fmt.Sprintf("%s; %d retr(ies) spent", v.reason, node.retries())
 	}
 
+	// recheck opens a round at the verifier first, which judges commit again;
+	// author, the verifier that made the commit, is passed over on the way.
+	recheck := func(first, author int32, commit, why string, extra map[string]any) error {
+		// why names what is wrong; the round the recheck opens is added here.
+		cv.AcceptedCommit = pgtype.Text{String: commit, Valid: true}
+		cv.CurIdx, cv.Round = first, cv.Round+1
+		cv.Status, cv.CurTaskID, cv.WaitingReason = ConveyorActive, pgtype.UUID{}, pgtype.Text{}
+		if _, err := q.SaveIssueConveyor(ctx, saveParams(cv)); err != nil {
+			return err
+		}
+		why += fmt.Sprintf("round %d checks it again from %s", cv.Round, route[first].Step)
+		extra["source_task_id"] = util.UUIDToString(task.ID)
+		owed, err := s.owe(ctx, q, cv, conveyorActionRunStep, first, why, extra)
+		if err != nil {
+			return err
+		}
+		details := map[string]any{"action_id": util.UUIDToString(owed.ID), "to_idx": first, "author_idx": author, "commit": commit, "round": cv.Round}
+		if files, ok := extra["files"]; ok {
+			details["files"] = files
+		}
+		return decide(conveyorDecisionRecheck, why, details)
+	}
+	acceptIdx := stepIdxAfter(route, conveyorStepAccept, cv.CurIdx)
+	carry := actionCarries(action)
+	results, err := s.routeResults(ctx, q, cv)
+	if err != nil {
+		return err
+	}
+
 	// A later verifier's own commit goes back to the first verifier; the
 	// verifier that made it is passed over on the way (it judged its fix).
+	// In a repository that lets verdicts carry it goes on to acceptance
+	// instead, which merges it when the earlier verdicts carry to it and
+	// otherwise opens that same round.
+	if v.action == conveyorDecisionRecheck && acceptIdx >= 0 && carryPathsKnown(res, results[acceptIdx]) {
+		carry = true
+		v = conveyorVerdict{action: conveyorDecisionAdvance, commit: v.commit, judgedOwn: true,
+			reason: fmt.Sprintf("step %s passed on its own commit %s: acceptance checks that the earlier verdicts carry", node.Step, short(v.commit))}
+	}
 	if v.action == conveyorDecisionRecheck {
 		rechecks, err := s.revisionDecisions(ctx, q, cv, conveyorDecisionRecheck, -1)
 		if err != nil {
@@ -224,23 +263,23 @@ func (s *IssueConveyorService) OnTaskTerminal(ctx context.Context, q *db.Queries
 		if len(rechecks) >= conveyorMaxRechecks {
 			v.action, v.reason = conveyorDecisionEscalate, fmt.Sprintf("%s; %d re-check(s) spent", v.reason, conveyorMaxRechecks)
 		} else {
-			first := firstVerifierBefore(route, cv.CurIdx)
-			author := cv.CurIdx
-			cv.AcceptedCommit = pgtype.Text{String: v.commit, Valid: true}
-			cv.CurIdx, cv.Round = first, cv.Round+1
-			cv.Status, cv.CurTaskID, cv.WaitingReason = ConveyorActive, pgtype.UUID{}, pgtype.Text{}
-			if _, err = q.SaveIssueConveyor(ctx, saveParams(cv)); err != nil {
-				return err
-			}
-			why := fmt.Sprintf("step %s committed %s itself: round %d checks it again from %s", node.Step, clip(v.commit, 9), cv.Round, route[first].Step)
-			owed, err := s.owe(ctx, q, cv, conveyorActionRunStep, first, why, map[string]any{
-				"report": v.report, "recheck_by": node.Step, "source_task_id": util.UUIDToString(task.ID),
-			})
-			if err != nil {
-				return err
-			}
-			return decide(conveyorDecisionRecheck, why, map[string]any{
-				"action_id": util.UUIDToString(owed.ID), "to_idx": first, "author_idx": author, "commit": v.commit, "round": cv.Round,
+			why := fmt.Sprintf("step %s committed %s itself: ", node.Step, clip(v.commit, 9))
+			return recheck(firstVerifierBefore(route, cv.CurIdx), cv.CurIdx, v.commit, why, map[string]any{"report": v.report, "recheck_by": node.Step})
+		}
+	}
+
+	// Acceptance found a verdict that does not carry to the accepted commit:
+	// that verifier judges it again, as a recheck.
+	if node.Step == conveyorStepAccept && task.Status == "completed" && res != nil && res.Outcome != ConveyorOutcomePass && res.Carry != nil && res.Carry.Reverify != "" {
+		first := stepIdxBefore(route, res.Carry.Reverify, cv.CurIdx)
+		rechecks, err := s.revisionDecisions(ctx, q, cv, conveyorDecisionRecheck, -1)
+		if err != nil {
+			return err
+		}
+		if first >= 0 && isConveyorVerifier(route[first].Step) && len(rechecks) < conveyorMaxRechecks {
+			why := fmt.Sprintf("the verdict of %s does not carry to %s (%s): ", res.Carry.Reverify, short(cv.AcceptedCommit.String), clipFiles(res.Carry.Files))
+			return recheck(first, carryAuthor(action), cv.AcceptedCommit.String, why, map[string]any{
+				"report": clip(res.Report, 4000), "recheck_by": node.Step, "files": res.Carry.Files,
 			})
 		}
 	}
@@ -300,6 +339,10 @@ func (s *IssueConveyorService) OnTaskTerminal(ctx context.Context, q *db.Queries
 	}
 	next := cv.CurIdx + 1
 	verdict, owedAction, why := conveyorDecisionAdvance, conveyorActionRunStep, "step "+node.Step+" passed"
+	extra := map[string]any{"source_task_id": util.UUIDToString(task.ID)}
+	if v.reason != "" {
+		why = v.reason
+	}
 	// The verifier whose own commit this round re-checks judged it already.
 	if author, ok, err := s.recheckAuthor(ctx, q, cv); err != nil {
 		return err
@@ -307,19 +350,46 @@ func (s *IssueConveyorService) OnTaskTerminal(ctx context.Context, q *db.Queries
 		next++
 		why = fmt.Sprintf("step %s passed; %s made this commit and is passed over", node.Step, route[author].Step)
 	}
+	if v.judgedOwn {
+		extra["carry_author"] = cv.CurIdx
+	}
+	// New work after every verifier passed goes straight to acceptance in a
+	// repository that lets verdicts carry: acceptance checks the diff from
+	// the judged commits and sends code back to the verifiers.
+	if !isConveyorVerifier(node.Step) && v.commit != "" && acceptIdx > next && isConveyorVerifier(route[next].Step) &&
+		carryPathsKnown(res, results[acceptIdx]) && passedSince(results, route, next, acceptIdx) {
+		next, carry = acceptIdx, true
+		why = fmt.Sprintf("step %s passed; earlier verdicts may carry to %s: straight to accept", node.Step, short(v.commit))
+	}
+	if carry && int(next) < len(route) && isConveyorVerifier(route[next].Step) {
+		extra["carry"] = true
+		if a := carryAuthor(action); a >= 0 {
+			extra["carry_author"] = a
+		}
+	}
+	carried := ""
+	if node.Step == conveyorStepAccept && res != nil && res.Carry != nil && len(res.Carry.Carried) > 0 {
+		carried = "; verdicts carried: " + carriedText(res.Carry.Carried)
+		extra["carried"] = res.Carry.Carried
+	}
 	cv.CurIdx, cv.CurTaskID, cv.WaitingReason = next, pgtype.UUID{}, pgtype.Text{}
 	if int(next) == len(route)-1 {
 		verdict, owedAction, why = conveyorDecisionComplete, conveyorActionNotifyCoordinator, "every step passed"
 		cv.Status = ConveyorCompleted
 	}
+	why += carried
 	if _, err = q.SaveIssueConveyor(ctx, saveParams(cv)); err != nil {
 		return err
 	}
-	owed, err := s.owe(ctx, q, cv, owedAction, next, why, map[string]any{"source_task_id": util.UUIDToString(task.ID)})
+	owed, err := s.owe(ctx, q, cv, owedAction, next, why, extra)
 	if err != nil {
 		return err
 	}
-	return decide(verdict, why, map[string]any{"action_id": util.UUIDToString(owed.ID), "to_idx": next})
+	details := map[string]any{"action_id": util.UUIDToString(owed.ID), "to_idx": next}
+	if c, ok := extra["carried"]; ok {
+		details["carried"] = c
+	}
+	return decide(verdict, why, details)
 }
 
 // isCurrentStep reports whether the action is the route's present position.
@@ -1178,4 +1248,112 @@ func (s *IssueConveyorService) recheckAuthor(ctx context.Context, q *db.Queries,
 		return 0, false, nil
 	}
 	return d.AuthorIdx, true, nil
+}
+
+// actionCarries reports whether the route owed this run on the way to an
+// acceptance that must check that earlier verdicts carry to the commit.
+func actionCarries(action db.IssueConveyorEvent) bool {
+	var d struct {
+		Carry bool `json:"carry"`
+	}
+	_ = json.Unmarshal(action.Details, &d)
+	return d.Carry
+}
+
+// carryAuthor is the verifier that made the commit a carry check is about,
+// -1 when the commit is new work.
+func carryAuthor(action db.IssueConveyorEvent) int32 {
+	var d struct {
+		Author *int32 `json:"carry_author"`
+	}
+	if json.Unmarshal(action.Details, &d) != nil || d.Author == nil {
+		return -1
+	}
+	return *d.Author
+}
+
+// routeResults is the latest result of each node since the route was
+// enabled.
+func (s *IssueConveyorService) routeResults(ctx context.Context, q *db.Queries, cv db.IssueConveyor) (map[int32]ConveyorResultInput, error) {
+	latest := map[int32]ConveyorResultInput{}
+	var after int64
+	for {
+		page, err := q.ListIssueConveyorEvents(ctx, db.ListIssueConveyorEventsParams{ConveyorID: cv.ID, AfterSeq: pgtype.Int8{Int64: after, Valid: true}, PageSize: 500})
+		if err != nil {
+			return nil, err
+		}
+		for _, e := range page {
+			after = max(after, e.Seq.Int64)
+			switch {
+			case e.Kind == conveyorEventState && e.Action.String == ConveyorCmdEnable:
+				latest = map[int32]ConveyorResultInput{}
+			case e.Kind == conveyorEventResult && e.Idx.Valid:
+				var r ConveyorResultInput
+				if json.Unmarshal(e.Details, &r) == nil {
+					latest[e.Idx.Int32] = r
+				}
+			}
+		}
+		if len(page) < 500 {
+			return latest, nil
+		}
+	}
+}
+
+// carryPathsKnown reports whether the repository is known to let verdicts
+// carry: the run that just ended read verdict_carry_paths from its commit,
+// or the route's last acceptance did. It is only a hint where to go next:
+// the accept run proves the diff fits them.
+func carryPathsKnown(res *ConveyorResultInput, lastAccept ConveyorResultInput) bool {
+	if res != nil && res.Carry != nil && len(res.Carry.Paths) > 0 {
+		return true
+	}
+	return lastAccept.Carry != nil && len(lastAccept.Carry.Paths) > 0
+}
+
+// passedSince reports whether every node from..to-1 is a verifier whose last
+// result is a pass.
+func passedSince(results map[int32]ConveyorResultInput, route []ConveyorNode, from, to int32) bool {
+	for i := from; i < to; i++ {
+		if r, ok := results[i]; !ok || r.Outcome != ConveyorOutcomePass || !isConveyorVerifier(route[i].Step) {
+			return false
+		}
+	}
+	return true
+}
+
+// stepIdxAfter is the index of the first node named step after idx, -1 if none.
+func stepIdxAfter(route []ConveyorNode, step string, idx int32) int32 {
+	for i := idx + 1; int(i) < len(route); i++ {
+		if route[i].Step == step {
+			return i
+		}
+	}
+	return -1
+}
+
+func carriedText(carried []ConveyorCarried) string {
+	parts := make([]string, 0, len(carried))
+	for _, c := range carried {
+		parts = append(parts, fmt.Sprintf("%s from %s (%s)", c.Step, short(c.From), clipFiles(c.Files)))
+	}
+	return strings.Join(parts, ", ")
+}
+
+// clipFiles names a few files and counts the rest.
+func clipFiles(files []string) string {
+	if len(files) == 0 {
+		return "same tree"
+	}
+	if len(files) <= 5 {
+		return strings.Join(files, ", ")
+	}
+	return fmt.Sprintf("%s and %d more", strings.Join(files[:5], ", "), len(files)-5)
+}
+
+func short(sha string) string {
+	if len(sha) > 12 {
+		return sha[:12]
+	}
+	return sha
 }

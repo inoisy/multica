@@ -51,6 +51,30 @@ type ConveyorResultInput struct {
 	Artifact      ConveyorArtifact `json:"artifact"`
 	Checks        []ConveyorCheck  `json:"checks"`
 	Report        string           `json:"report"`
+	// Carry is only read from the accept step: whether verdicts given on an
+	// earlier commit hold for the one it merges.
+	Carry *ConveyorCarry `json:"carry,omitempty"`
+}
+
+// ConveyorCarry is what acceptance found about verdicts given on another
+// commit than the accepted one. A verdict carries when the diff between the
+// two commits is empty or touches only the repository's verdict_carry_paths.
+type ConveyorCarry struct {
+	// Paths is the repository's verdict_carry_paths at the accepted commit:
+	// non-empty tells the route that a new commit may go straight to accept.
+	Paths   []string          `json:"paths,omitempty"`
+	Carried []ConveyorCarried `json:"carried,omitempty"`
+	// Reverify is the first verifier whose verdict does not carry; Files are
+	// the changed files outside the carry paths.
+	Reverify string   `json:"reverify,omitempty"`
+	Files    []string `json:"files,omitempty"`
+}
+
+// ConveyorCarried is one verdict moved from the commit it was given on.
+type ConveyorCarried struct {
+	Step  string   `json:"step"`
+	From  string   `json:"from"`
+	Files []string `json:"files"`
 }
 
 // normalize trims the input and rejects what cannot be a result.
@@ -75,6 +99,15 @@ func (in *ConveyorResultInput) normalize() error {
 	}
 	if in.Artifact.Commit != "" && !conveyorCommitPattern.MatchString(in.Artifact.Commit) {
 		return conveyorErr(ErrConveyorInvalid, "artifact.commit must be 7-64 hex characters")
+	}
+	if c := in.Carry; c != nil {
+		n := len(c.Paths) + len(c.Files)
+		for _, v := range c.Carried {
+			n += len(v.Files)
+		}
+		if n > 2000 || len(c.Carried) > 10 {
+			return conveyorErr(ErrConveyorInvalid, "carry lists at most 2000 paths and 10 verdicts")
+		}
 	}
 	if len(in.Checks) > 50 {
 		return conveyorErr(ErrConveyorInvalid, "at most 50 checks")
