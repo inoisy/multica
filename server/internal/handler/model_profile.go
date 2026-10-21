@@ -468,6 +468,18 @@ type AgentModelsResponse struct {
 	// Waiting are the agent's unclaimed runs whose every model is
 	// unavailable: "every model on a limit until HH:MM — the run waits".
 	Waiting []AgentModelChoiceEntry `json:"waiting"`
+	// RouteRuns are the agent's unclaimed runs of a route step with the
+	// choice each would get now: the step's profile and the family a cross
+	// step rules out apply to them, not Preview.
+	RouteRuns []AgentRouteRunEntry `json:"route_runs"`
+}
+
+// AgentRouteRunEntry is a queued run of a route step and its model now.
+type AgentRouteRunEntry struct {
+	AgentModelChoiceEntry
+	Step        string `json:"step"`
+	ProfileName string `json:"profile_name,omitempty"`
+	Cross       string `json:"cross,omitempty"`
 }
 
 // ModelRefWithProfile is an open issue of the agent with its own profile.
@@ -599,6 +611,31 @@ func (h *Handler) writeAgentModels(w http.ResponseWriter, r *http.Request, agent
 			entry.Choice = &choice
 		}
 		resp.Waiting = append(resp.Waiting, entry)
+	}
+	resp.RouteRuns = []AgentRouteRunEntry{}
+	routeRuns, err := h.Queries.ListAgentQueuedRouteTasks(ctx, agent.ID)
+	if err != nil {
+		writeModelProfileError(w, err)
+		return
+	}
+	for _, t := range routeRuns {
+		choice, node, err := service.RouteRunChoice(ctx, h.Queries, t, now)
+		if err != nil {
+			writeModelProfileError(w, err)
+			return
+		}
+		if node == nil {
+			continue
+		}
+		entry := AgentRouteRunEntry{
+			AgentModelChoiceEntry: AgentModelChoiceEntry{TaskID: util.UUIDToString(t.ID), Status: t.Status, IssueID: uuidToPtr(t.IssueID), Position: choice.Position, Choice: &choice, CreatedAt: timestampToString(t.CreatedAt)},
+			Step:                  node.Step, ProfileName: node.ProfileName, Cross: node.Cross,
+		}
+		if issue, err := h.Queries.GetIssue(ctx, t.IssueID); err == nil {
+			entry.IssueIdentifier = service.IssueIdentifier(m.prefix, issue.Number)
+			entry.IssueTitle = issue.Title
+		}
+		resp.RouteRuns = append(resp.RouteRuns, entry)
 	}
 	if len(resp.Journal) > 0 {
 		last := resp.Journal[0]

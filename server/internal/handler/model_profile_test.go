@@ -234,10 +234,15 @@ func TestModelProfileAgentModelsView(t *testing.T) {
 				Reason string `json:"reason"`
 			} `json:"choice"`
 		} `json:"waiting"`
+		RouteRuns []any `json:"route_runs"`
 	}
 	testutil.Call(t, testHandler.GetAgentModels, withURLParam(newRequest("GET", "/", nil), "id", agent)).Want(http.StatusOK).JSON(&withWaiting)
 	if len(withWaiting.Waiting) != 1 || withWaiting.Waiting[0].IssueIdentifier == "" || withWaiting.Waiting[0].Choice.Reason != "all_unavailable" {
 		t.Fatalf("waiting runs: %+v", withWaiting.Waiting)
+	}
+	// A run outside a route is no route run.
+	if withWaiting.RouteRuns == nil || len(withWaiting.RouteRuns) != 0 {
+		t.Fatalf("route runs: %+v", withWaiting.RouteRuns)
 	}
 
 	// An own list on a private runtime of another member is refused.
