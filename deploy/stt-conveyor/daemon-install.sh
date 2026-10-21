@@ -5,13 +5,17 @@
 #   daemon-install.sh [--check] [--binary PATH] [--unit NAME] [--port 19514]
 # The daemon is found by its process ("multica daemon"); its unit by the
 # process's cgroup; --unit overrides. Exit: 0 done; 2 the restarted daemon did
-# not offer accept — the old binary is back; 3 binary replaced, restart by hand.
+# not offer accept — the old binary is back; 3 binary replaced, restart by hand;
+# 4 runs are going and nothing changed: a restart cuts them (21.10.2026 one cut
+# five route runs at once), so wait — daemon-install-when-idle.sh — or set
+# FORCE_RESTART=1.
 # For tests: PROC (instead of /proc), BACKUPS (instead of /var/backups),
-# SYSTEMCTL, CURL and PGREP commands.
+# SYSTEMCTL, CURL, PGREP and RUNS (prints how many runs are going) commands.
 set -euo pipefail
 HERE=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 PROC=${PROC:-/proc} BACKUPS=${BACKUPS:-/var/backups}
 SYSTEMCTL=${SYSTEMCTL:-systemctl} CURL=${CURL:-curl} PGREP=${PGREP:-pgrep}
+RUNS=${RUNS:-"docker exec multica-postgres-1 psql -U multica -d multica -Atc \"select count(*) from agent_task_queue where status in ('running','dispatched')\""}
 MODE=install BINARY=$HERE/multica UNIT= PORT=19514 WAIT=${WAIT:-60}
 while (($#)); do
   case $1 in
@@ -47,6 +51,13 @@ echo "демон: ${pids[*]} → $TARGET"
 echo "юнит: ${UNIT:-не найден} ($SCOPE, пользователь $OWNER)"
 echo "новый: $BINARY ($("$BINARY" --version 2>/dev/null | head -1))"
 [[ $MODE == check ]] && { echo 'режим --check: ничего не меняется'; exit 0; }
+if [[ ${FORCE_RESTART:-} != 1 ]]; then
+  going=$(eval "$RUNS" 2>/dev/null || echo '?')
+  if [[ $going != 0 ]]; then
+    echo "идут раны ($going): перезапуск демона их оборвёт. Подождать простоя — /root/daemon-install-when-idle.sh; оборвать — FORCE_RESTART=1" >&2
+    exit 4
+  fi
+fi
 
 STAMP=$(date -u +%Y%m%dT%H%M%SZ)
 BACKUP=$BACKUPS/stt-conveyor-cli.$STAMP
