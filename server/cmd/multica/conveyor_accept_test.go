@@ -151,6 +151,33 @@ func TestAcceptRedCommandMergesNothing(t *testing.T) {
 	}
 }
 
+// STT-366: a full check on a loaded server timed out in a different test on
+// each run. A failed command runs again once; green on the retry merges and
+// says so, red twice stays red, retries=0 keeps a single run.
+func TestAcceptRunsAFailedCommandAgain(t *testing.T) {
+	r := newAcceptRig(t)
+	counter := filepath.Join(t.TempDir(), "n")
+	flaky := `n=$(cat ` + counter + ` 2>/dev/null || echo 0); n=$((n+1)); echo $n > ` + counter + `; [ $n -ge 2 ] || { echo flake >&2; exit 1; }`
+	sha := r.branch("t-flaky", acceptConfig{Commands: []string{flaky}}, nil)
+	out, log := r.accept(sha, "t-flaky")
+	if out.Outcome != "pass" || !strings.Contains(out.Reason, "green on a retry") || !strings.Contains(log, "running it again (1/1)") {
+		t.Fatalf("flaky command: %s (%s), log:\n%s", out.Outcome, out.Reason, log)
+	}
+
+	before := r.main()
+	red := r.branch("t-red", acceptConfig{Commands: []string{"echo boom >&2; exit 3"}}, nil)
+	out, log = r.accept(red, "t-red")
+	if out.Outcome != "changes_requested" || strings.Count(log, "$ echo boom") != 2 || r.main() != before {
+		t.Fatalf("red twice: %s, log:\n%s", out.Outcome, log)
+	}
+
+	zero := 0
+	once := r.branch("t-once", acceptConfig{Commands: []string{"echo boom >&2; exit 3"}, Retries: &zero}, nil)
+	if out, log = r.accept(once, "t-once"); out.Outcome != "changes_requested" || strings.Count(log, "$ echo boom") != 1 {
+		t.Fatalf("retries=0: %s, log:\n%s", out.Outcome, log)
+	}
+}
+
 func TestAcceptConflictAndDiffGuard(t *testing.T) {
 	r := newAcceptRig(t)
 	sha := r.branch("t-3", acceptConfig{Commands: []string{"true"}}, map[string]string{"README.md": "mine\n"})
