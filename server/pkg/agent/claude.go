@@ -33,6 +33,16 @@ func claudeTerminateGrace() time.Duration {
 	return 5 * time.Second
 }
 
+// claudeResultExitGraceNanos lets tests shorten the post-result exit budget.
+var claudeResultExitGraceNanos atomic.Int64
+
+func claudeResultExitGrace() time.Duration {
+	if n := claudeResultExitGraceNanos.Load(); n > 0 {
+		return time.Duration(n)
+	}
+	return 10 * time.Second
+}
+
 // claudeBackend implements Backend by spawning the Claude Code CLI
 // with --output-format stream-json.
 type claudeBackend struct {
@@ -210,9 +220,12 @@ func (b *claudeBackend) Execute(ctx context.Context, prompt string, opts ExecOpt
 		unreadableAssistantCount := 0
 		controlErrors := make(chan error, 1)
 		var controlWrites sync.WaitGroup
+		terminalResult := make(chan struct{})
+		terminationDone := make(chan struct{})
+		var stoppedAfterResult atomic.Bool
 
-		// On cancellation / timeout, terminate claude (and every MCP server and
-		// tool subprocess it spawned) BEFORE unblocking the scanner. EOF stdin
+		// On cancellation, timeout or a CLI outliving its terminal result,
+		// terminate claude and its tool/MCP subprocesses BEFORE unblocking the scanner. EOF stdin
 		// to nudge a clean exit, then SIGTERM the whole process group, give it a
 		// grace period, and SIGKILL the group if any member is still alive.
 		// SIGKILL is uncatchable, so once delivered no group member can write
@@ -220,10 +233,24 @@ func (b *claudeBackend) Execute(ctx context.Context, prompt string, opts ExecOpt
 		// last-resort unblock for a scanner a wedged descendant still keeps
 		// open. WaitDelay is the final backstop (#5918).
 		go func() {
+			defer close(terminationDone)
 			select {
 			case <-procDone:
 				return // finished on its own; nothing to terminate
 			case <-runCtx.Done():
+			case <-terminalResult:
+				// One Execute owns one foreground prompt. A terminal SDK result
+				// ends it even if a background command keeps the CLI's pipes open.
+				timer := time.NewTimer(claudeResultExitGrace())
+				defer timer.Stop()
+				select {
+				case <-procDone:
+					return
+				case <-runCtx.Done():
+				case <-timer.C:
+					stoppedAfterResult.Store(true)
+					b.cfg.Logger.Warn("claude still running after terminal result; terminating owned process group", "pid", cmd.Process.Pid)
+				}
 			}
 			closeStdin()
 			if cmd.Process != nil {
@@ -246,6 +273,11 @@ func (b *claudeBackend) Execute(ctx context.Context, prompt string, opts ExecOpt
 		scanner := newAgentStreamScanner(stdout)
 
 		for scanner.Scan() {
+			// Background completion notifications must not replace the answer,
+			// session or usage already handed in for this managed prompt.
+			if sawResult {
+				continue
+			}
 			line := strings.TrimSpace(scanner.Text())
 			if line == "" {
 				continue
@@ -292,6 +324,7 @@ func (b *claudeBackend) Execute(ctx context.Context, prompt string, opts ExecOpt
 					lastUsageResult = &usageMsg
 				}
 				closeStdin()
+				close(terminalResult)
 			case "log":
 				if msg.Log != nil {
 					trySend(msgCh, Message{
@@ -338,7 +371,22 @@ func (b *claudeBackend) Execute(ctx context.Context, prompt string, opts ExecOpt
 
 		// Wait for process exit, then release the cancellation handler.
 		exitErr := cmd.Wait()
+		observedExitErr := exitErr
 		close(procDone)
+		// Finish escalation before reporting the run or releasing the Windows
+		// job handle: a descendant can outlive the process-group leader.
+		<-terminationDone
+		if stoppedAfterResult.Load() {
+			// This signal is our post-result cleanup, not an agent failure.
+			// Keep unrelated protocol/read failures and context cancellation.
+			var processExit *exec.ExitError
+			if errors.As(exitErr, &processExit) {
+				exitErr = nil
+			}
+			if errors.Is(scanErr, os.ErrClosed) {
+				scanErr = nil
+			}
+		}
 		// The leader is reaped; drop ownership. On Windows that closes the Job
 		// Object, which kills anything still inside it — precisely what should
 		// happen to a descendant that outlived the CLI (GH #7522).
@@ -406,7 +454,7 @@ func (b *claudeBackend) Execute(ctx context.Context, prompt string, opts ExecOpt
 			provider:                   "claude",
 			cliVersion:                 b.cfg.CLIVersion,
 			model:                      opts.Model,
-			exitCode:                   streamProcessExitCode(exitErr),
+			exitCode:                   streamProcessExitCode(observedExitErr),
 			eventCount:                 eventCount,
 			invalidEventCount:          invalidEventCount,
 			assistantEventCount:        assistantEventCount,
