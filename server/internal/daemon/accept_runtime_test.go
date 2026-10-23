@@ -30,11 +30,11 @@ func TestEveryDaemonOffersTheAcceptRuntime(t *testing.T) {
 }
 
 func TestTaskEnvironmentNamesTheIssue(t *testing.T) {
-	env := taskMulticaEnvironment(Task{ID: "t", IssueID: "issue-1"}, "a", "mat_x", "", "", "", 1, 0, "")
+	env := taskMulticaEnvironment(Task{ID: "t", IssueID: "issue-1"}, "codex", "a", "mat_x", "", "", "", 1, 0, "")
 	if env["MULTICA_ISSUE_ID"] != "issue-1" {
 		t.Fatalf("MULTICA_ISSUE_ID = %q", env["MULTICA_ISSUE_ID"])
 	}
-	if _, ok := taskMulticaEnvironment(Task{ID: "t"}, "a", "mat_x", "", "", "", 1, 0, "")["MULTICA_ISSUE_ID"]; ok {
+	if _, ok := taskMulticaEnvironment(Task{ID: "t"}, "codex", "a", "mat_x", "", "", "", 1, 0, "")["MULTICA_ISSUE_ID"]; ok {
 		t.Fatal("a run without an issue got MULTICA_ISSUE_ID")
 	}
 }
