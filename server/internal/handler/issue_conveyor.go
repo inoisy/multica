@@ -95,16 +95,16 @@ func (h *Handler) ApplyIssueConveyor(w http.ResponseWriter, r *http.Request) {
 		invoker = parseUUID(originator)
 	}
 	svc := h.conveyorService()
-	// An agent may steer only a route it coordinates; it may start one on the
-	// authority of the person its run answers to.
+	// Step agents steer their own routes. A live personal chat may also carry
+	// its owner's management authority; ordinary issue runs gain no such right.
 	if actorType == "agent" && cmd.Action != service.ConveyorCmdEnable {
 		current, err := svc.View(r.Context(), issue.ID)
 		if err != nil {
 			writeConveyorError(w, err)
 			return
 		}
-		if current.CoordinatorAgentID != actorID {
-			writeError(w, http.StatusForbidden, "only the coordinator of the route may change it")
+		if current.CoordinatorAgentID != actorID && !h.canControlConveyorFromChat(r, actorID, issue.WorkspaceID) {
+			writeError(w, http.StatusForbidden, "only the route coordinator or an owner/admin's active personal chat may change it")
 			return
 		}
 	}
@@ -114,6 +114,28 @@ func (h *Handler) ApplyIssueConveyor(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, view)
+}
+
+// canControlConveyorFromChat derives authority from the server-bound run and
+// chat, never from a caller-supplied member ID or the runtime owner's rights.
+// Apply still owns revision checks and permission to invoke each route agent.
+func (h *Handler) canControlConveyorFromChat(r *http.Request, actorID string, workspaceID pgtype.UUID) bool {
+	if r.Header.Get("X-Actor-Source") != "task_token" {
+		return false
+	}
+	task, ok := h.taskFromRequestHeader(r)
+	if !ok || task.Status != "running" || task.IssueID.Valid || !task.ChatSessionID.Valid ||
+		!task.OriginatorUserID.Valid || uuidToString(task.AgentID) != actorID {
+		return false
+	}
+	session, err := h.Queries.GetChatSessionInWorkspace(r.Context(), db.GetChatSessionInWorkspaceParams{
+		ID: task.ChatSessionID, WorkspaceID: workspaceID,
+	})
+	if err != nil || session.Status != "active" || session.AgentID != task.AgentID || session.CreatorID != task.OriginatorUserID {
+		return false
+	}
+	member, err := h.getWorkspaceMember(r.Context(), uuidToString(task.OriginatorUserID), uuidToString(workspaceID))
+	return err == nil && roleAllowed(member.Role, "owner", "admin")
 }
 
 // GetIssueConveyor handles GET /api/issues/{id}/conveyor.
