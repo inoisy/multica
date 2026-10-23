@@ -854,7 +854,7 @@ type conveyorRerunPlan struct {
 // exactly once.
 func (s *IssueConveyorService) planRerun(ctx context.Context, issueID, sourceTaskID pgtype.UUID) (conveyorRerunPlan, error) {
 	cv, err := s.q().GetIssueConveyor(ctx, issueID)
-	if errors.Is(err, pgx.ErrNoRows) || (err == nil && cv.Status != ConveyorActive && cv.Status != ConveyorWaitingProvider) {
+	if errors.Is(err, pgx.ErrNoRows) || (err == nil && cv.Status != ConveyorActive && cv.Status != ConveyorWaitingProvider && cv.Status != ConveyorAwaitingCoordinator) {
 		return conveyorRerunPlan{}, nil
 	}
 	if err != nil {
@@ -879,6 +879,9 @@ func (s *IssueConveyorService) planRerun(ctx context.Context, issueID, sourceTas
 	case "completed":
 		return conveyorRerunPlan{}, nil
 	}
+	if err := s.requireFinishedCoordinator(ctx, s.q(), cv); err != nil {
+		return conveyorRerunPlan{}, err
+	}
 	if successor, serr := s.q().GetLiveRerunSuccessor(ctx, latest.ID); serr == nil {
 		return conveyorRerunPlan{managed: true, failed: latest, existing: &successor}, nil
 	} else if !errors.Is(serr, pgx.ErrNoRows) {
@@ -887,10 +890,28 @@ func (s *IssueConveyorService) planRerun(ctx context.Context, issueID, sourceTas
 	return conveyorRerunPlan{managed: true, failed: latest}, nil
 }
 
+// A manual step retry may recover an escalation after its coordinator ended,
+// but must not race a coordinator that can still resume or disable the route.
+func (s *IssueConveyorService) requireFinishedCoordinator(ctx context.Context, q *db.Queries, cv db.IssueConveyor) error {
+	if cv.Status != ConveyorAwaitingCoordinator || !cv.CurTaskID.Valid {
+		return nil
+	}
+	current, err := q.GetAgentTask(ctx, cv.CurTaskID)
+	if err != nil {
+		return err
+	}
+	switch current.Status {
+	case "completed", "failed", "cancelled":
+		return nil
+	default:
+		return conveyorErr(ErrConveyorConflict, "the coordinator has an unfinished run on this issue")
+	}
+}
+
 // RerunGuard keeps a rerun on a routed issue to one successor of the run that
 // serves the current step, whoever asks and whether or not they name it. rerun
 // is the ordinary rerun, called with the run to repeat.
-func (s *IssueConveyorService) RerunGuard(ctx context.Context, issueID, sourceTaskID pgtype.UUID, rerun func(source pgtype.UUID) (*db.AgentTaskQueue, error)) (*db.AgentTaskQueue, error) {
+func (s *IssueConveyorService) RerunGuard(ctx context.Context, issueID, sourceTaskID pgtype.UUID, canInvoke func(db.Agent) bool, rerun func(source pgtype.UUID) (*db.AgentTaskQueue, error)) (*db.AgentTaskQueue, error) {
 	plan, err := s.planRerun(ctx, issueID, sourceTaskID)
 	if err != nil {
 		return nil, err
@@ -899,6 +920,17 @@ func (s *IssueConveyorService) RerunGuard(ctx context.Context, issueID, sourceTa
 		return rerun(sourceTaskID)
 	}
 	if plan.existing != nil {
+		// Adoption mutates route state too, so it needs the same invoke gate
+		// as creating a new successor through the ordinary rerun callback.
+		if canInvoke != nil {
+			agent, err := s.q().GetAgent(ctx, plan.existing.AgentID)
+			if err != nil {
+				return nil, err
+			}
+			if !canInvoke(agent) {
+				return nil, ErrRerunInvokeNotAllowed
+			}
+		}
 		return s.bindRerun(ctx, issueID, plan.failed, *plan.existing)
 	}
 	task, err := rerun(plan.failed.ID)
@@ -918,6 +950,12 @@ func (s *IssueConveyorService) bindRerun(ctx context.Context, issueID pgtype.UUI
 	}
 	defer tx.Rollback(ctx)
 	q := s.Tasks.Queries.WithTx(tx)
+	// Terminal writes lock task -> route. Follow the same order when adopting
+	// a running successor, so completion cannot deadlock or slip past binding.
+	task, err = q.GetAgentTaskForDelegatedFailureUpdate(ctx, task.ID)
+	if err != nil {
+		return nil, err
+	}
 	cv, err := q.LockIssueConveyor(ctx, issueID)
 	if err != nil {
 		return nil, err
@@ -926,11 +964,18 @@ func (s *IssueConveyorService) bindRerun(ctx context.Context, issueID pgtype.UUI
 	if err != nil {
 		return nil, err
 	}
-	if cv.Status != ConveyorActive && cv.Status != ConveyorWaitingProvider || !isCurrentStep(cv, action) {
+	if cv.Status != ConveyorActive && cv.Status != ConveyorWaitingProvider && cv.Status != ConveyorAwaitingCoordinator || !isCurrentStep(cv, action) {
 		return &task, nil
+	}
+	if err := s.requireFinishedCoordinator(ctx, q, cv); err != nil {
+		return nil, err
 	}
 	if task.ConveyorActionID.Valid {
 		return &task, nil
+	}
+	switch task.Status {
+	case "completed", "failed", "cancelled":
+		return nil, conveyorErr(ErrConveyorConflict, "the rerun ended before it could join the route; retry the step again")
 	}
 	latest, err := q.GetLatestConveyorStepTask(ctx, db.GetLatestConveyorStepTaskParams{ConveyorID: cv.ID, Idx: action.Idx, Round: action.Round})
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
@@ -962,6 +1007,13 @@ func (s *IssueConveyorService) bindRerun(ctx context.Context, issueID pgtype.UUI
 		HandoffNote: pgtype.Text{String: conveyorHandoffNote(issue, cv, action, route), Valid: true},
 	}); err != nil {
 		return nil, err
+	}
+	if cv.Status == ConveyorAwaitingCoordinator {
+		if _, err = q.CancelPendingIssueConveyorActions(ctx, db.CancelPendingIssueConveyorActionsParams{
+			ConveyorID: cv.ID, Reason: pgtype.Text{String: "superseded by step rerun", Valid: true},
+		}); err != nil {
+			return nil, err
+		}
 	}
 	cv.CurTaskID, cv.Status, cv.WaitingReason = task.ID, ConveyorActive, pgtype.Text{}
 	if _, err = q.SaveIssueConveyor(ctx, saveParams(cv)); err != nil {
