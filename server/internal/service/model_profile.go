@@ -477,6 +477,12 @@ func previewChoice(ctx context.Context, q *db.Queries, agent db.Agent, issue *db
 	if route.ProfileID.Valid {
 		issueProfile = route.ProfileID
 	}
+	if isAcceptCarrier(agent) {
+		// Acceptance runs no model: no profile or list may move it off the
+		// daemon's accept runtime onto a model runtime (STT-358).
+		issueProfile, route = pgtype.UUID{}, conveyorRunModel{}
+		a.Options, a.ModelProfileID = nil, ""
+	}
 	in := world.Input(a, issueID, issueProfile)
 	in.ExcludeFamily = route.ExcludeFamily
 	return ChooseModel(in, now), nil

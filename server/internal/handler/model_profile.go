@@ -518,9 +518,10 @@ func (h *Handler) canEditAgentQuietly(r *http.Request, agent db.Agent) bool {
 	return roleAllowed(member.Role, "owner", "admin") || uuidToString(agent.OwnerID) == requestUserID(r)
 }
 
-// GetAgentModels handles GET /api/agents/{id}/models.
+// GetAgentModels handles GET /api/agents/{id}/models. A read-only view, so the
+// hidden accept agent answers too: its journal shows whether a run got a model.
 func (h *Handler) GetAgentModels(w http.ResponseWriter, r *http.Request) {
-	agent, ok := h.loadAgentForUser(w, r, chi.URLParam(r, "id"))
+	agent, ok := h.loadAgentForView(w, r, chi.URLParam(r, "id"))
 	if !ok {
 		return
 	}
