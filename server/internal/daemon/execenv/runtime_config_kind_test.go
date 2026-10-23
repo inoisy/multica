@@ -336,6 +336,7 @@ func TestBackgroundTaskSafetySlimHardPins(t *testing.T) {
 		"Never background-and-yield",
 		"foreground tool calls that block",
 		"run unobservable work synchronously",
+		"polling shell can match itself forever",
 		"standing by",
 		"are not run-owned: do not wait",
 		// The full compound ban, not its first item — MUL-5223 made this a
