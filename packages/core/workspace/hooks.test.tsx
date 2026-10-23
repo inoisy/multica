@@ -162,4 +162,38 @@ describe("useActorName", () => {
     expect(result.current.hasActor("member", "user-1")).toBe(true);
     expect(result.current.hasActor("member", "departed-user")).toBe(false);
   });
+
+  // STT-358: the route's accept agent is a hidden system agent the workspace
+  // list leaves out; its runs must still be signed with its name.
+  it("finds a hidden system agent by id", async () => {
+    const agents = [{ id: "agent-1", name: "Walt", avatar_url: null }];
+    const getAgent = vi.fn((id: string) =>
+      id === "accept-1"
+        ? Promise.resolve({ id: "accept-1", name: "Приёмка", avatar_url: null })
+        : Promise.reject(new Error("agent not found")),
+    );
+    setApiInstance({
+      listMembers: () => Promise.resolve([]),
+      listAgents: () => Promise.resolve(agents),
+      listSquads: () => Promise.resolve([]),
+      getAgent,
+    } as unknown as ApiClient);
+    qc.setQueryData(workspaceKeys.members("ws-1"), []);
+    qc.setQueryData(workspaceKeys.agents("ws-1"), agents);
+    qc.setQueryData(workspaceKeys.squads("ws-1"), []);
+
+    const { result } = renderHook(() => useActorName(), {
+      wrapper: createWrapper(qc),
+    });
+
+    expect(result.current.getActorName("agent", "accept-1")).toBe("Unknown Agent");
+    expect(result.current.getAgentName("gone-1")).toBe("Unknown Agent");
+    await waitFor(() => expect(result.current.getActorName("agent", "accept-1")).toBe("Приёмка"));
+    expect(result.current.getAgentName("accept-1")).toBe("Приёмка");
+    expect(result.current.hasActor("agent", "accept-1")).toBe(true);
+    expect(result.current.getAgentName("gone-1")).toBe("Unknown Agent");
+    expect(result.current.hasActor("agent", "gone-1")).toBe(false);
+    // Each unknown id is asked for once, the listed agent never.
+    expect(getAgent.mock.calls.map(([id]) => id).sort()).toEqual(["accept-1", "gone-1"]);
+  });
 });
