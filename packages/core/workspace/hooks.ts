@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { useQueries, useQuery, type UseQueryResult } from "@tanstack/react-query";
 import type { Agent, MemberWithUser, Squad, Workspace } from "../types";
 import { useWorkspaceId } from "../hooks";
 import {
   memberListOptions,
   agentListOptions,
+  agentDetailOptions,
   squadListOptions,
   workspaceListOptions,
 } from "./queries";
@@ -29,6 +30,13 @@ const EMPTY_MEMBERS: MemberWithUser[] = [];
 const EMPTY_AGENTS: Agent[] = [];
 const EMPTY_SQUADS: Squad[] = [];
 const EMPTY_WORKSPACES: Workspace[] = [];
+const EMPTY_IDS: string[] = [];
+
+// Stable, so useQueries keeps the combined array while the results are the same.
+function presentAgents(results: UseQueryResult<Agent>[]): Agent[] {
+  const found = results.flatMap((r) => (r.data ? [r.data] : []));
+  return found.length ? found : EMPTY_AGENTS;
+}
 
 /**
  * Shared authoritative-state contract for the workspace list.
@@ -97,8 +105,33 @@ export function useActorName() {
   const { data: agentData } = useQuery(agentListOptions(wsId));
   const { data: squadData } = useQuery(squadListOptions(wsId));
   const members = memberData ?? EMPTY_MEMBERS;
-  const agents = agentData ?? EMPTY_AGENTS;
+  const listedAgents = agentData ?? EMPTY_AGENTS;
   const squads = squadData ?? EMPTY_SQUADS;
+
+  // The workspace list leaves out hidden system agents, such as the accept
+  // agent that carries a route's acceptance runs. An agent id the loaded list
+  // does not know is fetched by id once, so its runs show its name instead of
+  // "Unknown Agent"; an id the server does not know stays unknown.
+  const [hiddenIds, setHiddenIds] = useState<string[]>(EMPTY_IDS);
+  const requested = useRef(new Set<string>());
+  const hiddenAgents = useQueries({
+    queries: hiddenIds.map((id) => ({ ...agentDetailOptions(wsId, id), staleTime: Infinity })),
+    combine: presentAgents,
+  });
+  const agents = useMemo(() => {
+    const extra = hiddenAgents.filter((h) => !listedAgents.some((a) => a.id === h.id));
+    return extra.length ? [...listedAgents, ...extra] : listedAgents;
+  }, [hiddenAgents, listedAgents]);
+  const lookUpAgent = useCallback(
+    (id: string) => {
+      if (!id || agentData === undefined || requested.current.has(id)) return;
+      if (agentData.some((a) => a.id === id)) return;
+      requested.current.add(id);
+      // Called while a consumer renders: the state update waits for it to end.
+      queueMicrotask(() => setHiddenIds((prev) => [...prev, id]));
+    },
+    [agentData],
+  );
   // Only for naming a plugin-authored row. Gated on the flag so a workspace
   // without plugins does not fetch a list it can never render an author from.
   const pluginsEnabled = useFeatureEnabled(PLUGINS_V1_FLAG, false);
@@ -114,18 +147,22 @@ export function useActorName() {
 
   const getAgentName = useCallback((agentId: string) => {
     const a = agents.find((a) => a.id === agentId);
+    if (!a) lookUpAgent(agentId);
     return a?.name ?? "Unknown Agent";
-  }, [agents]);
+  }, [agents, lookUpAgent]);
 
   const getSquadName = useCallback((squadId: string) => {
     const s = squads.find((s) => s.id === squadId);
     return s?.name ?? "Unknown Squad";
   }, [squads]);
 
-  const getActorName = useMemo(
-    () => buildActorNameResolver({ members, agents, squads, plugins: pluginData?.plugins }),
-    [agents, members, squads, pluginData],
-  );
+  const getActorName = useMemo(() => {
+    const resolve = buildActorNameResolver({ members, agents, squads, plugins: pluginData?.plugins });
+    return (type: string, id: string) => {
+      if (type === "agent" && !agents.some((a) => a.id === id)) lookUpAgent(id);
+      return resolve(type, id);
+    };
+  }, [agents, members, squads, pluginData, lookUpAgent]);
 
   const getActorInitials = useCallback(
     (type: string, id: string, nameOverride?: string) => {
