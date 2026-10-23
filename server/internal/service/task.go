@@ -5747,7 +5747,7 @@ func (s *TaskService) RerunIssue(ctx context.Context, issueID pgtype.UUID, sourc
 	if s.TxStarter == nil {
 		return s.rerunIssue(ctx, issueID, sourceTaskID, triggerCommentID, actorUserID, canInvoke)
 	}
-	return s.conveyor().RerunGuard(ctx, issueID, sourceTaskID, func(source pgtype.UUID) (*db.AgentTaskQueue, error) {
+	return s.conveyor().RerunGuard(ctx, issueID, sourceTaskID, canInvoke, func(source pgtype.UUID) (*db.AgentTaskQueue, error) {
 		return s.rerunIssue(ctx, issueID, source, triggerCommentID, actorUserID, canInvoke)
 	})
 }
