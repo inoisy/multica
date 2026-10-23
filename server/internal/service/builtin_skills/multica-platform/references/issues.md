@@ -413,6 +413,19 @@ multica issue create --title "Step 2" --parent <issue-id> --assignee <agent> --s
 multica issue create --title "Step 3" --parent <issue-id> --assignee <agent> --stage 3 --status backlog
 ```
 
+## Route operator permissions
+
+`issue conveyor pause`, `resume`, and `disable` accept the route coordinator or
+an agent in an active personal chat whose owner is currently a workspace owner
+or admin. The server binds that authority to the live task token, chat, agent,
+human originator, and workspace. Ordinary issue runs do not inherit this chat
+permission. Completed runs and archived chats cannot lend authority.
+
+Read `issue conveyor get <issue> --output json` before changing a route and pass
+its current `--revision`. Chat control does not bypass revision checks, valid
+transitions, or the member's permission to invoke a private agent. Only the run
+serving the current route step can submit `conveyor result`.
+
 ## Issue wakeups
 
 Use `multica issue wakeup` to arrange a future ordinary run, then finish the
