@@ -105,6 +105,14 @@ func judge(cv db.IssueConveyor, route []ConveyorNode, node ConveyorNode, task db
 		if accepted == "" && commit != "" {
 			return conveyorVerdict{action: conveyorDecisionAdvance, commit: commit}
 		}
+	case conveyorStepClose:
+	default:
+		// A work step under another name (build, docs…) hands in work just as
+		// dev does: its commit is what accept must merge, or the route closes
+		// with nothing merged.
+		if commit != "" {
+			return conveyorVerdict{action: conveyorDecisionAdvance, commit: commit}
+		}
 	}
 	return conveyorVerdict{action: conveyorDecisionAdvance}
 }
