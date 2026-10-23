@@ -173,6 +173,10 @@ func Classify(rawError string) Reason {
 			// would not match the curly form either, so this is a small
 			// in-flight improvement on top of the SQL classifier.
 			"you\u2019ve hit your limit",
+			// Claude Code's subscription window: "You've hit your session
+			// limit \u00b7 resets 2pm (UTC)". Matched without the apostrophe so
+			// both quote forms land here.
+			"hit your session limit",
 			"credits",
 			"quota",
 		):
