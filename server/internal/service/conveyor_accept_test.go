@@ -272,3 +272,17 @@ func TestConveyorDeliversTheHiddenAcceptAgent(t *testing.T) {
 		t.Fatalf("accept agent has %d runs, want 1:%s", got, r.dump())
 	}
 }
+
+// A work step named other than dev (build) hands in the commit accept merges:
+// without it accept found nothing to merge and closed the route green (STT-375).
+func TestConveyorBuildStepCommitReachesAccept(t *testing.T) {
+	const commit = "abcdef1234567"
+	r := newConveyorRig(t)
+	r.withAcceptAgent()
+	r.agents["build"] = parseTestUUID(t, r.f.privateAgentOwnedBy(t, util.UUIDToString(r.owner), "build"))
+	r.enable("build", "accept", "close")
+	r.pass("build", commit)
+	if view := r.view(); view.Step != "accept" || view.AcceptedCommit != commit {
+		t.Fatalf("after build: step %s accepted %q, want accept with %q", view.Step, view.AcceptedCommit, commit)
+	}
+}
