@@ -38,7 +38,7 @@ FROM terminal_tasks`
 
 // activitySQL counts distinct current members active in the N complete UTC
 // days before the snapshot's UTC day ($1). Windows are calendar days, not
-// [T-24h, T), because both sources record only an activity date.
+// the preceding 24-hour interval, because both sources record only an activity date.
 //
 //   - visiting: the signed-in web or desktop app reported the member that day
 //     (client_usage_daily).

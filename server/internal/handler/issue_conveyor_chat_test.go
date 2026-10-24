@@ -113,6 +113,8 @@ func TestConveyorChatControlPreservesRevisionAndInvocationGuards(t *testing.T) {
 	// Admin may manage the route, but may not spend another member's private agent.
 	other := dbfx.User(t, "Private agent owner", "conveyor-private-owner@test.invalid")
 	dbfx.Exec(t, "UPDATE agent SET owner_id=$1 WHERE id=$2", other, r.agents["dev"])
+	// Release the foreign key before the newer user fixture is deleted.
+	dbfx.Cleanup(t, "UPDATE agent SET owner_id=$1 WHERE id=$2", testUserID, r.agents["dev"])
 	before := r.runs("dev")
 	call(map[string]any{"action": "resume", "expected_revision": view["revision"]}).Want(http.StatusForbidden)
 	if got := r.runs("dev"); got != before {

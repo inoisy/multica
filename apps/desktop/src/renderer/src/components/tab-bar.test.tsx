@@ -608,6 +608,15 @@ describe("TabBar context menu", () => {
 
 describe("TabBar locale", () => {
   const menus = {
+    ru: {
+      pin: "Закрепить вкладку",
+      unpin: "Открепить вкладку",
+      close: "Закрыть вкладку",
+      closeOthers: "Закрыть другие вкладки",
+      openWindow: "Открыть в новом окне",
+      newTab: "Новая вкладка",
+      pinned: "Issues (закреплено)",
+    },
     "zh-Hans": {
       pin: "固定标签页",
       unpin: "取消固定标签页",
