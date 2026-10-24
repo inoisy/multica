@@ -16,19 +16,19 @@ export interface PoolTarget {
 }
 
 export function emptyPoolTarget(currentWorkspaceId: string): PoolTarget {
-  return { name: "", allWorkspaces: true, workspaceIds: [currentWorkspaceId], spendOrder: "first" };
+  return { name: "", allWorkspaces: false, workspaceIds: [currentWorkspaceId], spendOrder: "first" };
 }
 
 export function poolTargetReady(target: PoolTarget): boolean {
   return target.name.trim().length > 0 && (target.allWorkspaces || target.workspaceIds.length > 0);
 }
 
-/** Workspaces part of `POST /api/runtime-pools`. */
+/** Workspaces part of `POST /api/pools`. */
 export function poolTargetScope(target: PoolTarget): { all_workspaces: true } | { workspace_ids: string[] } {
   return target.allWorkspaces ? { all_workspaces: true } : { workspace_ids: target.workspaceIds };
 }
 
-/** Name, workspaces and spend order of a new pool. The server picks the command itself. */
+/** Name, grants and spend order of a new pool. A grant creates the pool's environment in that workspace. */
 export function PoolTargetFields({
   idPrefix,
   value,
