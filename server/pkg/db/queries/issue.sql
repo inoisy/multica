@@ -484,6 +484,9 @@ cleared_wakeup_receipts AS (
 cleared_wakeups AS (
  DELETE FROM issue_wakeup WHERE issue_id IN (SELECT target.id FROM target)
 ),
+cleared_workflow_artifacts AS (
+ DELETE FROM issue_workflow_artifact WHERE issue_id IN (SELECT target.id FROM target)
+),
 cleared_conveyor_events AS (
  DELETE FROM issue_conveyor_event WHERE issue_id IN (SELECT target.id FROM target)
 ),

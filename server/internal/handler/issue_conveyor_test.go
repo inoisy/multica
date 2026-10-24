@@ -283,6 +283,9 @@ func TestConveyorStaleRunIsNotClaimed(t *testing.T) {
 	withdrawn := dbfx.Count(t, "SELECT count(*) FROM issue_conveyor_event WHERE issue_id=$1 AND kind='rejected_stale' AND source_task_id=$2", r.issue, dev)
 	dbfx.Exec(t, "UPDATE agent_task_queue SET status='queued',completed_at=NULL WHERE id=$1", dev)
 
+	// A daemon token is accepted only for a runtime that carries its daemon id.
+	dbfx.Exec(t, `UPDATE agent_runtime SET daemon_id = 'test-conveyor-stale-claim' WHERE id = $1`, testRuntimeID)
+	t.Cleanup(func() { dbfx.Exec(t, `UPDATE agent_runtime SET daemon_id = NULL WHERE id = $1`, testRuntimeID) })
 	req := newDaemonTokenRequest("POST", "/api/daemon/runtimes/"+testRuntimeID+"/claim", nil, testWorkspaceID, "test-conveyor-stale-claim")
 	req = withURLParam(req, "runtimeId", testRuntimeID)
 	rec := httptest.NewRecorder()

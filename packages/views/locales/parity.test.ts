@@ -41,7 +41,7 @@ function flattenKeys(obj: unknown, prefix = ""): string[] {
 }
 
 function normalizePlural(key: string): string {
-  return key.replace(/_(one|other)$/, "_count");
+  return key.replace(/_(zero|one|two|few|many|other)$/, "_count");
 }
 
 function keySet(bundle: Record<string, unknown>): Set<string> {
