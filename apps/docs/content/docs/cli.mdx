@@ -181,6 +181,7 @@ See [Daemon and runtimes](/daemon-runtimes) for how it works and for custom prof
 | --- | --- |
 | `issue` | Create, update, assign, and search issues; manage comments, subscribers, labels, properties, and runs |
 | `project` | Manage projects and their resources |
+| `workflow` | Manage ordered status steps, handlers, and project workflow bindings |
 | `label`, `property` | Manage workspace labels and custom properties |
 | `agent`, `skill`, `squad` | Manage agents, skills, and squads |
 | `autopilot` | Manage automations, triggers, and run history |
@@ -272,6 +273,8 @@ The tables below cover every current top-level command, grouped the way the CLI 
 | `project` | `list/get/create/update/delete` | Manage projects | |
 | | `status <id> <status>` | Change project status | |
 | | `resource list/add/update/remove` | Manage project resources | `--type`, `--url`, `--local-path`, `--daemon-id`, `--execution-mode` (`in_place` / `worktree` for a local directory) |
+| | `workflow get/set <project-id>` | Inspect the effective workflow or change the binding | `set`: `--workflow <UUID\|default>` or `--default`, `--dry-run`, `--status-mapping <file>` |
+| `workflow` | `list/get/create/update/delete` | Manage workspace workflows | UUID or `default`; `get --definition` exports writable JSON; `create/update`: `--file`, `--name`, `--description`; `update`: `--dry-run`, `--status-mapping <file>` |
 | `label` | `list/get/create/update/delete` | Manage workspace labels | `list`: `--resource-type` (`issue` or `skill`), `--full-id`; `create`: `--name`, `--color`, `--resource-type` (`issue` or `skill`), `--description` |
 | `property` | `list/get/create/update/archive/unarchive` | Manage workspace custom properties | `create`: `--name`, `--type` (`text`, `number`, `select`, `multi_select`, `date`, `checkbox`, `url`, `actor`, `multi_actor`, `multi_text`, `multi_url`), `--option` (repeatable, select types only); `list`: `--include-archived`; the type cannot be changed after creation |
 | `agent` | `list/get/create/update/archive/restore` | Manage agents | `--name`, `--runtime-id` (required for `create`), `--instructions`, `--conversation-starters`, `--model`, `--thinking-level`, `--mcp-config`, `--permission-mode`, `--max-concurrent-tasks` |
