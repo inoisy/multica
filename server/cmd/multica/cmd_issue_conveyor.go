@@ -21,8 +21,9 @@ func init() { issueCmd.AddCommand(newIssueConveyorCommand()) }
 // result and the server starts the next run when the executor's run ends.
 func newIssueConveyorCommand() *cobra.Command {
 	conv := &cobra.Command{
-		Use:   "conveyor",
-		Short: "Run one issue along a route of steps (opt-in)",
+		Use:    "conveyor",
+		Hidden: true,
+		Short:  "Manage a legacy issue route (use project Workflows for new work)",
 		Long: "A route is a list of steps, each owned by an agent, ending with close:<coordinator>.\n" +
 			"An executor finishes its step by handing in a result (`conveyor result`); when its run ends the server\n" +
 			"starts the next step's run, and wakes the coordinator only for a return, a stop, a failure or the end.",

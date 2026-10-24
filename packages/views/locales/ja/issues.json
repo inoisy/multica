@@ -1449,7 +1449,8 @@
       "member": "メンバー",
       "project_lead": "プロジェクトリード",
       "creator": "タスク作成者",
-      "project_lead_named": "{{name}}（プロジェクトリード）"
+      "project_lead_named": "{{name}}（プロジェクトリード）",
+      "accept": "自動受け入れ"
     },
     "settings": {
       "title": "ワークフロー",
@@ -1630,6 +1631,7 @@
       "mode_member": "メンバーに渡す",
       "mode_member_hint": "担当者だけが変わり、自動では実行されません",
       "project_lead_hint": "プロジェクトリードがエージェントの場合は実行を始めます。",
+      "accept_hint": "リポジトリのチェックが通ると前のステップが固定したコミットをマージし、タスクを次の列に移します。失敗した場合は差し戻します。",
       "pick_agent": "エージェントを選択",
       "pick_member": "メンバーを選択",
       "search_agents": "エージェントを検索",

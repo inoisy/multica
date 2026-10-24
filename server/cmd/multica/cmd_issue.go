@@ -301,7 +301,11 @@ var issueStatusCmd = &cobra.Command{
 		"To cancel an issue because it duplicates another, mark it instead of only cancelling:\n" +
 		"  multica issue status <id> cancelled --duplicate-of <original>\n" +
 		"The original then lists it as a duplicate. Moving the issue to any status other\n" +
-		"than cancelled later removes the mark.",
+		"than cancelled later removes the mark.\n\n" +
+		"In a project Workflow, hand code to the next step by pinning its commit:\n" +
+		"  multica issue status <id> <next> --commit <full-sha> --repo <url> --branch <branch>\n" +
+		"The next step's run reviews exactly that commit; a run that saw an older pin\n" +
+		"cannot move the issue until it checks the current one.",
 	Args: exactArgs(2),
 	RunE: runIssueStatus,
 }
@@ -680,6 +684,9 @@ func init() {
 	// issue status
 	issueStatusCmd.Flags().Bool("no-start", false, "Change status without starting an agent run")
 	issueStatusCmd.Flags().String("duplicate-of", "", "Mark the issue as a duplicate of this original issue (key like MUL-123, or full UUID); the status must be cancelled")
+	issueStatusCmd.Flags().String("commit", "", "Pin this full commit SHA for the next Workflow step (requires --repo)")
+	issueStatusCmd.Flags().String("repo", "", "Repository of the pinned commit")
+	issueStatusCmd.Flags().String("branch", "", "Branch of the pinned commit")
 	issueStatusCmd.Flags().String("output", "table", "Output format: table or json")
 
 	// issue reorder
@@ -1975,6 +1982,13 @@ func runIssueStatus(cmd *cobra.Command, args []string) error {
 	if noStart {
 		body["suppress_run"] = true
 	}
+	artifact, err := workflowArtifactFlags(cmd)
+	if err != nil {
+		return err
+	}
+	if artifact != nil {
+		body["workflow_artifact"] = artifact
+	}
 	var result map[string]any
 	if err := client.PutJSON(ctx, "/api/issues/"+issueRef.ID, body, &result); err != nil {
 		return fmt.Errorf("update status: %w", err)
@@ -1995,6 +2009,22 @@ func runIssueStatus(cmd *cobra.Command, args []string) error {
 		return cli.PrintJSON(os.Stdout, result)
 	}
 	return nil
+}
+
+// workflowArtifactFlags reads --commit/--repo/--branch: the code revision a
+// status change hands to the next Workflow step. nil when none is set.
+func workflowArtifactFlags(cmd *cobra.Command) (map[string]string, error) {
+	commit, _ := cmd.Flags().GetString("commit")
+	repo, _ := cmd.Flags().GetString("repo")
+	branch, _ := cmd.Flags().GetString("branch")
+	commit, repo, branch = strings.ToLower(strings.TrimSpace(commit)), strings.TrimSpace(repo), strings.TrimSpace(branch)
+	if commit == "" && repo == "" && branch == "" {
+		return nil, nil
+	}
+	if commit == "" || repo == "" {
+		return nil, fmt.Errorf("--commit and --repo are required together to pin a revision")
+	}
+	return map[string]string{"commit": commit, "repo": repo, "branch": branch}, nil
 }
 
 // duplicateOfFlag returns the --duplicate-of reference, or "" when the flag is

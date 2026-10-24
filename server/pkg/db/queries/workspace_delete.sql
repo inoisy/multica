@@ -562,6 +562,9 @@ deleted_child_events AS (
 deleted_conveyor_events AS (
  DELETE FROM issue_conveyor_event WHERE workspace_id=$1
 ),
+deleted_workflow_artifacts AS (
+ DELETE FROM issue_workflow_artifact WHERE workspace_id=$1
+),
 deleted_conveyors AS (
  DELETE FROM issue_conveyor WHERE workspace_id=$1
 ),

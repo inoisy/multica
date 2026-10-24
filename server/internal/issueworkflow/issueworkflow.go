@@ -36,6 +36,7 @@ import (
 const (
 	HandlerNone        = "none"
 	HandlerAgent       = "agent"
+	HandlerAccept      = "accept"
 	HandlerSquad       = "squad"
 	HandlerMember      = "member"
 	HandlerProjectLead = "project_lead"
@@ -181,7 +182,7 @@ type Definition struct {
 // HandsOff reports whether entering the step reassigns the issue.
 func (s Step) HandsOff() bool {
 	switch s.Handler.Type {
-	case HandlerAgent, HandlerSquad, HandlerMember, HandlerProjectLead, HandlerCreator:
+	case HandlerAgent, HandlerAccept, HandlerSquad, HandlerMember, HandlerProjectLead, HandlerCreator:
 		return true
 	}
 	return false
@@ -298,6 +299,10 @@ func (d Definition) HandsOffAnywhere() bool {
 	}
 	return false
 }
+
+// ControlsExecution distinguishes an adopted workflow from the passive Default
+// catalog used by legacy routes. A task must have one execution owner.
+func (d Definition) ControlsExecution() bool { return !d.IsDefault || d.HandsOffAnywhere() }
 
 // NextStatus is where a step's handler moves the issue when done: the step's
 // own choice, or else the next status on the board that is not blocked.
@@ -421,7 +426,7 @@ func ValidateHandoff(s Step, def Definition) error {
 		return invalid("status %q is not part of this workflow", s.StatusKey)
 	}
 	switch s.Handler.Type {
-	case HandlerNone, HandlerProjectLead:
+	case HandlerNone, HandlerProjectLead, HandlerAccept:
 	case HandlerAgent, HandlerMember:
 		if s.Handler.ID == "" {
 			return invalid("choose a %s to hand off to", s.Handler.Type)
@@ -622,6 +627,7 @@ type BriefInput struct {
 	// AssigneeName names the issue's assignee in an observer's brief; empty
 	// means unassigned.
 	AssigneeName string
+	Artifact     *Artifact
 }
 
 // Brief renders what an agent reads about the issue's project workflow: the
@@ -695,6 +701,10 @@ func Brief(in BriefInput) string {
 		b.WriteString("\nMoving the issue into a step that hands off reassigns it to that step's handler and starts their run.\n")
 		return b.String()
 	}
+	if in.Artifact != nil {
+		fmt.Fprintf(&b, "\nCode revision for this step: %s (repository %s, branch %s). Review this exact commit.\n", in.Artifact.Commit, briefLine(in.Artifact.Repo), briefLine(in.Artifact.Branch))
+	}
+	b.WriteString("When handing code to the next step, pin its full SHA with the status command's --commit, --repo and --branch flags. Reviewers keep the pinned revision unless they changed the code.\n")
 	b.WriteString("\nHand off by changing the status — moving the issue into a step that hands off reassigns it to that step's handler and starts their run:\n")
 	if next := in.Workflow.NextStatus(in.StatusKey); next != "" {
 		fmt.Fprintf(&b, "Step done      → multica issue status %s %s\n", in.IssueIdentifier, next)

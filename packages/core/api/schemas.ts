@@ -552,7 +552,7 @@ const IssueWorkflowHandlerSchema = z.object({
 }).loose();
 
 const ISSUE_WORKFLOW_HANDLER_TYPES = new Set<string>([
-  "none", "agent", "squad", "member", "project_lead", "creator",
+  "none", "agent", "squad", "member", "project_lead", "creator", "accept",
 ]);
 
 const IssueWorkflowStepSchema = z.object({

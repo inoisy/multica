@@ -81,7 +81,10 @@ func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (P
 }
 
 const deleteProject = `-- name: DeleteProject :exec
-DELETE FROM project WHERE id = $1 AND workspace_id = $2
+WITH cleared_workflow_artifacts AS (
+ DELETE FROM issue_workflow_artifact WHERE project_id = $1 AND workspace_id = $2
+)
+DELETE FROM project WHERE project.id = $1 AND project.workspace_id = $2
 `
 
 type DeleteProjectParams struct {

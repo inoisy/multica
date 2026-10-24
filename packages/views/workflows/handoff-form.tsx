@@ -39,7 +39,7 @@ const NOT_SET = "__not_set__";
 type HandoffMode = "none" | "agent" | "member";
 
 function modeOf(handler: IssueWorkflowStep["handler"]): HandoffMode {
-  if (handler.type === "agent") return "agent";
+  if (handler.type === "agent" || handler.type === "accept") return "agent";
   if (handler.type === "member" || handler.type === "project_lead") return "member";
   return "none";
 }
@@ -51,7 +51,7 @@ function modeOf(handler: IssueWorkflowStep["handler"]): HandoffMode {
 export function savedHandoff<T extends Pick<IssueWorkflowStep, "handler" | "instructions" | "next_status_key" | "back_status_key">>(
   step: T,
 ): T {
-  if (step.handler.type === "agent") return step;
+  if (step.handler.type === "agent" || step.handler.type === "accept") return step;
   return { ...step, instructions: "", next_status_key: undefined, back_status_key: undefined };
 }
 
@@ -355,6 +355,11 @@ export function HandoffFields({
                       {t(($) => $.workflows.handoff.project_lead_hint)}
                     </p>
                   )}
+                  {step.handler.type === "accept" && (
+                    <p className="mt-1.5 text-caption leading-5 text-muted-foreground">
+                      {t(($) => $.workflows.handoff.accept_hint)}
+                    </p>
+                  )}
                 </div>
               )}
             </div>
@@ -362,7 +367,17 @@ export function HandoffFields({
         })}
       </div>
 
-      {mode === "agent" && (
+      {mode === "agent" && step.handler.type === "accept" && (
+        <NextBackFields
+          step={step}
+          workflow={workflow}
+          canEdit={canEdit}
+          nextDefaultLabel={nextDefaultLabel}
+          onPatch={onPatch}
+          onPreview={onPreview}
+        />
+      )}
+      {mode === "agent" && step.handler.type !== "accept" && (
         <>
           <Field
             label={t(($) => $.workflows.handoff.instructions)}
@@ -419,6 +434,7 @@ function HandlerPicker({
   const agentRows = kind === "agent" ? agents.filter((a) => !a.archived_at && matches(a.name)) : [];
   const memberRows = kind === "member" ? members.filter((m) => matches(m.name)) : [];
   const leadLabel = t(($) => $.workflows.handler.project_lead);
+  const acceptLabel = t(($) => $.workflows.handler.accept);
   const pick = (handler: IssueWorkflowStep["handler"]) => {
     onChange(handler);
     setOpen(false);
@@ -427,7 +443,9 @@ function HandlerPicker({
   const current =
     value.type === "project_lead"
       ? leadLabel
-      : value.id
+      : value.type === "accept"
+        ? acceptLabel
+        : value.id
         ? (value.type === "agent" ? agents.find((a) => a.id === value.id)?.name : members.find((m) => m.user_id === value.id)?.name) ?? ""
         : "";
   const placeholder = kind === "agent" ? t(($) => $.workflows.handoff.pick_agent) : t(($) => $.workflows.handoff.pick_member);
@@ -459,6 +477,11 @@ function HandlerPicker({
         </>
       }
     >
+      {kind === "agent" && !q && (
+        <PickerItem selected={is("accept")} onClick={() => pick({ type: "accept" })}>
+          <span className="truncate">{acceptLabel}</span>
+        </PickerItem>
+      )}
       {kind === "member" && !q && (
         <PickerItem selected={is("project_lead")} onClick={() => pick({ type: "project_lead" })}>
           <span className="truncate">{leadLabel}</span>
