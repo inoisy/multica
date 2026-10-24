@@ -11,7 +11,11 @@
     "usage": "统计",
     "runtimes": "运行时",
     "skills": "Skills",
-    "settings": "设置"
+    "settings": "设置",
+    "conveyor": "史诗",
+    "subscriptions": "Subscriptions",
+    "pages": "Pages",
+    "model_profiles": "模型配置"
   },
   "tab": {
     "issue": "任务",
@@ -40,6 +44,13 @@
     "loading_workspace": "正在加载工作区...",
     "loading_named_prefix": "正在加载"
   },
+  "window": {
+    "go_back": "后退",
+    "go_forward": "前进",
+    "hold_for_history": "长按查看历史",
+    "back_history": "后退历史",
+    "forward_history": "前进历史"
+  },
   "sidebar": {
     "unpin_tooltip": "取消固定",
     "workspaces_label": "工作区",
@@ -61,5 +72,44 @@
       "title": "加入 Discord",
       "dismiss": "关闭"
     }
+  },
+  "custom_pages": {
+    "title": "Pages",
+    "description": "Workspace pages available from the sidebar. Open inside Multica or in a new tab.",
+    "saved": "Pages saved",
+    "save_failed": "Could not save pages",
+    "add": "Add",
+    "save": "Save",
+    "saving": "Saving…",
+    "loading": "Loading…",
+    "empty_readonly": "No pages yet. Workspace owners and admins can add them.",
+    "empty_editable": "No pages yet. Click Add to create one.",
+    "name": "Name",
+    "url": "/takes/ or https://…",
+    "open_mode": "How to open",
+    "embed": "Inside Multica",
+    "tab": "New tab",
+    "up": "Move up",
+    "down": "Move down",
+    "open": "Open",
+    "delete": "Delete",
+    "optional_description": "Description (optional)",
+    "url_hint": "Use a path on this site (for example /takes/) or an HTTPS URL. External sites may block embedding; open those in a new tab.",
+    "configure": "Configure",
+    "page": "Page",
+    "load_failed": "Could not load pages: {{error}}",
+    "not_found": "Page not found.",
+    "all": "All pages",
+    "opens_in_tab": "This page opens in a new tab.",
+    "open_named": "Open “{{title}}”",
+    "add_page": "Add page"
+  },
+  "section_tabs": {
+    "issues": "任务",
+    "conveyor": "史诗",
+    "agents": "智能体",
+    "modelProfiles": "模型配置",
+    "runtimes": "运行时",
+    "subscriptions": "订阅"
   }
 }

@@ -32,6 +32,9 @@ vi.mock("./tabs/activity-tab", () => ({
 vi.mock("./agent-overview-summary", () => ({
   AgentOverviewSummary: () => <div>agent-overview-summary</div>,
 }));
+vi.mock("./agent-models", () => ({
+  AgentModels: () => <div>agent-models</div>,
+}));
 vi.mock("./agent-access-settings", () => ({
   AgentAccessSettings: () => <div>agent-access-settings</div>,
 }));
@@ -284,6 +287,38 @@ describe("AgentOverviewPane Environment tab visibility", () => {
     expect(
       screen.queryByRole("tab", { name: /^Environment$/i }),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("AgentOverviewPane on a Qoder Cloud Agents runtime", () => {
+  const tabNames = () =>
+    screen
+      .getAllByRole("tab")
+      .filter((tab) => tab.closest("aside"))
+      .map((tab) => tab.textContent);
+
+  it("offers only Instructions under Capabilities", () => {
+    larkListingRef.current = { installations: [], configured: true };
+    renderPane([makeRuntime("qoder_cloud")]);
+    openCapabilities();
+    expect(tabNames()).toEqual(["Instructions"]);
+  });
+
+  it("drops Environment and Custom Args and names the QCA agent tab", () => {
+    renderPane([makeRuntime("qoder_cloud")]);
+    openSettings();
+    expect(tabNames()).toEqual(["General", "Access", "QCA Agent"]);
+  });
+
+  it("keeps Routing off for other runtimes", () => {
+    renderPane([makeRuntime("claude")]);
+    openSettings();
+    expect(tabNames()).toEqual([
+      "General",
+      "Access",
+      "Environment",
+      "Custom Args",
+    ]);
   });
 });
 

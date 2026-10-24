@@ -16,6 +16,7 @@ import {
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
 import { ApiError } from "@multica/core/api";
+import { paths, useWorkspaceSlug } from "@multica/core/paths";
 import type {
   RuntimeProfile,
   RuntimeProfileType,
@@ -26,6 +27,7 @@ import {
   useUpdateRuntimeProfile,
 } from "@multica/core/runtimes";
 import { Button } from "@multica/ui/components/ui/button";
+import { IconButton } from "@multica/ui/components/common/icon-button";
 import {
   Dialog,
   DialogClose,
@@ -54,6 +56,7 @@ import {
   type RuntimeCatalogSections,
 } from "./runtime-profile-catalog";
 import { useT } from "../../i18n";
+import { AppLink } from "../../navigation";
 import { customRuntimeDocsHref } from "./runtime-docs";
 
 // The dialog runs in two surfaces that swap inside one Popup:
@@ -147,17 +150,17 @@ export function RuntimeProfilesDialog({
               )}
               <DialogClose
                 render={
-                  <Button
+                  <IconButton
                     type="button"
                     variant="ghost"
                     size="icon-sm"
                     className="shrink-0"
-                    aria-label={t(($) => $.profiles.close)}
+                    label={t(($) => $.profiles.close)}
+                    tooltipSide="bottom"
                   />
                 }
               >
                 <X aria-hidden="true" className="h-4 w-4" />
-                <span className="sr-only">{t(($) => $.profiles.close)}</span>
               </DialogClose>
             </div>
           </div>
@@ -248,9 +251,7 @@ export function RuntimeProfilesDialog({
   );
 }
 
-// ---------------------------------------------------------------------------
 // Master list — custom profiles first, built-in families as collapsed reference.
-// ---------------------------------------------------------------------------
 
 function CatalogList({
   catalog,
@@ -472,10 +473,8 @@ function CatalogRow({
   );
 }
 
-// ---------------------------------------------------------------------------
 // Detail panel — adaptive: built-in is read-only, custom shows fields +
 // Edit / Delete.
-// ---------------------------------------------------------------------------
 
 function DetailPanel({
   entry,
@@ -636,9 +635,7 @@ function DetailRow({
   );
 }
 
-// ---------------------------------------------------------------------------
 // Create / edit form.
-// ---------------------------------------------------------------------------
 
 function ProfileFormView({
   wsId,
@@ -754,6 +751,8 @@ function ProfileDetailsForm({
   onSaved: (profile: RuntimeProfile) => void;
 }) {
   const { t } = useT("runtimes");
+  // The dialog can open outside a workspace route; the link needs one.
+  const workspaceSlug = useWorkspaceSlug();
   const idPrefix = `runtime-profile-${useId().replace(/:/g, "")}`;
   const createProfile = useCreateRuntimeProfile(wsId);
   const updateProfile = useUpdateRuntimeProfile(wsId);
@@ -936,6 +935,20 @@ function ProfileDetailsForm({
           >
             {t(($) => $.profiles.form.command_name_label)}
           </Label>
+          <p className="text-caption text-muted-foreground">
+            {t(($) => $.profiles.form.subscriptions_hint)}
+            {workspaceSlug ? (
+              <>
+                {" "}
+                <AppLink
+                  href={paths.workspace(workspaceSlug).subscriptions()}
+                  className="text-foreground underline underline-offset-2"
+                >
+                  {t(($) => $.profiles.form.subscriptions_link)}
+                </AppLink>
+              </>
+            ) : null}
+          </p>
           <Input
             id={`${idPrefix}-command`}
             name="command"

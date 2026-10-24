@@ -98,6 +98,8 @@ func TestSubscriptionLoginThroughHeartbeat(t *testing.T) {
 	h := subscriptionTestHandler(t)
 	h.SubscriptionLogins = NewSubscriptionLoginStore()
 	_, runtimeID := poolFixture(t, h, "subtest-login")
+	// A daemon token is accepted only for a runtime that carries its daemon id.
+	dbfx.Exec(t, `UPDATE agent_runtime SET daemon_id = 'subtest-daemon' WHERE id = $1`, runtimeID)
 
 	callSubscription(t, h.StartSubscriptionLogin,
 		withURLParam(newRequest("POST", "/x", map[string]any{"token": "not-a-token"}), "key", "subtest-login"), http.StatusBadRequest)

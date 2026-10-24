@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/multica-ai/multica/server/internal/events"
 	"github.com/multica-ai/multica/server/internal/issuestatus"
+	"github.com/multica-ai/multica/server/internal/issueworkflow"
 	"github.com/multica-ai/multica/server/internal/util"
 	db "github.com/multica-ai/multica/server/pkg/db/generated"
 	"github.com/multica-ai/multica/server/pkg/dbid"
@@ -388,9 +389,16 @@ func (s *IssueConveyorService) Apply(ctx context.Context, issue db.Issue, invoke
 
 	// Enable may add route statuses. Take the catalog before the route, as
 	// delivery does, to serialize creation and respect concurrent archiving.
-	if cmd.Action == ConveyorCmdEnable {
+	if cmd.Action == ConveyorCmdEnable || cmd.Action == ConveyorCmdResume {
 		if err = q.LockIssueStatusCatalog(ctx, issue.WorkspaceID); err != nil {
 			return ConveyorView{}, err
+		}
+		def, _, werr := issueworkflow.ForProject(ctx, q, issue.WorkspaceID, issue.ProjectID)
+		if werr != nil {
+			return ConveyorView{}, werr
+		}
+		if def != nil && def.ControlsExecution() {
+			return ConveyorView{}, conveyorErr(ErrConveyorConflict, "the project's Workflow owns this issue; use ordinary status transitions")
 		}
 	}
 	cv, err := q.LockIssueConveyor(ctx, issue.ID)
@@ -956,6 +964,19 @@ func withImplicitAccept(ctx context.Context, q *db.Queries, issue db.Issue, agen
 
 // acceptSystemKey marks the hidden agent that carries accept steps.
 const acceptSystemKey = "accept"
+
+// WorkflowAcceptanceAgent uses the existing model-free carrier without creating
+// a conveyor route. Its task follows the project's ordinary workflow handoff.
+func WorkflowAcceptanceAgent(ctx context.Context, q *db.Queries, workspaceID pgtype.UUID) (*db.Agent, error) {
+	agents, err := q.ListAllAgentsAnyKind(ctx, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	a, _, err := acceptAgent(ctx, q, workspaceID, agents)
+	return a, err
+}
+
+func IsWorkflowAcceptanceAgent(a db.Agent) bool { return isAcceptCarrier(a) }
 
 // isAcceptCarrier reports whether the agent is the server's hidden accept agent.
 func isAcceptCarrier(a db.Agent) bool {

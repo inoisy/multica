@@ -16,11 +16,13 @@ import (
 func newIssueConveyorAcceptCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "accept [issue-id]",
-		Short: "Run the route's accept step: check the accepted commit on top of the base and merge it",
+		Short: "Run an accept step: check the accepted commit on top of the base and merge it",
 		Long: "Runs inside the accept step's run (the daemon's accept runtime starts it). It checks out the repository\n" +
 			"of the commit the route accepted, merges that commit onto the current base branch, runs the commands of\n" +
 			acceptanceFile + " from the commit, pushes exactly the checked merge, and hands the outcome in as\n" +
-			"the step's result. The issue defaults to MULTICA_ISSUE_ID.",
+			"the step's result. Without a live route it serves a project Workflow's acceptance step: it merges the\n" +
+			"commit the previous step pinned (`issue status --commit`), posts the report as a comment and moves the\n" +
+			"issue to the next step, back, or to blocked. The issue defaults to MULTICA_ISSUE_ID.",
 		Args: cobra.MaximumNArgs(1),
 		RunE: runIssueConveyorAccept,
 	}
@@ -88,9 +90,18 @@ func runIssueConveyorAccept(cmd *cobra.Command, args []string) error {
 	}
 	base := "/api/issues/" + url.PathEscape(ref.ID)
 
+	var issue struct {
+		Identifier string `json:"identifier"`
+	}
+	_ = getJSON(ctx, client, base, &issue)
+
 	var view acceptRouteView
-	if err := getJSON(ctx, client, base+"/conveyor", &view); err != nil {
-		return err
+	routeErr := getJSON(ctx, client, base+"/conveyor", &view)
+	if noLiveRoute(routeErr, view.Status) {
+		return runWorkflowAccept(ctx, client, base, issue.Identifier, os.Stdout)
+	}
+	if routeErr != nil {
+		return routeErr
 	}
 	if view.Step != "accept" {
 		return fmt.Errorf("the route is on step %q, not accept", view.Step)
@@ -98,11 +109,6 @@ func runIssueConveyorAccept(cmd *cobra.Command, args []string) error {
 	if task := os.Getenv("MULTICA_TASK_ID"); task != "" && view.CurrentTaskID != "" && task != view.CurrentTaskID {
 		return fmt.Errorf("this run is not the route's current accept run")
 	}
-	var issue struct {
-		Identifier string `json:"identifier"`
-	}
-	_ = getJSON(ctx, client, base, &issue)
-
 	outcome, repo, commit := acceptOutcome{}, "", view.AcceptedCommit
 	artifact, err := acceptedArtifact(ctx, client, base, view.AcceptedCommit)
 	switch {
