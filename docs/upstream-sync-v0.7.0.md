@@ -56,8 +56,9 @@ Notably absent from live and this integration are their `/profiles`,
 `/subscriptions`, and `/conveyor` web pages, model selectors, subscription
 wizards, and related core queries/types. The conveyor branch additionally
 contains custom pages and newer subscription hooks. Their backend equivalents
-are already in live. Russian translations exist in live but the older
-branches contain additional translated keys and copy.
+are already in live. Matching missing Russian translation keys were restored
+from those branches; new upstream messages were translated to keep the Russian
+bundle aligned with the English schema and interpolation parameters.
 
 These features have not been silently imported into an upstream merge. Decide
 whether to port them separately; the integration preserves the live baseline,
