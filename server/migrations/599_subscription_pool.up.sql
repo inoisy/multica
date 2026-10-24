@@ -1,4 +1,4 @@
--- Subscription pools (STT-420). A pool is an ordered set of accounts of one CLI
+-- Subscription pools . A pool is an ordered set of accounts of one CLI
 -- family and the order they are spent in, shared by the whole instance. A
 -- runtime profile of a workspace points at a pool with pool_id and keeps being
 -- the launch setting of the CLI in that workspace.

@@ -121,7 +121,7 @@ func compareSnapshots(before, after snapshot) ([]difference, int) {
 		if bc.Archived != ac.Archived {
 			add(k, "archived", bc.Archived, ac.Archived)
 		}
-		if bc.Error != ac.Error {
+		if bc.Error != "" || ac.Error != "" {
 			add(k, "error", bc.Error, ac.Error)
 		}
 		if bc.Choice == nil || ac.Choice == nil {
@@ -149,17 +149,19 @@ func normalizePersonal(before, after *choice) bool {
 	if before.Source != "agent_list" || after.Source != "agent_profile" || !after.ProfilePersonal {
 		return false
 	}
-	for _, c := range []*choice{before, after} {
-		c.Source = "agent_list"
-		c.ProfileID, c.ProfileName, c.ProfilePersonal = "", "", false
-		c.ExhaustedProfiles = nil
-		rows := make([]row, len(c.Rows))
-		copy(rows, c.Rows)
-		for i := range rows {
+	personalID, personalName := after.ProfileID, after.ProfileName
+	after.Source = "agent_list"
+	after.ProfileID, after.ProfileName, after.ProfilePersonal = "", "", false
+	if len(after.ExhaustedProfiles) > 0 && after.ExhaustedProfiles[0] == personalName {
+		after.ExhaustedProfiles = after.ExhaustedProfiles[1:]
+	}
+	rows := append([]row(nil), after.Rows...)
+	for i := range rows {
+		if rows[i].ProfileID == personalID {
 			rows[i].ProfileID = ""
 		}
-		c.Rows = rows
 	}
+	after.Rows = rows
 	return true
 }
 

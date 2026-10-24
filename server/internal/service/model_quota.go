@@ -187,21 +187,32 @@ func QuotaUnavailableUntil(reported time.Time, errMsg, runtimeName, provider str
 	return ParseQuotaReset(errMsg, runtimeName, provider, now)
 }
 
-// markRuntimeUnavailable records the limit of the run's runtime until the
-// reset the daemon reported or, without one, the reset its error names.
+// markRuntimeUnavailable records the refusal of the run's runtime until the
+// reset the daemon reported or, without one, the reset its error names. The
+// kind of refusal is a code: the daemon's own refusals on the agent limit or
+// on disabled accounts, otherwise the provider's. A provider refusal of a run
+// whose account the daemon confirmed belongs to that account; without the
+// fact it closes the whole runtime.
 func markRuntimeUnavailable(ctx context.Context, q *db.Queries, t db.AgentTaskQueue, errMsg string, reported, now time.Time) error {
 	rt, err := q.GetAgentRuntime(ctx, t.RuntimeID)
 	if err != nil {
 		return err
 	}
 	until := QuotaUnavailableUntil(reported, errMsg, runtimeDisplayName(rt), rt.Provider, now)
+	code := RefusalCodeForFailure(errMsg)
+	var account pgtype.UUID
+	if fact, ok := ParseAccountFact(t.AccountFact); ok && code == UnavailableProviderLimit {
+		account = util.MustParseUUID(fact.SubscriptionID)
+	}
 	_, err = q.InsertRuntimeUnavailable(ctx, db.InsertRuntimeUnavailableParams{
 		WorkspaceID: rt.WorkspaceID, RuntimeID: rt.ID,
 		Until:  pgtype.Timestamptz{Time: until, Valid: true},
 		Reason: clip(t.FailureReason.String+": "+errMsg, 300), TaskID: t.ID,
+		ReasonCode: code, SubscriptionID: account,
 	})
 	if err == nil {
-		slog.Info("model choice: runtime on a provider limit", "runtime_id", util.UUIDToString(rt.ID), "until", until, "task_id", util.UUIDToString(t.ID))
+		slog.Info("model choice: runtime refused a run", "runtime_id", util.UUIDToString(rt.ID), "until", until,
+			"task_id", util.UUIDToString(t.ID), "reason_code", code, "account", util.UUIDToString(account))
 	}
 	return err
 }

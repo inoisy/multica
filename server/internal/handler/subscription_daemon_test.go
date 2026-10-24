@@ -8,7 +8,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/multica-ai/multica/server/internal/service"
 	"github.com/multica-ai/multica/server/internal/testutil"
+	db "github.com/multica-ai/multica/server/pkg/db/generated"
 )
 
 // poolFixture: a claude pool in the test workspace spending one subscription,
@@ -35,17 +37,26 @@ func TestClaimCarriesSubscriptionPool(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pool := h.subscriptionPoolForRuntime(context.Background(), rt)
+	offer, err := service.BuildAccountOffer(context.Background(), h.Queries, rt.ID)
+	if err != nil || offer == nil {
+		t.Fatalf("offer: %+v %v", offer, err)
+	}
+	raw, _ := json.Marshal(offer)
+	task := &db.AgentTaskQueue{AccountOffer: raw}
+	pool := h.subscriptionPoolForTask(context.Background(), rt, task)
 	if pool == nil || pool.SpendOrder != "first" || len(pool.Subscriptions) != 1 || pool.Subscriptions[0].Key != "subtest-claim" ||
 		pool.Subscriptions[0].CredentialPath != "~/.config/subtest-claim/token" {
 		t.Fatalf("pool: %+v", pool)
 	}
-	if len(pool.Subscriptions) == 0 {
-		t.Fatal("no subscriptions")
+	if pool.OfferID != offer.OfferID || pool.PoolID != offer.PoolID || pool.Revision != offer.PoolRevision {
+		t.Fatalf("payload does not carry the offer: %+v vs %+v", pool, offer)
 	}
 	rt.ProfileID.Valid = false
-	if h.subscriptionPoolForRuntime(context.Background(), rt) != nil {
+	if h.subscriptionPoolForTask(context.Background(), rt, task) != nil {
 		t.Fatal("built-in runtimes carry no pool")
+	}
+	if h.subscriptionPoolForTask(context.Background(), rt, &db.AgentTaskQueue{}) != nil {
+		t.Fatal("a run handed no offer carries no pool")
 	}
 }
 
@@ -72,19 +83,13 @@ func TestDaemonUsageParksRuntimeAtCap(t *testing.T) {
 			},
 		}, testWorkspaceID, "subtest-daemon"), "workspaceId", testWorkspaceID), http.StatusOK)
 	}
-	parked := func() (int, string) {
-		var n int
-		var reason string
-		testPool.QueryRow(context.Background(), `SELECT count(*), coalesce(max(reason), '') FROM runtime_unavailable WHERE runtime_id = $1 AND until > now()`, runtimeID).Scan(&n, &reason)
-		return n, reason
-	}
 	report(95)
-	if n, reason := parked(); n != 1 || !strings.Contains(reason, "usage limit") {
-		t.Fatalf("over cap: %d %q", n, reason)
+	if until, code, _ := runtimeClosedUntil(t, h, runtimeID); until.IsZero() || code != service.ReasonAgentCap {
+		t.Fatalf("over cap: closed until %v for %q, want the agent limit", until, code)
 	}
 	report(10)
-	if n, _ := parked(); n != 0 {
-		t.Fatalf("below cap must lift the park, still %d", n)
+	if until, _, _ := runtimeClosedUntil(t, h, runtimeID); !until.IsZero() {
+		t.Fatalf("below cap must open the runtime, still closed until %v", until)
 	}
 
 	one := callSubscription(t, h.GetSubscription, withURLParam(newRequest("GET", "/x", nil), "key", "subtest-park"), http.StatusOK)
@@ -92,6 +97,19 @@ func TestDaemonUsageParksRuntimeAtCap(t *testing.T) {
 	if len(hosts) != 1 || hosts[0].(map[string]any)["device_name"] != "host-1" || one["login_state"] != "logged_in" {
 		t.Fatalf("host state: %v", one)
 	}
+}
+
+// runtimeClosedUntil is when the runtime can run again as the model choice sees
+// it now, with the reason code and whether the time is only a guess; zero when
+// it is open.
+func runtimeClosedUntil(t *testing.T, h *Handler, runtimeID string) (time.Time, string, bool) {
+	t.Helper()
+	world, err := service.LoadModelWorld(context.Background(), h.Queries, parseUUID(testWorkspaceID), time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	rt := world.Runtimes[runtimeID]
+	return rt.UnavailableUntil, rt.UnavailableCode, rt.UnavailableEstimated
 }
 
 func TestSubscriptionLoginThroughHeartbeat(t *testing.T) {
@@ -206,24 +224,16 @@ func twoSubscriptionPool(t *testing.T, h *Handler, suffix string) (runtimeID str
 
 func TestDaemonUsageParksTwoSubscriptionPoolUntilEarliestReset(t *testing.T) {
 	h := subscriptionTestHandler(t)
-	ctx := context.Background()
 	runtimeID, report := twoSubscriptionPool(t, h, "")
 	now := time.Now().UTC().Truncate(time.Second)
-	parkedUntil := func() (int, time.Time) {
-		var n int
-		var until time.Time
-		testPool.QueryRow(ctx, `SELECT count(*), coalesce(max(until), 'epoch') FROM runtime_unavailable WHERE runtime_id = $1 AND until > now()`, runtimeID).Scan(&n, &until)
-		return n, until
-	}
-
 	mainReset := now.Add(30 * time.Minute)
 	report(97, mainReset)
-	if n, until := parkedUntil(); n != 1 || !until.Equal(mainReset) {
-		t.Fatalf("both over cap: parked %d until %v, want %v (claude-main's 5h reset, not the week)", n, until, mainReset)
+	if until, _, estimated := runtimeClosedUntil(t, h, runtimeID); !until.Equal(mainReset) || estimated {
+		t.Fatalf("both over cap: closed until %v (estimated %v), want %v (claude-main's 5h reset, not the week)", until, estimated, mainReset)
 	}
 	report(97, now.Add(-10*time.Second))
-	if n, _ := parkedUntil(); n != 0 {
-		t.Fatalf("main's 5h reset has passed: the runtime is free, still %d parked", n)
+	if until, _, _ := runtimeClosedUntil(t, h, runtimeID); !until.IsZero() {
+		t.Fatalf("main's 5h reset has passed: the runtime is free, still closed until %v", until)
 	}
 }
 
@@ -254,7 +264,7 @@ func TestFreshUsageLiftsStaleLocalRefusal(t *testing.T) {
 	taskID := dbfx.Task(t, agentID, testutil.Cols{"runtime_id": runtimeID, "status": "failed"})
 	tomorrow := time.Now().Add(24 * time.Hour)
 	refuse := func() {
-		testPool.Exec(ctx, `INSERT INTO runtime_unavailable (workspace_id, runtime_id, until, reason, task_id) VALUES ($1,$2,$3,$4,$5)`, testWorkspaceID, runtimeID, tomorrow,
+		testPool.Exec(ctx, `INSERT INTO runtime_unavailable (workspace_id, runtime_id, until, reason, task_id, reason_code) VALUES ($1,$2,$3,$4,$5,'agent_cap_refusal')`, testWorkspaceID, runtimeID, tomorrow,
 			"agent_provider_quota_limit: usage limit: подписки runtime выше лимита агентам (остаток — резерв людям): subtest-second неделя 54% ≥ 50%; subtest-main 5ч 97% ≥ 75%", taskID)
 	}
 	refusals := func() int {
@@ -273,7 +283,7 @@ func TestFreshUsageLiftsStaleLocalRefusal(t *testing.T) {
 		t.Fatalf("main is usable: the stale refusal is lifted, still %d", n)
 	}
 
-	testPool.Exec(ctx, `INSERT INTO runtime_unavailable (workspace_id, runtime_id, until, reason, task_id) VALUES ($1,$2,$3,$4,$5)`, testWorkspaceID, runtimeID, tomorrow,
+	testPool.Exec(ctx, `INSERT INTO runtime_unavailable (workspace_id, runtime_id, until, reason, task_id, reason_code) VALUES ($1,$2,$3,$4,$5,'provider_limit')`, testWorkspaceID, runtimeID, tomorrow,
 		"agent_provider_quota_limit: You've hit your usage limit · resets 10:44", taskID)
 	refuse()
 	var out struct {

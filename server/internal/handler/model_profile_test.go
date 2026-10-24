@@ -17,6 +17,35 @@ type modelRig struct {
 	runtimes map[string]string
 }
 
+func TestPersonalProfileEndpointsCopyEditResetAndEnforceOwnership(t *testing.T) {
+	r := newModelRig(t)
+	base := r.createProfile("personal API base", r.row("codex-main", "sol", "high"))["id"].(string)
+	agent := dbfx.Agent(t, "personal API", r.runtimes["codex-main"], testutil.Cols{"model_profile_id": base})
+	call := func(fn http.HandlerFunc, method string, body any) *testutil.Response {
+		t.Helper()
+		return testutil.Call(t, fn, withURLParam(newRequest(method, "/api/agents/"+agent+"/models", body), "id", agent))
+	}
+	var copied AgentModelsResponse
+	call(testHandler.CreateAgentPersonalProfile, "POST", map[string]any{"from_profile_id": base}).Want(http.StatusOK).JSON(&copied)
+	if copied.PersonalProfileID == nil || copied.MatchesBase == nil || !*copied.MatchesBase || copied.Mode != "single" {
+		t.Fatalf("copy: %+v", copied)
+	}
+	outsider := subtestOutsider(t)
+	req := withURLParam(newRequestAs(outsider, "PUT", "/x", r.row("codex-main", "denied", "")), "id", agent)
+	testutil.Call(t, testHandler.SetAgentSingleModel, req).Want(http.StatusForbidden)
+	var edited AgentModelsResponse
+	call(testHandler.SetAgentPersonalProfile, "PUT", map[string]any{"options": []map[string]any{r.row("codex-main", "changed", ""), r.row("claude-main", "opus", "")}}).Want(http.StatusOK).JSON(&edited)
+	if edited.Mode != "personal" || edited.MatchesBase == nil || *edited.MatchesBase || len(edited.DiffRows) != 2 {
+		t.Fatalf("edit: %+v", edited)
+	}
+	call(testHandler.SetAgentSingleModel, "PUT", r.row("claude-main", "one", "")).Want(http.StatusOK)
+	var reset AgentModelsResponse
+	call(testHandler.ResetAgentPersonalProfile, "DELETE", nil).Want(http.StatusOK).JSON(&reset)
+	if reset.ModelProfileID == nil || *reset.ModelProfileID != base || reset.OwnList || reset.PersonalProfileID != nil {
+		t.Fatalf("reset: %+v", reset)
+	}
+}
+
 func newModelRig(t *testing.T) *modelRig {
 	t.Helper()
 	if testHandler == nil {
@@ -351,8 +380,8 @@ func TestModelProfileImportDryRunFixture(t *testing.T) {
 	if n := dbfx.Count(t, "SELECT count(*) FROM agent WHERE id=$1 AND model_profile_id IS NOT NULL", same); n != 1 {
 		t.Fatal("agent not put on its profile")
 	}
-	if n := dbfx.Count(t, "SELECT count(*) FROM agent_model_option WHERE agent_id=$1", pinned); n != 1 {
-		t.Fatal("pinned agent has no one-row own list")
+	if n := dbfx.Count(t, "SELECT count(*) FROM model_profile_option o JOIN model_profile p ON p.id = o.profile_id WHERE p.owner_agent_id=$1", pinned); n != 1 {
+		t.Fatal("pinned agent has no one-row personal profile")
 	}
 	if n := dbfx.Count(t, "SELECT count(*) FROM issue WHERE id=$1 AND model_profile_id IS NOT NULL", issue); n != 1 {
 		t.Fatal("epic override not carried to the issue")

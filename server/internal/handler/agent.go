@@ -397,6 +397,13 @@ type AgentTaskResponse struct {
 	WorkspaceContext string `json:"workspace_context,omitempty"`
 	// SubscriptionPool is set for runtimes whose profile spends subscriptions.
 	SubscriptionPool *SubscriptionPoolPayload `json:"subscription_pool,omitempty"`
+	// ModelChoice is what the claim chose for the run, as stored. AccountFact is
+	// the account the daemon confirmed; a run that never confirmed one (an older
+	// daemon, a runtime without a pool, a run before the confirmation existed)
+	// has none, which clients show as unknown. The accounts handed to the
+	// daemon are not part of the answer.
+	ModelChoice json.RawMessage      `json:"model_choice,omitempty"`
+	AccountFact *service.AccountFact `json:"account_fact,omitempty"`
 	// IssueStatuses is the workspace's ACTIVE CUSTOM status catalog (MUL-6460),
 	// injected into the agent brief so agents can see and use statuses beyond
 	// the seven built-ins. Built-ins are omitted: their keys, names, and
@@ -844,7 +851,13 @@ func taskToResponse(t db.AgentTaskQueue, workspaceID string) AgentTaskResponse {
 	if t.HandoffNote.Valid {
 		handoffNote = t.HandoffNote.String
 	}
+	var accountFact *service.AccountFact
+	if fact, ok := service.ParseAccountFact(t.AccountFact); ok {
+		accountFact = &fact
+	}
 	return AgentTaskResponse{
+		ModelChoice: json.RawMessage(t.ModelChoice),
+		AccountFact: accountFact,
 		// Task-scoped provenance must not transfer through copied retry context.
 		CancelledByCommentChange: t.Status == "cancelled" && cancellation.TaskID != "" && cancellation.TaskID == uuidToString(t.ID),
 		CancelledBy:              taskCancellationActorToResponse(t),

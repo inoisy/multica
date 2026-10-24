@@ -4066,7 +4066,7 @@ func (h *Handler) buildClaimedTaskResponse(r *http.Request, task *db.AgentTaskQu
 
 	// Subscriptions the runtime spends (stage B): the daemon picks one and
 	// launches the provider CLI on its credential.
-	resp.SubscriptionPool = h.subscriptionPoolForRuntime(r.Context(), runtime)
+	resp.SubscriptionPool = h.subscriptionPoolForTask(r.Context(), runtime, task)
 
 	// Workspace status catalog (MUL-6460): active CUSTOM statuses only, so the
 	// daemon can render them into the brief's status-command line. Read on every

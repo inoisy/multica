@@ -3303,8 +3303,15 @@ func (q *Queries) CreateSystemUserAgent(ctx context.Context, arg CreateSystemUse
 }
 
 const deleteSystemAgentByID = `-- name: DeleteSystemAgentByID :exec
+WITH victims AS (
+ SELECT a.id FROM agent a WHERE a.id = $1 AND a.kind = 'system' AND a.system_key LIKE 'agent_builder:%'
+), deleted_personal_rows AS (
+ DELETE FROM model_profile_option o WHERE o.profile_id IN (SELECT p.id FROM model_profile p WHERE p.owner_agent_id IN (SELECT v.id FROM victims v))
+), deleted_personal_profiles AS (
+ DELETE FROM model_profile p WHERE p.owner_agent_id IN (SELECT v.id FROM victims v)
+)
 DELETE FROM agent
-WHERE id = $1 AND kind = 'system' AND system_key LIKE 'agent_builder:%'
+WHERE agent.id IN (SELECT v.id FROM victims v)
 `
 
 // Builder sessions own their hidden execution agent. Deleting the session

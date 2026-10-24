@@ -52,6 +52,23 @@ func TestPersonalProfileNormalizationIsNarrow(t *testing.T) {
 	}
 }
 
+func TestPersonalNormalizationPreservesFallbackProfiles(t *testing.T) {
+	before := baseChoice()
+	after := baseChoice()
+	after.Source, after.ProfileID, after.ProfileName, after.ProfilePersonal = "agent_profile", "personal", "Personal", true
+	after.ExhaustedProfiles = []string{"Personal", "Shared fallback"}
+	if diffs, _ := compareSnapshots(snap(ctxOf("a", before)), snap(ctxOf("a", after))); len(diffs) == 0 {
+		t.Fatal("normalization hid a changed fallback graph")
+	}
+}
+
+func TestMatchingErrorsAreNotAnEquivalenceProof(t *testing.T) {
+	s := snap(contextResult{Key: "agent/a", Kind: kindAgent, Error: "choice failed"})
+	if diffs, _ := compareSnapshots(s, s); len(diffs) == 0 {
+		t.Fatal("failed previews were counted as equal choices")
+	}
+}
+
 func TestSharedProfileSourceChangeIsADifference(t *testing.T) {
 	before := baseChoice()
 	before.Source = "agent_profile"

@@ -3702,6 +3702,13 @@ func (s *TaskService) claimTask(ctx context.Context, agentID, runtimeID pgtype.U
 		}
 		idleNotices = notices
 
+		// An environment that spends a pool of accounts is handed the pool
+		// with the claim; what was handed over is stored with the assignment.
+		if err := claimAccountOffer(ctx, qtx, &task, claimRuntimeID); err != nil {
+			outcome = "error_account_offer"
+			return fmt.Errorf("account offer: %w", err)
+		}
+
 		claimedTask := task
 		claimed = &claimedTask
 		return nil
