@@ -258,3 +258,16 @@ These actions can trigger agent work or mutate durable state:
 - Getting the leader briefing does NOT imply status authority. A squad
   `@`-mentioned into an issue assigned to someone else is a guest: roster and
   delegation rules yes, `multica issue status` no.
+
+## Route operator permissions
+
+`issue conveyor pause`, `resume`, and `disable` accept the route coordinator or
+an agent in an active personal chat whose owner is currently a workspace owner
+or admin. The server binds that authority to the live task token, chat, agent,
+human originator, and workspace. Ordinary issue runs do not inherit this chat
+permission. Completed runs and archived chats cannot lend authority.
+
+Read `issue conveyor get <issue> --output json` before changing a route and pass
+its current `--revision`. Chat control does not bypass revision checks, valid
+transitions, or the member's permission to invoke a private agent. Only the run
+serving the current route step can submit `conveyor result`.

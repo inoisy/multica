@@ -1,0 +1,44 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: multica
+      POSTGRES_DB: multica
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U multica -d multica]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgres://multica:${DB_PASSWORD}@postgres:5432/multica?sslmode=disable
+      JWT_SECRET: ${JWT_SECRET:?}
+      APP_ENV: development
+      ALLOW_SIGNUP: "true"
+      FRONTEND_ORIGIN: ${STAND_URL}
+      MULTICA_APP_URL: ${STAND_URL}
+      MULTICA_PUBLIC_URL: ${STAND_URL}
+      MULTICA_DEV_VERIFICATION_CODE: "411411"
+      DO_NOT_TRACK: "1"
+    depends_on:
+      postgres:
+        condition: service_healthy
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    environment:
+      REMOTE_API_URL: http://backend:8080
+      DO_NOT_TRACK: "1"
+    ports:
+      - "3000"
+    depends_on:
+      - backend
+volumes:
+  pgdata:

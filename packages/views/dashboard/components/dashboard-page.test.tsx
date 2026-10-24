@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import { cleanup, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderWithI18n } from "../../test/i18n";
 import { NavigationProvider } from "../../navigation";
 import type { NavigationAdapter } from "../../navigation";
@@ -70,9 +71,6 @@ vi.mock("@tanstack/react-query", async () => {
     );
   return {
     ...actual,
-    // The page reads the client only to invalidate the dashboard keys from
-    // the refresh button; there is no provider in these renders.
-    useQueryClient: () => ({ invalidateQueries: vi.fn() }),
     useQuery: (opts: { queryKey: unknown[] }) => {
       queryKeys.push(opts.queryKey);
       if (dashboardDataRef.current) {
@@ -270,6 +268,9 @@ const replaceSpy = vi.fn();
  * runs and each failure's reason.
  */
 function DashboardHarness({ initialSearch = "" }: { initialSearch?: string }) {
+  const [queryClient] = useState(() => new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  }));
   const [search, setSearch] = useState(initialSearch);
   const adapter = useMemo<NavigationAdapter>(
     () => ({
@@ -287,9 +288,11 @@ function DashboardHarness({ initialSearch = "" }: { initialSearch?: string }) {
     [search],
   );
   return (
-    <NavigationProvider value={adapter}>
-      <DashboardPage />
-    </NavigationProvider>
+    <QueryClientProvider client={queryClient}>
+      <NavigationProvider value={adapter}>
+        <DashboardPage />
+      </NavigationProvider>
+    </QueryClientProvider>
   );
 }
 

@@ -855,6 +855,7 @@ func TestCreateIsolatedCheckoutImportsFetchedTipFromShallowCache(t *testing.T) {
 		t.Fatalf("create work repo directory: %v", err)
 	}
 	createTestRepoAt(t, workPath)
+	runGitAuthored(t, workPath, "branch", "-m", "test/shallow-cache")
 	branch := currentBranchName(t, workPath)
 	runGitAuthored(t, workPath, "remote", "add", "origin", originPath)
 	runGitAuthored(t, workPath, "push", "-u", "origin", branch)

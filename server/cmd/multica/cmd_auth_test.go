@@ -40,6 +40,11 @@ func TestMain(m *testing.M) {
 		fmt.Fprintf(os.Stderr, "isolate cmd/multica test home: %v\n", err)
 		os.Exit(1)
 	}
+	// Tests must not inherit a task marker from the checkout's parent directories.
+	if err := os.Chdir(scratchHome); err != nil {
+		fmt.Fprintf(os.Stderr, "isolate cmd/multica working directory: %v\n", err)
+		os.Exit(1)
+	}
 
 	code := m.Run()
 	_ = os.RemoveAll(scratchHome)

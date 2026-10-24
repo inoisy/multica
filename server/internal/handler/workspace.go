@@ -321,7 +321,8 @@ func (h *Handler) CreateWorkspace(w http.ResponseWriter, r *http.Request) {
 	// Runtimes marked for every workspace (subscription pools) appear in the
 	// new workspace with it.
 	if err := copyAllWorkspaceRuntimeProfiles(r.Context(), qtx, ws.ID); err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to copy shared runtime profiles: "+err.Error())
+		slog.Warn("copy shared runtime profiles failed", append(logger.RequestAttrs(r), "error", err)...)
+		writeError(w, http.StatusInternalServerError, "failed to copy shared runtime profiles")
 		return
 	}
 
