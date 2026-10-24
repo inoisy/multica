@@ -41,7 +41,9 @@
    (`DeleteRuntimeUnavailableByReasonPrefix`, `DeleteRuntimeLocalRefusals` со свидетелями «выше лимита агентам» и
    «подписки среды отключены»). Запись может пережить сброс квоты: «квота сброшена, а среда ещё закрыта».
 4. **Два параметра на одно число.** Агенты останавливаются на `min(cap, 100 − reserve)` (`effectiveSubscriptionCaps`).
-   На 24.10 итог отличается от `caps` у одного из 10 аккаунтов: `codex-second` (caps 88/86, reserve 15 → 85/85).
+   Повторная проверка через `multica subscription list` 24.10 при продолжении STT-420: 10 аккаунтов, итог отличается
+   у двух: `codex-main` (caps 99/90, reserve 5 → 95/90) и `codex-second` (caps 88/86, reserve 15 → 85/85).
+   Это наблюдение, а не вход миграции: перед переносом снимается новый согласованный снимок БД.
 5. **Нет факта аккаунта.** Аккаунт выбирает демон (`prepareSubscriptionRun`), и только после `StartTask`. Сервер об
    этом выборе не узнаёт, `model_choice` его не содержит.
 
@@ -84,7 +86,7 @@ erDiagram
 
 ```sql
 CREATE TABLE IF NOT EXISTS subscription_pool (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
   name text NOT NULL CHECK (char_length(btrim(name)) BETWEEN 1 AND 100),
   runtime_type text NOT NULL CHECK (runtime_type IN ('claude', 'codex')),
   description text NOT NULL DEFAULT '',
@@ -109,7 +111,8 @@ CREATE TABLE IF NOT EXISTS subscription_pool_grant (
 ALTER TABLE runtime_profile ADD COLUMN IF NOT EXISTS pool_id uuid;
 ```
 
-Индексы — каждый своим файлом, `CONCURRENTLY`: `subscription_pool_member (pool_id, position)` unique,
+Индексы — каждый своим файлом, `CONCURRENTLY`: `subscription_pool (id)` unique,
+`subscription_pool_member (pool_id, position)` unique,
 `(pool_id, subscription_id)` unique, `(subscription_id)`; `subscription_pool_grant (pool_id, workspace_id)` unique,
 `(workspace_id)`; `runtime_profile (workspace_id, pool_id) WHERE pool_id IS NOT NULL` unique.
 
@@ -127,7 +130,10 @@ ALTER TABLE runtime_profile ADD COLUMN IF NOT EXISTS pool_id uuid;
   workspace (как `subscriptionReaderWorkspaces` сейчас).
 - **Демону** пул уходит в прежнем виде (`SubscriptionPoolPayload`: `profile_id`, `spend_order`, `subscriptions[]`
   с `effective_caps` и снимками) плюс `pool_id` и `revision`. Аккаунт с активным отказом провайдера (3.4) уходит с
-  `disabled_until` = концу отказа: старый и новый демон его пропускают (`subscriptions.Active`).
+  `disabled = true` и `disabled_until` = концу отказа: старый демон фильтрует именно `disabled` в
+  `subscriptions.Active`. Это проекция для запуска, не изменение настройки отключения аккаунта.
+- Состав, порядок и `revision` меняются одной транзакцией. Мутация передаёт ожидаемую ревизию; при конфликте — 409
+  и перечитывание. Изменение выдачи не переопределяет уже выданный запуск.
 
 ### 3.3. Профили моделей: общий и личный
 
@@ -157,6 +163,8 @@ CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS model_profile_owner_agent_uidx
 - Права: личный профиль правят те же, кто сейчас правит свою цепочку агента (владелец агента, admin/owner workspace),
   общие — admin/owner workspace.
 - Удаление агента удаляет его личный профиль и строки. При архивации профиль остаётся.
+- Удаление общего профиля обнуляет `based_on_profile_id` его личных производных, сохраняя их строки и назначение.
+  Это не перевод агента на общий профиль. Проверки удаления используемого общего профиля сохраняются.
 - Порядок источников списка не меняется: профиль шага маршрута → профиль задачи → профиль агента (общий или личный) →
   штатные поля. В `model_choice` для личного профиля `source = "agent_profile"` и новое поле `profile_personal: true`.
   Значение `agent_list` остаётся только в истории старых запусков.
@@ -205,16 +213,30 @@ ALTER TABLE runtime_unavailable ADD COLUMN IF NOT EXISTS subscription_id uuid; -
 
 ```sql
 ALTER TABLE agent_task_queue ADD COLUMN IF NOT EXISTS account_fact jsonb;
+ALTER TABLE agent_task_queue ADD COLUMN IF NOT EXISTS account_offer jsonb;
 ```
 
 `account_fact` = `{subscription_id, subscription_key, account_group, pool_id, pool_revision, daemon_id, confirmed_at}`.
+Отдельное nullable-поле `account_offer` в `agent_task_queue` хранит выданный сервером при claim снимок:
+`{offer_id, pool_id, pool_revision, subscriptions: [{subscription_id, subscription_key, account_group}]}`.
+`offer_id` — UUID назначения, создаётся сервером при claim, передаётся новому демону в пейлоаде и возвращается им
+при подтверждении; запоздавший запрос от предыдущего назначения не может подтвердить новое.
+В нём нет токенов и путей к файлам; публичные сведения о запуске отдают только подтверждённый `account_fact`.
 
 - Новый демон после `prepareSubscriptionRun` (аккаунт выбран, CLI ещё не запущен) вызывает
-  `POST /api/daemon/tasks/{taskId}/account` с `subscription_id`, `pool_id`, `pool_revision`.
+  `POST /api/daemon/tasks/{taskId}/account` с `offer_id`, `subscription_id`, `pool_id`, `pool_revision`.
 - Сервер проверяет: токен демона (`requireDaemonRuntimeAccess` к `task.runtime_id`), статус задачи `dispatched` или
-  `running`, аккаунт входит в пул среды задачи. Повтор с тем же аккаунтом отвечает 200, с другим — 409, первое значение
-  остаётся. Демон повторяет вызов по `postJSONWithRetry`. 404 от старого сервера демон пишет в журнал и продолжает
-  запуск.
+  `running`, `offer_id` совпадает, аккаунт и ревизия входят в сохранённый `account_offer` этого claim. Снимок
+  сохраняется атомарно с назначением задачи демону и формируется из тех же данных, что отправленный пейлоад. Ключ, группа, `daemon_id`
+  и время в факте берутся сервером из снимка и аутентифицированного назначения, не из запроса.
+  Проверять текущий состав пула вместо снимка нельзя: удаление аккаунта из пула между claim и подтверждением не
+  должно ломать уже выданный запуск или менять его историю. При повторной выдаче задачи старое предложение
+  заменяется, факт предыдущего выполнения не переносится в новый запуск.
+- Повтор с тем же аккаунтом, пулом и ревизией отвечает 200 даже после завершения задачи, если принадлежит тому же
+  назначению демона; это только чтение уже сохранённого факта. С другим — 409, первое значение остаётся. Первую
+  запись для завершённой задачи не принимаем. Конкурирующие подтверждения сериализуются в транзакции; один факт
+  не перезаписывает другой. Демон повторяет вызов по `postJSONWithRetry`. Только 404 от старого сервера позволяет
+  продолжить без подтверждения; прочие ошибки обрабатываются явно и не подменяются успешным подтверждением.
 - Старый демон этот вызов не делает: `account_fact` = NULL, интерфейс показывает «неизвестен». Прошлые запуски по
   нынешним настройкам не восстанавливаются.
 - Ран упал с квотой провайдера, и `account_fact` есть → строка `provider_limit` пишется с `subscription_id` этого аккаунта.
@@ -231,15 +253,15 @@ ALTER TABLE agent_task_queue ADD COLUMN IF NOT EXISTS account_fact jsonb;
 | 597 | `model_profile_personal` | колонки `owner_agent_id`, `based_on_profile_id` |
 | 598 | `model_profile_owner_agent_index` | unique index (3.3) |
 | 599 | `subscription_pool` | таблицы пула, `runtime_profile.pool_id` |
-| 600–605 | `subscription_pool_*_index` | индексы пула, по одному на файл |
-| 606 | `runtime_unavailable_reason_code` | колонки `reason_code`, `subscription_id` |
-| 607 | `agent_task_queue_account_fact` | колонка `account_fact` |
-| 608 | `migrate_personal_model_profiles` | перенос своих цепочек |
-| 609 | `migrate_subscription_pools` | перенос пулов |
-| 610 | `migrate_subscription_limit` | один лимит |
-| 611 | `migrate_runtime_unavailable_codes` | коды причин |
+| 600–606 | `subscription_pool_*_index` | индексы пула, включая уникальность id, по одному на файл |
+| 607 | `runtime_unavailable_reason_code` | колонки `reason_code`, `subscription_id` |
+| 608 | `agent_task_queue_account_fact` | nullable-колонки `account_fact`, `account_offer` |
+| 609 | `migrate_personal_model_profiles` | перенос своих цепочек |
+| 610 | `migrate_subscription_pools` | перенос пулов |
+| 611 | `migrate_subscription_limit` | один лимит |
+| 612 | `migrate_runtime_unavailable_codes` | коды причин |
 
-**608 — личные профили.** Для каждого агента (и архивного) со строками `agent_model_option` без личного профиля:
+**609 — личные профили.** Для каждого агента (и архивного) со строками `agent_model_option` без личного профиля:
 
 1. Создать `model_profile`: `workspace_id` агента, `owner_agent_id = agent.id`,
    `based_on_profile_id = agent.model_profile_id`, `when_exhausted_profile_id = NULL`, имя `<имя агента> · личный`.
@@ -251,11 +273,14 @@ ALTER TABLE agent_task_queue ADD COLUMN IF NOT EXISTS account_fact jsonb;
 
 `agent_model_option` не удаляется до этапа 4. Код с этой миграции её не читает и не пишет.
 
-**609 — пулы.** Группы — `runtime_profile` с непустым `subscriptions` или с `share_key`, ключ группы —
-`coalesce(share_key, id::text)`.
+**610 — пулы.** Группы — `runtime_profile` с непустым `subscriptions` или с непустым `share_key`. Ключ группы —
+`CASE WHEN nullif(share_key, '') IS NOT NULL THEN 'shared:' || share_key ELSE 'profile:' || id::text END`:
+пустой ключ не объединяет независимые среды, а строка shared-key не сталкивается с UUID одиночной среды.
 
-1. Если копии одного `share_key` расходятся в `subscriptions` или `spend_order`, миграция падает (`RAISE EXCEPTION`)
-   и печатает ключ. Чинится выравниванием копий через существующий API, затем миграцию запускают снова.
+1. Если копии одного `share_key` расходятся в `subscriptions`, `spend_order` или `protocol_family`, миграция падает
+   (`RAISE EXCEPTION`) и печатает ключ. Так же проверяются повторяющиеся аккаунты в списке и несколько копий
+   одной группы в одном workspace: их нельзя молча удалять ради unique-индексов. Чинится выравниванием через
+   существующий API, затем миграцию запускают снова. Проверка идёт до частичного переноса группы.
 2. На группу — один `subscription_pool`: имя и описание от самой ранней копии, `runtime_type` = `protocol_family`,
    `spend_order`, `all_workspaces = bool_or(all_workspaces)`, `legacy_share_key = share_key`, `created_by`.
 3. Участники — ключи `subscriptions` самой ранней копии, сопоставленные с `subscription.key`, позиции 1..n по порядку.
@@ -264,7 +289,7 @@ ALTER TABLE agent_task_queue ADD COLUMN IF NOT EXISTS account_fact jsonb;
 
 Для STT получится 7 пулов: 6 своих и «claude толя» со всеми workspace.
 
-**610 — один лимит.** Перед правкой сохранить `(id, caps, reserve)` в `subscription_limit_backup` для строк с
+**611 — один лимит.** Перед правкой сохранить `(id, caps, reserve)` в `subscription_limit_backup` для строк с
 `reserve <> 0`, затем:
 
 ```sql
@@ -278,9 +303,10 @@ UPDATE subscription s SET
 WHERE s.reserve <> 0;
 ```
 
-`effective_caps` до и после совпадает по построению. Тест: все 10 аккаунтов STT, `codex-second` → `{5h:85, week:85}`.
+`effective_caps` до и после совпадает по построению. Тесты по актуальному снимку всех аккаунтов STT;
+наблюдённые граничные примеры: `codex-main` → `{5h:95, week:90}`, `codex-second` → `{5h:85, week:85}`.
 
-**611 — коды причин.** По существующим строкам:
+**612 — коды причин.** По существующим строкам:
 
 | Условие | Код |
 | --- | --- |
@@ -310,20 +336,20 @@ WHERE s.reserve <> 0;
 
 Каждая миграция имеет `down`. Код после отката — предыдущий образ backend.
 
-- **608 down.** Для агентов с личным профилем: строки `agent_model_option` агента заменить строками его личного
+- **609 down.** Для агентов с личным профилем: строки `agent_model_option` агента заменить строками его личного
   профиля, чтобы правки после переноса не потерялись, и вернуть `agent.model_profile_id := based_on_profile_id`.
   Строки `agent_model_option` агентов без личного профиля удалить: это агенты, которых после переноса вернули на общий.
   Затем удалить личные профили и их строки.
-- **609 down.** Для сред с `pool_id`: `subscriptions` := ключи участников пула по позиции, `spend_order` пула,
+- **610 down.** Для сред с `pool_id`: `subscriptions` := ключи участников пула по позиции, `spend_order` пула,
   `share_key = legacy_share_key` (или NULL), `all_workspaces` пула. Если пул создан уже после переноса и выдан
   нескольким workspace, `share_key = 'pool-' || left(md5(pool.id::text), 16)`. Затем удалить данные пулов.
-- **610 down.** Вернуть `caps`, `reserve` из `subscription_limit_backup` там, где `caps` не правили после переноса.
+- **611 down.** Вернуть `caps`, `reserve` из `subscription_limit_backup` там, где `caps` не правили после переноса.
   Где правили, оставить текущие `caps` с `reserve = 0`.
-- **611 down** и DDL 597–607 down — удалить колонки и таблицы. Строки `pool_verdict` в таблице на этапе 2 ещё
+- **612 down** и DDL 597–608 down — удалить колонки и таблицы. Строки `pool_verdict` в таблице на этапе 2 ещё
   остаются, поэтому старый код после отката их видит. Через минуты `refreshSubscriptionAvailability` пишет их заново.
 
 Порядок выкатки: backend с миграциями → демон с фактом аккаунта → интерфейс. Перед выкаткой — `pg_dump` (как в
-`deploy-multica-v070.sh`). Откат: down 611…597 на копии, затем на проде, затем прежний образ.
+`deploy-multica-v070.sh`). Откат: down 612…597 на копии, затем на проде, затем прежний образ.
 
 ## 7. Этап 4: удаление старого
 
@@ -335,30 +361,45 @@ WHERE s.reserve <> 0;
 - `runtime_profile.subscriptions`, `share_key`, `all_workspaces`, `subscription_pool.legacy_share_key`;
 - строки `runtime_unavailable` с `reason_code IN ('pool_verdict')`, затем `reason_code` становится обязательным
   (`CHECK` по списку);
-- совместимые поля API из раздела 5 и ветки кода под них;
+- совместимые поля API из раздела 5 и ветки кода под них — только после отдельного решения о поддерживаемых версиях
+  desktop и CLI; обновление демонов само по себе не разрешает сломать установленный desktop;
 - индекс `592_runtime_profile_share_key_index`.
 
-Перед этим этапом `down` для 608–609 перестаёт быть возможным, о чём сказано в описании миграции.
+Перед этим этапом `down` для 609–610 перестаёт быть возможным, о чём сказано в описании миграции.
 
 ## 8. Приёмка
 
-1. **Прогноз до и после.** Команда `go run ./cmd/model-choice-compare` (новая) на копии прод-БД с
-   `DATABASE_URL`:
-   - `snapshot --now <время дампа> --out before.json` — для каждого не архивного агента и каждой открытой задачи с
-     агентом-исполнителем workspace STT вызывает `PreviewChoice` (с шагом маршрута — `previewChoice` с его
-     `conveyorRunModel`), фиксируя `now`. Время дампа берётся как `max(agent_runtime.last_seen_at)`, иначе все среды
-     окажутся офлайн. Перед снимком один раз вызывает `refreshSubscriptionAvailability`, чтобы старые вердикты были
-     актуальны.
-   - Миграции 597–611.
-   - `snapshot … --out after.json`, `diff before.json after.json`.
+1. **Прогноз до и после.** Новая команда `model-choice-compare` запускается только на изолированной копии прод-БД
+   с `DATABASE_URL`. До переключения чтения строится и сохраняется бинарь исходного алгоритма с экспортёром;
+   после — бинарь нового алгоритма. Сравнение не должно вызывать новый алгоритм дважды или восстанавливать
+   исходный прогноз из уже перенесённых данных.
+   - `snapshot --workspace STT --now <T> --out before.json` — для каждого агента (включая архивных, с пометкой)
+     и каждой открытой задачи с агентом-исполнителем вызывает `PreviewChoice`. Отдельно покрываются действующие
+     шаги Workflows и оставшихся старых маршрутов с их переопределениями профиля и семейства, немодельная приёмка.
+   - `T` сохраняется в манифесте согласованного дампа. Оба экспортёра читают один и тот же снимок данных и используют
+     `T` во всех временных условиях: SQL-предикатах отказов, свежести heartbeat и снимков, отключении и сбросе окон.
+     Одного аргумента `now` в `PreviewChoice` недостаточно: исходный `ListActiveRuntimeUnavailable` фильтрует
+     `until > now()` в PostgreSQL, `refreshSubscriptionAvailability` берёт `time.Now()`. Для воспроизводимого
+     экспортёра нужны параметризованное время SQL и часы зависимых вычислений; в обычном сервере это текущее время.
+   - Первый проход снимает фактический исходный прогноз без очистки отказов. Если известные старые ошибки
+     доступности требуют пересчёта, сохраняется отдельный снимок после пересчёта на `T` и явный список изменений
+     относительно исходного. Нельзя молча очистить старые строки и объявить поведение неизменным.
+   - Затем применяются миграции 597–612 и снимается `snapshot … --out after.json`. Команда
+     `model-choice-compare diff --before before.json --after after.json` завершается ненулевым кодом при любом
+     расхождении или пропавшем/добавленном контексте; сверяет manifest, набор и число агентов/задач/шагов.
 
-   Сравниваются `reason`, `position`, `chosen` (runtime, model, thinking, итоговые `custom_args`), `wait_until` и
-   строки (`runtime_id`, `model`, `thinking_level`, `state`, `until`). `source` `agent_list` ↔ `agent_profile` +
-   `profile_personal`, `profile_id` и `profile_name` личного профиля нормализуются. Итог — 0 расхождений, вывод —
-   в отчёт задачи.
-2. **Миграции вверх и вниз** на той же копии: `up` → `down` до 596 → `up`. Затем `pg_dump --schema-only` и данные
-   `agent_model_option`, `runtime_profile`, `subscription` до и после круга совпадают. Повторный `make sqlc` ничего
-   не меняет.
+   Сравниваются `reason`, `position`, `chosen` (runtime, model, thinking, итоговые `custom_args`), `wait_until`,
+   `excluded_family` и строки (`runtime_id`, `model`, `thinking_level`, `custom_args`, `state`, `until`, `chosen`).
+   Разрешена только адресная нормализация `agent_list` ↔ `agent_profile` + `profile_personal` и id/имён созданных
+   личных профилей. Общие профили и их fallback, различие NULL и пустых аргументов не маскируются. Итог — 0
+   расхождений на исходном снимке, вывод и manifest — в отчёт. Изменение поведения из-за исправления старого бага
+   выделяется отдельно на решение автора, а не скрывается нормализацией.
+2. **Миграции вверх и вниз** на той же копии: сохранить схему и бизнес-данные до переноса; `up` → `down` до 596;
+   сравнить восстановленную схему и данные с исходными; затем повторить `up`. Бизнес-сравнение покрывает строки
+   моделей, назначения, состав/порядок/выдачу пулов, поля запуска сред, caps/reserve и отказы. Исключаются только
+   технические id вновь созданных строк и явно перечисленные служебные timestamps; потерю ссылок или порядка
+   исключать нельзя. Отдельные сценарии — изменения личного профиля, состава пула и лимита после `up`, затем `down`:
+   откат сохраняет эти изменения в старом представлении по разделу 6. Повторный `make sqlc` ничего не меняет.
 3. `make test` с рабочей PostgreSQL (SKIP не считается), `pnpm typecheck`, `pnpm lint`, `pnpm test`.
 4. **Старый демон.** Бинарь демона с `sync/upstream-v0.7.0` (`00dd04146`) на новом сервере забирает и выполняет задачу
    на среде пула. `account_fact` = NULL, в интерфейсе «неизвестен».
@@ -402,3 +443,35 @@ WHERE s.reserve <> 0;
 | §4 п. 3 «У своего списка агента запасного профиля нет» | у личного профиля может быть, перенесённые — без |
 | §5 «Страница „Подписки“ … колонка „агенты“ из `agent_model_option`» | раздел 9 |
 | §7 «Перенос текущего состояния» в части своих цепочек | раздел 4 |
+
+## 11. Реализация и передача между этапами
+
+Спецификация ведётся в PR №48, ветка `t-12345-model-accounts`; реализация — зависимые ветки от её закреплённого
+коммита. Сквад «Разработка» ведёт
+одного исполнителя в этом репозитории за раз. Поздние этапы находятся в backlog; Техдиректор продвигает следующий
+только после проверки конкретного коммита предыдущего. Если этап крупнее одного рана, сквад дробит его дальше,
+сохраняя этот порядок и единый контракт. Согласие на продолжение не является согласием на слияние или выкатку.
+
+| Этап | Результат | Проверка перед передачей |
+| --- | --- | --- |
+| 1. Сервер и перенос | Миграции, личные профили, пулы/выдачи, единый лимит, вычисляемая доступность, API кодов причин и факта аккаунта; два экспортёра прогноза | `make test` с PostgreSQL без SKIP, `make sqlc` без повторного diff, round-trip и сравнение PreviewChoice на копии прод-БД, проверки прав |
+| 2. Демон и CLI | Подтверждение выбранного аккаунта с offer_id, совместимый старый пейлоад, команды пулов и личных профилей | `make test`, фикстуры обоих поколений, 404/409/повтор подтверждения, CLI/API smoke без реальных агентских CLI |
+| 3. Web и desktop | Все экраны прототипа из раздела 9, общие редакторы/мутации, zod и parseWithFallback, неизвестные enum с запасным значением | `pnpm typecheck`, `pnpm lint`, `pnpm test`, Playwright и скриншоты обеих тем при 1440/375 px |
+| 4. Сквозная приёмка | Стенд всей линии, воспроизводимые логи проверок и пакет для решения о выкатке | Весь раздел 8 на одном SHA; старый бинарь демона и новый сервер с подставным CLI, проверка отсутствия утечек workspace |
+| 5. Удаление старого | Отдельный PR с миграцией и обновлённым откатом по разделу 7 | Только после согласованной выкатки, срока наблюдения и решения о поддерживаемых версиях клиентов |
+
+Каждый этап сдаёт SHA, ветку, PR, использованный SHA предыдущего этапа и команды с результатами. Stacked PR
+направляется в ветку предыдущего этапа, первый — в `t-12345-model-accounts`. При интеграции база сохраняется
+`sync/upstream-v0.7.0`, пока автор явно не изменит её; ничего не переносится в `main` по догадке.
+Промежуточные PR не выкатываются. Полный запуск реальных агентских CLI не входит в разрешение на тестирование:
+старый демон проверяется с тестовым исполняемым файлом, без расходования аккаунтов.
+
+Стадия 1 сначала сохраняет экспортёр исходного алгоритма отдельным коммитом, затем переключает сервер.
+Отсутствие копии прод-БД — конкретный блокер критерия переноса, а не повод заменить его синтетическими фикстурами.
+Дамп, токены, пути к секретам и сырые строки приватных workspace не прикладываются к задаче; отчёт содержит
+манифест, количества контекстов и обезличенный diff.
+
+Пересечение с upstream: [PR multica-ai/multica №8931](https://github.com/multica-ai/multica/pull/8931) добавляет
+межпространственный запрет запуска агентов одного аккаунта. Его пул — группа агентов аккаунта, здесь пул —
+упорядоченный набор аккаунтов среды. Это не готовая замена STT-420. При будущей интеграции сверяются точки
+admission/claim/start и снятие отказов; сейчас не переносим второй реестр квот или его миграции автоматически.
