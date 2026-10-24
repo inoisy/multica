@@ -1525,6 +1525,7 @@
       "preview_brief": "预览智能体收到的说明",
       "preview_title": "「{{status}}」这一步的说明",
       "preview_description": "任务进入这一步时，处理人的运行会收到这段说明。预览不需要先保存。",
+      "preview_error": "无法加载说明。请检查这一步的处理人后重试。",
       "description_placeholder": "添加描述",
       "select_step": "选择一列，设置任务进入时交给谁。",
       "unsaved": "有未保存的修改",

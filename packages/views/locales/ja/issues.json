@@ -1525,6 +1525,7 @@
       "preview_brief": "エージェントが受け取る説明をプレビュー",
       "preview_title": "「{{status}}」ステップの説明",
       "preview_description": "タスクがこのステップに入ったとき、処理者の実行が受け取る内容です。プレビューに保存は不要です。",
+      "preview_error": "指示を読み込めませんでした。ステップの処理者を確認して、もう一度お試しください。",
       "description_placeholder": "説明を追加",
       "select_step": "列を選択して、課題の引き継ぎ先を設定します。",
       "unsaved": "未保存の変更があります",
