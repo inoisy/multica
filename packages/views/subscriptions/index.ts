@@ -1,1 +1,1 @@
-export { SubscriptionsPage } from "./subscriptions-page";
+export { SubscriptionsPage, SubscriptionsContent } from "./subscriptions-page";

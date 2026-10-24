@@ -74,7 +74,6 @@ import {
 } from "./mika-runtime-choice";
 import { Skeleton } from "@multica/ui/components/ui/skeleton";
 import { CollectionPageHeader } from "../../layout/collection-page";
-import { SectionTabs } from "../../layout/section-tabs";
 import { PAGE_GUTTER, PAGE_RAIL, PageHeader } from "../../layout/page-header";
 import { cn } from "@multica/ui/lib/utils";
 import {
@@ -123,7 +122,8 @@ const COMING_SOON_SERVICES = [
 // `hidden @2xl:flex` and drop out of subgrid placement. MUST stay a literal
 // string so Tailwind sees the arbitrary template.
 const GRID_COLS =
-  "grid-cols-[0.5rem_minmax(160px,1fr)_112px_5.5rem_0.5rem] " +
+  "grid-cols-[0.5rem_minmax(0,1fr)_96px_2rem_0.5rem] " +
+  "@sm:grid-cols-[0.5rem_minmax(160px,1fr)_112px_2rem_0.5rem] " +
   "@2xl:grid-cols-[0.5rem_minmax(120px,1fr)_128px_64px_112px_136px_5.5rem_0.5rem]";
 
 const OPTIONAL_CELL = "hidden @2xl:flex";
@@ -312,7 +312,6 @@ export function RuntimesPage({
         icon={Server}
         title={t(($) => $.page.title)}
         count={totalCount}
-        tabs={<SectionTabs section="runtimes" current="runtimes" count={totalCount} />}
         learnMore={{
           href: daemonRuntimesDocsHref(i18n.language),
           label: t(($) => $.page.learn_more),
@@ -497,9 +496,9 @@ function AddRuntimeMenu({
     <DropdownMenu>
       <DropdownMenuTrigger
         render={
-          <Button size="sm" className="gap-1">
+          <Button size="sm" className="gap-1" aria-label={t(($) => $.page.add)}>
             <Plus aria-hidden="true" className="size-3.5" />
-            {t(($) => $.page.add)}
+            <span className="hidden sm:inline">{t(($) => $.page.add)}</span>
             <ChevronDown aria-hidden="true" className="size-3.5 opacity-70" />
           </Button>
         }
@@ -636,7 +635,7 @@ function RuntimesToolbar({
     offline: t(($) => $.page.filters.offline),
   };
   return (
-    <div className="flex min-w-0 items-center gap-2">
+    <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
       <div className="relative min-w-0 flex-1 sm:flex-none">
         <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
         <Input
@@ -698,7 +697,7 @@ function ActionRow({
   return (
     <div
       role="row"
-      className="col-span-full flex min-h-14 items-center gap-3 border-b px-4 py-2.5"
+      className="col-span-full flex min-h-14 flex-wrap items-center gap-3 border-b px-4 py-2.5 sm:flex-nowrap"
     >
       <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-dashed text-muted-foreground">
         <Icon aria-hidden="true" className="size-4" />
@@ -709,7 +708,7 @@ function ActionRow({
           {description}
         </span>
       </span>
-      <span className="shrink-0">{action}</span>
+      <span className="w-full shrink-0 pl-11 sm:w-auto sm:pl-0">{action}</span>
     </div>
   );
 }
@@ -914,9 +913,9 @@ function MachineRow({
             <HealthIcon health={machine.health} />
             <span className={cn("truncate", !online && "text-muted-foreground")}>
               {healthLabel(machine.health)}
-              {!online && machine.lastSeenAt
-                ? ` · ${timeAgo(machine.lastSeenAt)}`
-                : ""}
+              {!online && machine.lastSeenAt ? (
+                <span className="hidden @sm:inline">{` · ${timeAgo(machine.lastSeenAt)}`}</span>
+              ) : null}
             </span>
           </>
         )}
