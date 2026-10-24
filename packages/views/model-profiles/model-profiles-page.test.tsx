@@ -31,13 +31,10 @@ vi.mock("@multica/core/workspace/queries", async (importOriginal) => ({
   memberListOptions: () => ({ queryKey: ["members"], queryFn: () => Promise.resolve([]) }),
   agentListOptions: () => ({ queryKey: ["agents"], queryFn: () => Promise.resolve([{ id: "a1", name: "Dev" }]) }),
 }));
-vi.mock("@multica/core/paths", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@multica/core/paths")>()),
-  useWorkspacePaths: () => ({
-    agentDetail: (id: string) => `/acme/agents/${id}`,
-    issueDetail: (id: string) => `/acme/issues/${id}`,
-  }),
-}));
+vi.mock("@multica/core/paths", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@multica/core/paths")>();
+  return { ...actual, useWorkspacePaths: () => actual.paths.workspace("acme") };
+});
 vi.mock("./model-rows-editor", () => ({
   ModelRowsEditor: ({ rows, onChange }: { rows: unknown[]; onChange: (rows: unknown[]) => void }) => (
     <button type="button" onClick={() => onChange([...rows].reverse())}>

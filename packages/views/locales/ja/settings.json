@@ -411,7 +411,8 @@
       "code": "コード",
       "channels": "メッセージング",
       "apps": "接続済みアプリ",
-      "workflows": "ワークフロー"
+      "workflows": "ワークフロー",
+      "pages": "ページ"
     },
     "groups": {
       "personal": "個人",

@@ -17,10 +17,10 @@ const apiMock = vi.hoisted(() => ({
 }));
 vi.mock("@multica/core/api", () => ({ api: apiMock }));
 vi.mock("@multica/core/hooks", () => ({ useWorkspaceId: () => "ws-1" }));
-vi.mock("@multica/core/paths", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@multica/core/paths")>()),
-  useWorkspacePaths: () => ({ issueDetail: (id: string) => `/acme/issues/${id}` }),
-}));
+vi.mock("@multica/core/paths", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@multica/core/paths")>();
+  return { ...actual, useWorkspacePaths: () => actual.paths.workspace("acme") };
+});
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 import { buildStages, cardState, ConveyorPage, parseRef } from "./conveyor-page";

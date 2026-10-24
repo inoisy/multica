@@ -413,7 +413,8 @@
       "code": "Code",
       "channels": "Messaging",
       "apps": "Connected apps",
-      "workflows": "Workflows"
+      "workflows": "Workflows",
+      "pages": "Pages"
     },
     "groups": {
       "personal": "Personal",

@@ -29,6 +29,14 @@ vi.mock("@multica/core/api", () => ({
   ApiError: class ApiError extends Error {},
 }));
 vi.mock("@multica/core/hooks", () => ({ useWorkspaceId: () => "ws-1" }));
+vi.mock("../navigation", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../navigation")>()),
+  AppLink: ({ href, children, ...props }: { href: string; children?: React.ReactNode }) => <a href={href} {...props}>{children}</a>,
+}));
+vi.mock("@multica/core/paths", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@multica/core/paths")>();
+  return { ...actual, useWorkspacePaths: () => actual.paths.workspace("acme") };
+});
 
 import { SubscriptionsPage } from "./subscriptions-page";
 

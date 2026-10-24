@@ -12,10 +12,10 @@
     "runtimes": "Runtimes",
     "skills": "Skills",
     "settings": "Paramètres",
-    "conveyor": "Conveyor",
+    "conveyor": "Épopées",
     "subscriptions": "Subscriptions",
     "pages": "Pages",
-    "model_profiles": "Profiles"
+    "model_profiles": "Profils de modèles"
   },
   "tab": {
     "issue": "Tâche",
@@ -103,5 +103,13 @@
     "opens_in_tab": "This page opens in a new tab.",
     "open_named": "Open “{{title}}”",
     "add_page": "Add page"
+  },
+  "section_tabs": {
+    "issues": "Tâches",
+    "conveyor": "Épopées",
+    "agents": "Agents",
+    "modelProfiles": "Profils de modèles",
+    "runtimes": "Runtimes",
+    "subscriptions": "Abonnements"
   }
 }

@@ -1208,7 +1208,7 @@
     "preview_waits": "ждёт"
   },
   "conveyor": {
-    "title": "Конвейер",
+    "title": "Эпики",
     "refresh": "Обновить",
     "done": "Готово",
     "ref_placeholder": "Номер эпика или ссылка Multica, например STT-239",

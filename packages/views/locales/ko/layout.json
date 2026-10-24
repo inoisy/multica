@@ -12,10 +12,10 @@
     "runtimes": "런타임",
     "skills": "스킬",
     "settings": "설정",
-    "conveyor": "Conveyor",
+    "conveyor": "에픽",
     "subscriptions": "Subscriptions",
     "pages": "Pages",
-    "model_profiles": "Profiles"
+    "model_profiles": "모델 프로필"
   },
   "tab": {
     "issue": "태스크",
@@ -103,5 +103,13 @@
     "opens_in_tab": "This page opens in a new tab.",
     "open_named": "Open “{{title}}”",
     "add_page": "Add page"
+  },
+  "section_tabs": {
+    "issues": "태스크",
+    "conveyor": "에픽",
+    "agents": "에이전트",
+    "modelProfiles": "모델 프로필",
+    "runtimes": "런타임",
+    "subscriptions": "구독"
   }
 }

@@ -36,6 +36,7 @@ import {
 import { Input } from "@multica/ui/components/ui/input";
 import { cn } from "@multica/ui/lib/utils";
 import { CollectionPageHeader } from "../layout/collection-page";
+import { SectionTabs } from "../layout/section-tabs";
 import { PAGE_GUTTER } from "../layout/page-header";
 import { useT } from "../i18n";
 import { AddSubscriptionDialog } from "./add-subscription-dialog";
@@ -391,6 +392,7 @@ export function SubscriptionsPage() {
       <CollectionPageHeader
         icon={Gauge}
         title={t(($) => $.subscriptions.title)}
+        tabs={<SectionTabs section="runtimes" current="subscriptions" />}
         description={t(($) => $.subscriptions.description)}
         actions={
           <div className="flex items-center gap-1">

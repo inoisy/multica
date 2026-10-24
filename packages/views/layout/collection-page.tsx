@@ -25,6 +25,8 @@ interface CollectionPageHeaderProps {
   };
   actions?: ReactNode;
   className?: string;
+  /** Section switcher shown in place of the icon, title and count. */
+  tabs?: ReactNode;
 }
 
 /**
@@ -39,20 +41,25 @@ export function CollectionPageHeader({
   learnMore,
   actions,
   className,
+  tabs,
 }: CollectionPageHeaderProps) {
   return (
     <PageHeader className={className}>
       <div className="flex min-w-0 flex-1 items-center gap-2">
-        <Icon
-          aria-hidden="true"
-          className="size-4 shrink-0 text-muted-foreground"
-        />
-        <h1 className="truncate text-body font-medium">{title}</h1>
-        {typeof count === "number" && count > 0 ? (
-          <span className="shrink-0 font-mono text-caption tabular-nums text-muted-foreground">
-            {count}
-          </span>
-        ) : null}
+        {tabs ?? (
+          <>
+            <Icon
+              aria-hidden="true"
+              className="size-4 shrink-0 text-muted-foreground"
+            />
+            <h1 className="truncate text-body font-medium">{title}</h1>
+            {typeof count === "number" && count > 0 ? (
+              <span className="shrink-0 font-mono text-caption tabular-nums text-muted-foreground">
+                {count}
+              </span>
+            ) : null}
+          </>
+        )}
         {description || learnMore ? (
           <p className="ml-2 hidden min-w-0 truncate text-caption text-muted-foreground md:block">
             {description}

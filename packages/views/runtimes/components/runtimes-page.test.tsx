@@ -26,12 +26,13 @@ vi.mock("@multica/core/auth", () => ({
   useAuthStore: (select: (state: unknown) => unknown) =>
     select({ isLoading: false, user: { id: "user-1" } }),
 }));
-vi.mock("@multica/core/paths", () => ({
-  useWorkspacePaths: () => ({
-    runtimeDetail: (id: string) => `/runtimes/${id}`,
-  }),
-  useRequiredWorkspaceSlug: () => "workspace-test",
-}));
+vi.mock("@multica/core/paths", async () => {
+  const actual = await vi.importActual<typeof import("@multica/core/paths")>("@multica/core/paths");
+  return {
+    useWorkspacePaths: () => ({ ...actual.paths.workspace("workspace-test"), runtimeDetail: (id: string) => `/runtimes/${id}` }),
+    useRequiredWorkspaceSlug: () => "workspace-test",
+  };
+});
 vi.mock("@multica/core/realtime", () => ({ useWSEvent: () => {} }));
 vi.mock("@multica/core/onboarding", () => ({
   memberNeedsMikaSetup: () => false,
