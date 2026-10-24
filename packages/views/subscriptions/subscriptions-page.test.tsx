@@ -38,7 +38,8 @@ vi.mock("@multica/core/paths", async (importOriginal) => {
   return { ...actual, useWorkspacePaths: () => actual.paths.workspace("acme") };
 });
 
-import { SubscriptionsPage } from "./subscriptions-page";
+import { NavigationProvider } from "../navigation";
+import { SubscriptionsContent, SubscriptionsPage } from "./subscriptions-page";
 
 function sub(key: string, extra: Partial<Subscription> = {}): Subscription {
   return {
@@ -84,7 +85,7 @@ function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return renderWithI18n(
     <QueryClientProvider client={client}>
-      <SubscriptionsPage />
+      <SubscriptionsContent />
     </QueryClientProvider>,
   );
 }
@@ -100,6 +101,20 @@ describe("SubscriptionsPage", () => {
     api.updateRuntimeProfileSubscriptions.mockResolvedValue({});
   });
   afterEach(() => vi.restoreAllMocks());
+
+  it("redirects the old subscriptions page to the Analytics tab", async () => {
+    const replace = vi.fn();
+    renderWithI18n(
+      <NavigationProvider value={{
+        pathname: "/acme/subscriptions", searchParams: new URLSearchParams(), hash: "",
+        push: vi.fn(), replace, back: vi.fn(), getShareableUrl: (path) => path,
+      }}>
+        <SubscriptionsPage />
+      </NavigationProvider>,
+    );
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/acme/usage?tab=subscriptions"));
+    expect(api.listSubscriptions).not.toHaveBeenCalled();
+  });
 
   it("shows one card per account with load, agents' limits and who spends it", async () => {
     renderPage();

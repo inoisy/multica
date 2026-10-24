@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, Gauge, MoreHorizontal, Plus, RefreshCw } from "lucide-react";
+import { AlertTriangle, MoreHorizontal, Plus, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { useWorkspaceId } from "@multica/core/hooks";
+import { useWorkspacePaths } from "@multica/core/paths";
 import { runtimeProfileListOptions } from "@multica/core/runtimes";
 import {
   groupByAccount,
@@ -34,10 +35,9 @@ import {
   DropdownMenuTrigger,
 } from "@multica/ui/components/ui/dropdown-menu";
 import { Input } from "@multica/ui/components/ui/input";
+import { Skeleton } from "@multica/ui/components/ui/skeleton";
 import { cn } from "@multica/ui/lib/utils";
-import { CollectionPageHeader } from "../layout/collection-page";
-import { SectionTabs } from "../layout/section-tabs";
-import { PAGE_GUTTER } from "../layout/page-header";
+import { useNavigation } from "../navigation";
 import { useT } from "../i18n";
 import { AddSubscriptionDialog } from "./add-subscription-dialog";
 import { Discrepancies } from "./discrepancies";
@@ -98,6 +98,15 @@ function accountBlocked(account: SubscriptionAccount): boolean {
  * instance admin (`can_manage`) changes anything.
  */
 export function SubscriptionsPage() {
+  const navigation = useNavigation();
+  const paths = useWorkspacePaths();
+  const target = `${paths.usage()}?tab=subscriptions`;
+  const { replace } = navigation;
+  useEffect(() => replace(target), [replace, target]);
+  return null;
+}
+
+export function SubscriptionsContent() {
   const { t } = useT("agents");
   const wsId = useWorkspaceId();
   const listQuery = useQuery(subscriptionListOptions());
@@ -388,140 +397,130 @@ export function SubscriptionsPage() {
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <CollectionPageHeader
-        icon={Gauge}
-        title={t(($) => $.subscriptions.title)}
-        tabs={<SectionTabs section="runtimes" current="subscriptions" />}
-        description={t(($) => $.subscriptions.description)}
-        actions={
-          <div className="flex items-center gap-1">
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label={t(($) => $.subscriptions.refresh)}
-              title={t(($) => $.subscriptions.refresh)}
-              onClick={refresh}
-            >
-              <RefreshCw className={fetching ? "animate-spin" : undefined} />
+    <div className="min-w-0 space-y-6">
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label={t(($) => $.subscriptions.refresh)}
+          title={t(($) => $.subscriptions.refresh)}
+          onClick={refresh}
+          disabled={fetching}
+        >
+          <RefreshCw className={fetching ? "animate-spin" : undefined} />
+        </Button>
+        {canManage ? (
+          <>
+            <Button size="sm" variant="outline" onClick={() => setCreatingPool(true)}>
+              <Plus />
+              {t(($) => $.subscriptions.new_pool.open)}
             </Button>
-            {canManage ? (
-              <>
-                <Button size="sm" variant="outline" onClick={() => setCreatingPool(true)}>
-                  <Plus />
-                  {t(($) => $.subscriptions.new_pool.open)}
-                </Button>
-                <Button size="sm" onClick={() => setAdding(true)}>
-                  <Plus />
-                  {t(($) => $.subscriptions.add.open)}
-                </Button>
-              </>
-            ) : null}
-          </div>
-        }
-      />
-
-      <div className={cn("min-h-0 flex-1 overflow-y-auto py-4", PAGE_GUTTER)}>
-        <div className="space-y-6">
-          {loadError ? (
-            <p role="alert" className="rounded-md border border-destructive/40 px-3 py-2 text-caption text-destructive">
-              {loadError}
-            </p>
-          ) : null}
-          {limited.length ? (
-            <p
-              role="status"
-              className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-caption"
-            >
-              <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" aria-hidden="true" />
-              <span>
-                {t(($) => $.subscriptions.limited_banner, {
-                  titles: limited.map((account) => account.subscriptions.map((s) => s.title).join(", ")).join(", "),
-                })}
-              </span>
-            </p>
-          ) : null}
-          {listQuery.data && !canManage ? (
-            <p className="text-caption text-muted-foreground">{t(($) => $.subscriptions.readonly)}</p>
-          ) : null}
-
-          <Discrepancies
-            items={discrepanciesQuery.data ?? []}
-            wsId={wsId}
-            profiles={profiles}
-            subscriptions={subscriptions}
-            onOpenPool={setPoolId}
-          />
-
-          {GROUPS.map((group) => {
-            const groupAccounts = accounts.filter((account) => groupOf(account.subscriptions[0]!) === group);
-            if (!groupAccounts.length) return null;
-            return (
-              <section key={group} className="space-y-3" aria-labelledby={`subscriptions-${group}`}>
-                <h2 id={`subscriptions-${group}`} className="text-body font-medium">
-                  {t(($) => $.subscriptions.groups[group])}
-                </h2>
-                <div className="grid gap-3 lg:grid-cols-2">
-                  {groupAccounts.map((account) => {
-                    const titles = [...new Set(account.subscriptions.map((s) => s.title))];
-                    const shared = account.subscriptions.length > 1;
-                    return (
-                      <article key={account.id} className="flex flex-col gap-3 rounded-lg border p-4">
-                        <h3 className="text-body font-medium">{titles.join(" · ")}</h3>
-                        {renderUsage(account)}
-                        {account.subscriptions.map((sub) => renderSubscription(sub, shared))}
-                      </article>
-                    );
-                  })}
-                </div>
-              </section>
-            );
-          })}
-
-          {listQuery.data && !subscriptions.length ? (
-            <p className="text-caption text-muted-foreground">{t(($) => $.subscriptions.empty)}</p>
-          ) : null}
-
-          <section className="space-y-3" aria-labelledby="subscriptions-pools">
-            <h2 id="subscriptions-pools" className="text-body font-medium">
-              {t(($) => $.subscriptions.pools_title)}
-            </h2>
-            {pools.length ? (
-              <ul className="grid gap-2 lg:grid-cols-2">
-                {pools.map((pool: RuntimeProfile) => (
-                  <li key={pool.id}>
-                    <Button variant="outline"
-                      type="button"
-                      className="h-auto w-full items-start whitespace-normal flex-col gap-1 rounded-lg border px-4 py-3 text-left hover:bg-muted/50"
-                      onClick={() => setPoolId(pool.id)}
-                    >
-                      <span className="flex flex-wrap items-center gap-1.5">
-                        <span className="text-body font-medium">{pool.display_name}</span>
-                        {pool.all_workspaces ? (
-                          <Badge variant="outline">{t(($) => $.subscriptions.pool.all_workspaces)}</Badge>
-                        ) : null}
-                        {!pool.enabled ? <Badge variant="destructive">{t(($) => $.subscriptions.pool.off)}</Badge> : null}
-                      </span>
-                      <span className="truncate text-caption text-muted-foreground">
-                        {pool.subscriptions?.length
-                          ? pool.subscriptions.map(titleOf).join(" → ")
-                          : t(($) => $.subscriptions.pool.empty_short)}
-                        {" · "}
-                        {pool.spend_order === "balanced"
-                          ? t(($) => $.subscriptions.order.balanced)
-                          : t(($) => $.subscriptions.order.first)}
-                      </span>
-                    </Button>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-caption text-muted-foreground">{t(($) => $.subscriptions.pools_empty)}</p>
-            )}
-          </section>
-        </div>
+            <Button size="sm" onClick={() => setAdding(true)}>
+              <Plus />
+              {t(($) => $.subscriptions.add.open)}
+            </Button>
+          </>
+        ) : null}
       </div>
+      <div className="space-y-6">
+        {listQuery.isLoading ? <Skeleton className="h-48 rounded-lg" /> : null}
+        {loadError ? (
+          <p role="alert" className="rounded-md border border-destructive/40 px-3 py-2 text-caption text-destructive">
+            {loadError}
+          </p>
+        ) : null}
+        {limited.length ? (
+          <p
+            role="status"
+            className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-caption"
+          >
+            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" aria-hidden="true" />
+            <span>
+              {t(($) => $.subscriptions.limited_banner, {
+                titles: limited.map((account) => account.subscriptions.map((s) => s.title).join(", ")).join(", "),
+              })}
+            </span>
+          </p>
+        ) : null}
+        {listQuery.data && !canManage ? (
+          <p className="text-caption text-muted-foreground">{t(($) => $.subscriptions.readonly)}</p>
+        ) : null}
 
+        <Discrepancies
+          items={discrepanciesQuery.data ?? []}
+          wsId={wsId}
+          profiles={profiles}
+          subscriptions={subscriptions}
+          onOpenPool={setPoolId}
+        />
+
+        {GROUPS.map((group) => {
+          const groupAccounts = accounts.filter((account) => groupOf(account.subscriptions[0]!) === group);
+          if (!groupAccounts.length) return null;
+          return (
+            <section key={group} className="space-y-3" aria-labelledby={`subscriptions-${group}`}>
+              <h2 id={`subscriptions-${group}`} className="text-body font-medium">
+                {t(($) => $.subscriptions.groups[group])}
+              </h2>
+              <div className="grid gap-3 lg:grid-cols-2">
+                {groupAccounts.map((account) => {
+                  const titles = [...new Set(account.subscriptions.map((s) => s.title))];
+                  const shared = account.subscriptions.length > 1;
+                  return (
+                    <article key={account.id} className="flex min-w-0 flex-col gap-3 break-words rounded-lg border p-4">
+                      <h3 className="text-body font-medium">{titles.join(" · ")}</h3>
+                      {renderUsage(account)}
+                      {account.subscriptions.map((sub) => renderSubscription(sub, shared))}
+                    </article>
+                  );
+                })}
+              </div>
+            </section>
+          );
+        })}
+
+        {listQuery.data && !subscriptions.length ? (
+          <p className="text-caption text-muted-foreground">{t(($) => $.subscriptions.empty)}</p>
+        ) : null}
+
+        <section className="space-y-3" aria-labelledby="subscriptions-pools">
+          <h2 id="subscriptions-pools" className="text-body font-medium">
+            {t(($) => $.subscriptions.pools_title)}
+          </h2>
+          {pools.length ? (
+            <ul className="grid gap-2 lg:grid-cols-2">
+              {pools.map((pool: RuntimeProfile) => (
+                <li key={pool.id} className="min-w-0">
+                  <Button variant="outline"
+                    type="button"
+                    className="h-auto w-full items-start whitespace-normal flex-col gap-1 rounded-lg border px-4 py-3 text-left hover:bg-muted/50"
+                    onClick={() => setPoolId(pool.id)}
+                  >
+                    <span className="flex flex-wrap items-center gap-1.5">
+                      <span className="text-body font-medium">{pool.display_name}</span>
+                      {pool.all_workspaces ? (
+                        <Badge variant="outline">{t(($) => $.subscriptions.pool.all_workspaces)}</Badge>
+                      ) : null}
+                      {!pool.enabled ? <Badge variant="destructive">{t(($) => $.subscriptions.pool.off)}</Badge> : null}
+                    </span>
+                    <span className="max-w-full truncate text-caption text-muted-foreground">
+                      {pool.subscriptions?.length
+                        ? pool.subscriptions.map(titleOf).join(" → ")
+                        : t(($) => $.subscriptions.pool.empty_short)}
+                      {" · "}
+                      {pool.spend_order === "balanced"
+                        ? t(($) => $.subscriptions.order.balanced)
+                        : t(($) => $.subscriptions.order.first)}
+                    </span>
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-caption text-muted-foreground">{t(($) => $.subscriptions.pools_empty)}</p>
+          )}
+        </section>
+      </div>
       {canManage ? (
         <>
           <AddSubscriptionDialog
