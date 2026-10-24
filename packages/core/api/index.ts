@@ -14,7 +14,7 @@ export type {
 } from "./client";
 export { parseWithFallback, setSchemaLogger } from "./schema";
 export type { ParseOptions } from "./schema";
-export { DuplicateIssueErrorBodySchema } from "./schemas";
+export { CustomPagesStateSchema, DuplicateIssueErrorBodySchema } from "./schemas";
 export type { DuplicateIssueErrorBody } from "./schemas";
 export { WSClient } from "./ws-client";
 

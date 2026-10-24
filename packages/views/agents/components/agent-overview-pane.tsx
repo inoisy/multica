@@ -35,6 +35,7 @@ import { IntegrationsTab } from "./tabs/integrations-tab";
 import { QoderAgentTab } from "./tabs/qoder-agent-tab";
 import { RuntimeConfigTab } from "./tabs/runtime-config-tab";
 import { AgentDetailInspector } from "./agent-detail-inspector";
+import { AgentModels } from "./agent-models";
 import { AgentAccessSettings } from "./agent-access-settings";
 import { AgentOverviewSummary } from "./agent-overview-summary";
 import { ActorIssuesPanel } from "../../common/actor-issues-panel";
@@ -498,15 +499,23 @@ export function AgentOverviewPane({
                     <IntegrationsTab agent={agent} />
                   )}
                   {effectiveView === "general" && (
-                    <AgentDetailInspector
-                      agent={agent}
-                      runtime={runtime}
-                      runtimes={runtimes}
-                      members={members}
-                      currentUserId={currentUserId ?? null}
-                      canEdit={canEdit}
-                      onUpdate={onUpdate}
-                    />
+                    <div className="space-y-8">
+                      <AgentDetailInspector
+                        agent={agent}
+                        runtime={runtime}
+                        runtimes={runtimes}
+                        members={members}
+                        currentUserId={currentUserId ?? null}
+                        canEdit={canEdit}
+                        onUpdate={onUpdate}
+                      />
+                      <AgentModels
+                        agent={agent}
+                        runtimes={runtimes}
+                        members={members}
+                        currentUserId={currentUserId ?? null}
+                      />
+                    </div>
                   )}
                   {effectiveView === "access" && (
                     <AgentAccessSettings

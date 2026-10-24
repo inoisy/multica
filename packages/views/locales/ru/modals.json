@@ -104,7 +104,9 @@
     "submitting": "Создание...",
     "toast_created": "Команда создана",
     "toast_failed": "Не удалось создать команду",
-    "toast_member_add_failed": "Не удалось добавить {{name}}: {{error}}"
+    "toast_member_add_failed": "Не удалось добавить {{name}}: {{error}}",
+    "members_selected_count_few": "Выбрано {{count}}",
+    "members_selected_count_many": "Выбрано {{count}}"
   },
   "create_project": {
     "title": "Новый проект",
@@ -150,7 +152,9 @@
     "local_pick_failed": "Не удалось открыть диалог выбора директории.",
     "local_invalid_dir": "Эта директория не может быть использована. Выберите другую.",
     "local_hint": "Агенты на других устройствах не увидят этот путь — они не смогут запуститься. Используйте репозитории для совместной работы.",
-    "repos_ref_default": "Ветка по умолчанию"
+    "repos_ref_default": "Ветка по умолчанию",
+    "repos_pill_count_few": "{{count}} репозитория",
+    "repos_pill_count_many": "{{count}} репозиториев"
   },
   "create_issue": {
     "sr_manual": "Новая задача",

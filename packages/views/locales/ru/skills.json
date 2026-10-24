@@ -102,7 +102,21 @@
     "add_confirm": "Добавить ({{num}})",
     "adding": "Добавление...",
     "added_multi_toast_one": "Добавлено {{count}} агенту",
-    "added_multi_toast_other": "Добавлено агентам: {{count}}"
+    "added_multi_toast_other": "Добавлено агентам: {{count}}",
+    "delete_dialog_title_few": "Удалить {{count}} навыка?",
+    "delete_dialog_title_many": "Удалить {{count}} навыков?",
+    "delete_dialog_desc_few": "Выбранные навыки ({{count}}) будут безвозвратно удалены и сняты со всех агентов.",
+    "delete_dialog_desc_many": "Выбранные навыки ({{count}}) будут безвозвратно удалены и сняты со всех агентов.",
+    "deleted_toast_few": "Удалено навыков: {{count}}",
+    "deleted_toast_many": "Удалено навыков: {{count}}",
+    "update_summary_selected_few": "Навыков будет обновлено из источников: {{count}}",
+    "update_summary_selected_many": "Навыков будет обновлено из источников: {{count}}",
+    "update_summary_skipped_few": "Нельзя обновить из источника — пропущено: {{count}}",
+    "update_summary_skipped_many": "Нельзя обновить из источника — пропущено: {{count}}",
+    "updated_toast_few": "Обновлено навыков из источника: {{count}}",
+    "updated_toast_many": "Обновлено навыков из источника: {{count}}",
+    "added_multi_toast_few": "Добавлено агентам: {{count}}",
+    "added_multi_toast_many": "Добавлено агентам: {{count}}"
   },
   "toolbar": {
     "result_count_title": "Найдено навыков / всего навыков",
@@ -121,7 +135,9 @@
     "direction_desc": "По убыванию",
     "section_columns": "Столбцы",
     "manage_labels": "Управлять метками...",
-    "manage_labels_title": "Метки навыков"
+    "manage_labels_title": "Метки навыков",
+    "filter_active_count_few": "Фильтров: {{count}}",
+    "filter_active_count_many": "Фильтров: {{count}}"
   },
   "detail": {
     "all_skills": "Все навыки",
@@ -151,7 +167,9 @@
       "changed_files_other": "Файлов: {{count}}",
       "discard": "Отменить",
       "save": "Сохранить изменения",
-      "saving": "Сохранение…"
+      "saving": "Сохранение…",
+      "changed_files_few": "Файлов: {{count}}",
+      "changed_files_many": "Файлов: {{count}}"
     },
     "not_found": {
       "title": "Навык не найден",
@@ -187,7 +205,9 @@
       "warning": "Это действие нельзя отменить.",
       "cancel": "Отмена",
       "confirm": "Удалить навсегда",
-      "deleting": "Удаление…"
+      "deleting": "Удаление…",
+      "description_with_agents_few": "«{{name}}» будет безвозвратно удалён и снят с агентов, которые сейчас его используют ({{count}}).",
+      "description_with_agents_many": "«{{name}}» будет безвозвратно удалён и снят с агентов, которые сейчас его используют ({{count}})."
     },
     "add_file": {
       "placeholder": "templates/review.md",
@@ -209,13 +229,19 @@
       "used_by_one": "{{count}} агент",
       "used_by_other": "Агентов: {{count}}",
       "updated": "Обновлён {{when}}",
-      "updated_by": "Обновлён {{when}} — {{name}}"
+      "updated_by": "Обновлён {{when}} — {{name}}",
+      "files_few": "Файлов: {{count}}",
+      "files_many": "Файлов: {{count}}",
+      "used_by_few": "Агентов: {{count}}",
+      "used_by_many": "Агентов: {{count}}"
     },
     "tabs": {
       "aria": "Разделы навыка",
       "overview": "Обзор",
       "files_one": "Файлы {{count}}",
-      "files_other": "Файлы {{count}}"
+      "files_other": "Файлы {{count}}",
+      "files_few": "Файлы {{count}}",
+      "files_many": "Файлы {{count}}"
     },
     "overview": {
       "properties": "Свойства",
@@ -231,7 +257,9 @@
       "permissions_locked_creator": "Редактировать этот навык может только создатель ({{name}}) или администратор рабочего пространства.",
       "permissions_locked": "Редактировать этот навык может только создатель или администратор рабочего пространства.",
       "properties_help": "О свойствах навыка",
-      "character_count": "Символов: {{count}}"
+      "character_count": "Символов: {{count}}",
+      "used_by_few": "Используется агентами: {{count}}",
+      "used_by_many": "Используется агентами: {{count}}"
     },
     "files": {
       "list_aria": "Файлы навыка",
@@ -243,7 +271,9 @@
       "mode_aria": "Режим просмотра файла",
       "mode_preview": "Просмотр",
       "mode_edit": "Редактирование",
-      "mode_raw": "Обычный текст"
+      "mode_raw": "Обычный текст",
+      "supporting_few": "Дополнительные {{count}}",
+      "supporting_many": "Дополнительные {{count}}"
     }
   },
   "create": {
@@ -302,7 +332,9 @@
       "cancel": "Отмена",
       "import": "Импортировать",
       "importing": "Импорт…",
-      "toast_imported": "Навык импортирован"
+      "toast_imported": "Навык импортирован",
+      "files_few": "Файлов: {{count}}",
+      "files_many": "Файлов: {{count}}"
     },
     "url": {
       "url_label": "URL навыка",
@@ -371,7 +403,9 @@
     "conflict_footer": "Ожидают решения конфликтов: {{count}}.",
     "conflict_apply_button": "Применить решения",
     "conflict_missing_resolution": "Выберите способ разрешения этого конфликта.",
-    "conflict_name_still_exists": "Такое название уже существует. Выберите другое название или пропустите."
+    "conflict_name_still_exists": "Такое название уже существует. Выберите другое название или пропустите.",
+    "skill_files_few": "Файлов: {{count}}",
+    "skill_files_many": "Файлов: {{count}}"
   },
   "file_tree": {
     "no_files": "Нет файлов",

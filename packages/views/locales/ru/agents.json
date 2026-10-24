@@ -36,7 +36,9 @@
   "presence_status_aria": "Статус: {{status}}",
   "avatar_stack": {
     "overflow_aria_one": "Ещё {{count}} агент",
-    "overflow_aria_other": "Ещё {{count}} агентов"
+    "overflow_aria_other": "Ещё {{count}} агентов",
+    "overflow_aria_few": "Ещё {{count}} агента",
+    "overflow_aria_many": "Ещё {{count}} агентов"
   },
   "archived": {
     "active_link": "Активные агенты",
@@ -63,7 +65,9 @@
     "section_cloud": "Облачные",
     "agent_count_one": "{{count}} агент",
     "agent_count_other": "{{count}} агентов",
-    "empty": "Пока нет машин"
+    "empty": "Пока нет машин",
+    "agent_count_few": "{{count}} агента",
+    "agent_count_many": "{{count}} агентов"
   },
   "columns": {
     "agent": "Агент",
@@ -87,7 +91,9 @@
     "fallback_runtime_local": "Локально",
     "actions_aria": "Действия со строкой",
     "task_count_one": "{{count}} задача",
-    "task_count_other": "{{count}} задач"
+    "task_count_other": "{{count}} задач",
+    "task_count_few": "{{count}} задачи",
+    "task_count_many": "{{count}} задач"
   },
   "activity_tooltip": {
     "created_today": "Создан сегодня",
@@ -97,7 +103,11 @@
     "no_activity": "Нет активности",
     "runs_one": "{{count}} запуск",
     "runs_other": "{{count}} запусков",
-    "failed_suffix": " · {{count}} с ошибкой ({{percent}}%)"
+    "failed_suffix": " · {{count}} с ошибкой ({{percent}}%)",
+    "created_days_ago_few": "Создан {{count}} дня назад",
+    "created_days_ago_many": "Создан {{count}} дней назад",
+    "runs_few": "{{count}} запуска",
+    "runs_many": "{{count}} запусков"
   },
   "row_actions": {
     "cancel_all_tasks": "Отменить все задачи",
@@ -133,7 +143,15 @@
     "archive_dialog_title": "Архивировать «{{name}}»?",
     "archive_dialog_description": "Агента нельзя будет назначить или упомянуть, а все активные задачи будут отменены. Вся история сохраняется, и позже вы сможете его восстановить.",
     "archive_dialog_cancel": "Отмена",
-    "archive_dialog_confirm": "Архивировать"
+    "archive_dialog_confirm": "Архивировать",
+    "cancelled_tasks_toast_few": "Отменено задач: {{count}}",
+    "cancelled_tasks_toast_many": "Отменено задач: {{count}}",
+    "cancel_dialog_running_few": "{{count}} выполняется",
+    "cancel_dialog_running_many": "{{count}} выполняется",
+    "cancel_dialog_queued_few": "{{count}} в очереди",
+    "cancel_dialog_queued_many": "{{count}} в очереди",
+    "cancel_dialog_impact_few": "Будет отменено задач: {{summary}}.",
+    "cancel_dialog_impact_many": "Будет отменено задач: {{summary}}."
   },
   "detail": {
     "back_to_agents": "Агенты",
@@ -199,14 +217,17 @@
     "edit_description_title": "Изменить описание",
     "description_placeholder": "Чем занимается этот агент?",
     "save": "Сохранить",
-    "cancel": "Отмена"
+    "cancel": "Отмена",
+    "model_routed": "Модель рана выбирает раздел «Модели» ниже."
   },
   "overview": {
     "agent_context": "Агент",
     "access": "Доступ",
     "attention_title": "Задачи требуют внимания",
     "attention_queued_one": "{{count}} задача стоит в очереди, пока среда выполнения недоступна.",
-    "attention_queued_other": "{{count}} задач стоят в очереди, пока среда выполнения недоступна."
+    "attention_queued_other": "{{count}} задач стоят в очереди, пока среда выполнения недоступна.",
+    "attention_queued_few": "{{count}} задачи стоят в очереди, пока среда выполнения недоступна.",
+    "attention_queued_many": "{{count}} задач стоят в очереди, пока среда выполнения недоступна."
   },
   "skill_attach": {
     "trigger_aria": "Прикрепить навык рабочего пространства",
@@ -492,7 +513,9 @@
       "list_loading": "Загрузка…",
       "list_empty_default": "Нет доступных навыков.",
       "list_no_match": "Совпадающих навыков не найдено.",
-      "search_placeholder": "Поиск навыков…"
+      "search_placeholder": "Поиск навыков…",
+      "selected_few": "Выбрано: {{count}} — нажмите, чтобы изменить",
+      "selected_many": "Выбрано: {{count}} — нажмите, чтобы изменить"
     },
     "avatar": {
       "change_aria": "Сменить аватар",
@@ -577,7 +600,9 @@
       "reveal_action": "Показать и редактировать",
       "revealing": "Показ…",
       "reveal_failed_toast": "Не удалось загрузить значения окружения",
-      "empty_editable": "Переменные окружения не настроены. Добавьте одну, чтобы внедрить её в агента при запуске."
+      "empty_editable": "Переменные окружения не настроены. Добавьте одну, чтобы внедрить её в агента при запуске.",
+      "not_revealed_title_few": "Настроено переменных: {{count}}",
+      "not_revealed_title_many": "Настроено переменных: {{count}}"
     },
     "custom_args": {
       "intro": "Добавьте аргументы командной строки, передаваемые при запуске этого агента.",
@@ -772,7 +797,9 @@
       "add_dialog_confirm_one": "Добавить {{count}} навык",
       "add_dialog_confirm_other": "Добавить навыков: {{count}}",
       "add_dialog_cancel": "Отмена",
-      "add_failed_toast": "Не удалось добавить навык"
+      "add_failed_toast": "Не удалось добавить навык",
+      "add_dialog_confirm_few": "Добавить навыков: {{count}}",
+      "add_dialog_confirm_many": "Добавить навыков: {{count}}"
     },
     "integrations": {
       "members_note": "Управлять этим подключением могут только владельцы и администраторы рабочего пространства. Просмотреть подключённых ботов можно в настройках → Интеграции."
@@ -831,7 +858,11 @@
       "cancel_failed_toast": "Не удалось отменить задачу",
       "started_prefix": "Начато {{when}}",
       "dispatched_prefix": "Отправлено {{when}}",
-      "queued_prefix": "В очереди с {{when}}"
+      "queued_prefix": "В очереди с {{when}}",
+      "subtitle_active_few": "{{count}} активные задачи",
+      "subtitle_active_many": "{{count}} активных задач",
+      "runs_few": "запуска",
+      "runs_many": "запусков"
     }
   },
   "char_counter": {
@@ -987,7 +1018,15 @@
     "tool_kind_write": "Правки",
     "tool_kind_read": "Чтения",
     "tool_kind_misc": "Прочее",
-    "trigger_wakeup": "Будильник"
+    "trigger_wakeup": "Будильник",
+    "outcome_files_few": "Файлов: {{count}}",
+    "outcome_files_many": "Файлов: {{count}}",
+    "outcome_commands_few": "Команд: {{count}}",
+    "outcome_commands_many": "Команд: {{count}}",
+    "group_calls_few": "Вызовов: {{count}}",
+    "group_calls_many": "Вызовов: {{count}}",
+    "steps_count_few": "Шагов: {{count}}",
+    "steps_count_many": "Шагов: {{count}}"
   },
   "task_failure": {
     "cancelled_by_system": "Отменено системой",
@@ -1036,7 +1075,9 @@
     "today": "Сегодня",
     "days_ago_one": "{{count}} день назад",
     "days_ago_other": "{{count}} дней назад",
-    "none": "Нет активности (30 дн.)"
+    "none": "Нет активности (30 дн.)",
+    "days_ago_few": "{{count}} дня назад",
+    "days_ago_many": "{{count}} дней назад"
   },
   "toolbar": {
     "result_count_title": "Совпадающих агентов / агентов в области видимости",
@@ -1053,11 +1094,349 @@
     "direction_desc": "По убыванию",
     "section_columns": "Столбцы",
     "section_owner": "Владелец",
-    "section_model": "Модель"
+    "section_model": "Модель",
+    "filter_active_count_few": "Фильтров: {{count}}",
+    "filter_active_count_many": "Фильтров: {{count}}"
   },
   "actions": {
     "selected_one": "Выбрана {{count}}",
     "selected_other": "Выбрано: {{count}}",
-    "clear_selection": "Снять выделение"
+    "clear_selection": "Снять выделение",
+    "selected_few": "Выбрано: {{count}}",
+    "selected_many": "Выбрано: {{count}}"
+  },
+  "models": {
+    "title": "Модели",
+    "profile_label": "Профиль",
+    "profile_none": "Без профиля",
+    "profile_usage": "Правка профиля затронет агентов: {{agents}}, задач: {{issues}}.",
+    "open_profile": "Открыть профили",
+    "now_label": "Сейчас",
+    "now_next_run": "Что взял бы следующий ран",
+    "profile_rows": "Модели профиля «{{name}}»",
+    "row_primary": "Основная",
+    "row_n": "{{n}}",
+    "row_short": "строка {{n}}",
+    "current": "текущая",
+    "pin": "Закрепить",
+    "own_label": "Отличается от профиля",
+    "own_hint": "Агент работает по своей цепочке вместо профиля. Одна строка — модель закреплена.",
+    "edit_own": "Изменить цепочку",
+    "next_run_hint": "Действует со следующего рана; идущий ран сохраняет свою модель.",
+    "tools_label": "Запреты инструментов",
+    "tools_hint": "сервер:инструмент. Для claude и codex выводятся в строки без аргументов.",
+    "tools_none": "Нет",
+    "tools_add": "Добавить запрет",
+    "tools_placeholder": "сервер:инструмент",
+    "tools_remove": "Убрать {{name}}",
+    "issues_label": "Задачи со своим профилем",
+    "journal_label": "Журнал",
+    "saved": "Сохранено. Действует со следующего рана.",
+    "save": "Сохранить",
+    "cancel": "Отмена",
+    "move_up": "Выше",
+    "move_down": "Ниже",
+    "remove": "Удалить",
+    "runtime": "Runtime",
+    "model": "Модель",
+    "thinking": "Рассуждение",
+    "args": "Аргументы",
+    "args_hint": "Только для исключений: аргументы уходят в runtime как есть, по одному в строке.",
+    "args_auto": "Выводятся из запретов инструментов",
+    "advanced": "Дополнительно",
+    "add_row": "Добавить модель",
+    "source_profile": "профиль «{{name}}»",
+    "source_own": "своя цепочка",
+    "source_issue": "профиль задачи {{issue}} («{{name}}»)",
+    "source_fields": "штатные поля агента",
+    "reason_primary": "основная",
+    "reason_fallback_row": "{{n}}-я недоступна — взята {{m}}-я",
+    "reason_fallback_row_until": "{{n}}-я на лимите до {{time}} — взята {{m}}-я",
+    "reason_fallback_profile": "все модели «{{exhausted}}» на лимите — взят «{{name}}»",
+    "reason_waiting_until": "все на лимите до {{time}} — ран ждёт",
+    "reason_waiting": "все модели недоступны — ран ждёт",
+    "reason_no_models": "нет моделей и runtime",
+    "state_available": "доступна",
+    "state_limited": "на лимите до {{time}}",
+    "state_offline": "runtime офлайн",
+    "state_missing": "runtime удалён",
+    "state_not_permitted": "runtime недоступен агенту",
+    "mode_label": "Откуда берётся модель",
+    "mode_profile": "Профиль",
+    "mode_profile_hint": "общий список на нескольких агентов",
+    "mode_chain": "Своя цепочка",
+    "mode_chain_hint": "свой список с запасными",
+    "mode_single": "Одна модель",
+    "mode_one_hint": "ровно эта модель, без запасных",
+    "mode_fields_hint": "Ни профиля, ни своей модели: ран берёт среду и модель из полей выше.",
+    "switch_to_profile": "Работать по профилю «{{name}}»",
+    "profile_unused": "Профиль «{{name}}» не используется, пока у агента своя модель.",
+    "chain_title": "Своя цепочка",
+    "one_title": "Модель агента",
+    "one_hint": "Запасных нет: если среда на лимите или выключена, ран ждёт сброса, а владельцу придёт уведомление.",
+    "edit_single": "Изменить модель"
+  },
+  "model_profiles": {
+    "title": "Профили",
+    "description": "Списки моделей workspace по порядку. Агенты и задачи ссылаются на профиль; правка доходит до всех со следующего рана.",
+    "create": "Создать профиль",
+    "create_title": "Новый профиль",
+    "create_description": "Строки пробуются по порядку; работает первая доступная.",
+    "edit_title": "Правка профиля",
+    "edit_description": "Сохранение меняет следующий ран всех агентов и задач на этом профиле. Предпросмотр покажет, у кого сменится основная модель.",
+    "edit": "Изменить {{name}}",
+    "delete": "Удалить {{name}}",
+    "deleted": "Профиль «{{name}}» удалён",
+    "saved": "Профиль сохранён",
+    "load_failed": "Не удалось загрузить профили",
+    "empty": "Профилей пока нет.",
+    "col_name": "Имя",
+    "col_models": "Модели",
+    "col_exhausted": "Когда всё на лимите",
+    "col_refs": "Кто ссылается",
+    "exhausted_wait": "ждать",
+    "refs_agents": "агенты",
+    "refs_issues": "открытые задачи",
+    "refs_own": "своя цепочка из этого профиля",
+    "name": "Имя",
+    "description_label": "Описание",
+    "source": "Основа",
+    "from_scratch": "С нуля",
+    "preview": "Предпросмотр",
+    "preview_none": "Основная модель ни у кого не сменится.",
+    "preview_title": "Основная модель сменится у {{count}}:",
+    "preview_waits": "ждёт"
+  },
+  "conveyor": {
+    "title": "Конвейер",
+    "refresh": "Обновить",
+    "done": "Готово",
+    "ref_placeholder": "Номер эпика или ссылка Multica, например STT-239",
+    "bad_ref": "Введите номер вида STT-239 или ссылку Multica",
+    "add": "Назначать стадии",
+    "remove": "Перестать назначать",
+    "remove_confirm": "Перестать назначать стадии {{key}}? Назначенные подзадачи продолжат работу, следующие стадии назначаться не будут.",
+    "lane_finished": "Все этапы пройдены",
+    "lane_stage": "В работе · этап {{stage}}",
+    "progress": "{{done}} из {{total}} задач закрыто · этапов {{stagesDone}} из {{stages}}",
+    "in_review": "на приёмке: {{count}}",
+    "empty": "Ни у одного эпика стадии не назначаются. Укажите эпик и команду: сервер назначает каждую стадию, как только закрыта предыдущая.",
+    "no_stage": "Без этапа",
+    "stage": "Этап {{stage}}",
+    "card_actions": "Действия с {{key}}",
+    "dialog_idle": "Уточнение публикуется в задаче и доходит до её агента; повтор запускает новый ран.",
+    "continue_placeholder": "Уточнение для агента",
+    "open_issue": "Открыть задачу",
+    "retry": "Повторить",
+    "continue": "Отправить уточнение",
+    "card": {
+      "running": "работает",
+      "cancelled": "отменена",
+      "review": "маршрут пройден, ждёт закрытия",
+      "success": "готово",
+      "held": "ждёт заказчика",
+      "blocked": "у координатора",
+      "quota": "ждёт провайдера",
+      "failed": "ошибка запуска",
+      "created": "ждёт этапа",
+      "queued": "в очереди"
+    },
+    "squad": "Команда",
+    "lane_squad": "Стадии назначаются команде {{squad}}"
+  },
+  "subscriptions": {
+    "title": "Подписки",
+    "description": "Подписки на модели: загрузка окон, лимиты для агентов, резерв людям",
+    "refresh": "Обновить",
+    "readonly": "Менять подписки и среды может только администратор инстанса.",
+    "limit_reached": "лимит",
+    "of_cap": "из {{cap}}%",
+    "reset": "сброс {{time}}",
+    "no_usage": "Данных о загрузке пока нет.",
+    "agents_up_to": "Агентам до: {{limits}}",
+    "provider_limit": "Агентам — до лимита провайдера",
+    "reserve": "резерв людям {{reserve}}%",
+    "reserve_label": "Резерв",
+    "field_percent": "{{name}}, %",
+    "edit_hint": "Итоговый лимит окна — меньшее из лимита окна и 100 − резерв. Действует со следующего рана.",
+    "save": "Сохранить",
+    "cancel": "Отмена",
+    "close": "Закрыть",
+    "saved": "Сохранено",
+    "bad_percent": "Лимит и резерв — целые проценты от 0 до 100",
+    "credential": "Учётка на хосте:",
+    "usage_as_of": "цифры на {{time}}",
+    "limited_banner": "На лимите агентам: {{titles}}. Агенты идут на следующую модель своего профиля.",
+    "spent_by": "Тратят:",
+    "spent_by_item": "{{name}} (№{{position}})",
+    "spent_by_none": "ни одна среда",
+    "spent_elsewhere": "в других workspace: {{n}}",
+    "disabled": "Отключена",
+    "disabled_until": "Отключена до {{time}}",
+    "empty": "Подписок пока нет.",
+    "pools_title": "Среды с подписками",
+    "pools_empty": "В этом workspace нет сред с подписками.",
+    "windows": {
+      "5h": "5 часов",
+      "week": "неделя"
+    },
+    "groups": {
+      "claude": "Claude",
+      "codex": "Codex",
+      "api": "Ключи API"
+    },
+    "order": {
+      "first": "первая годная",
+      "balanced": "равномерно по неделе"
+    },
+    "order_hint": {
+      "first": "берётся первая подписка, у которой агентам ещё есть лимит",
+      "balanced": "из годных — та, у которой недельная загрузка меньше"
+    },
+    "login": {
+      "state": {
+        "logged_in": "Вход есть",
+        "revoked": "Вход отозван",
+        "never": "Входа не было",
+        "check_failed": "Проверка не удалась",
+        "unchecked": "Не проверялся"
+      },
+      "credential": {
+        "present": "учётка есть",
+        "missing": "учётки нет",
+        "revoked": "учётка отозвана",
+        "unreadable": "учётка не читается",
+        "unknown": "не проверено"
+      },
+      "hosts": "Учётка на хостах",
+      "host": "{{host}}: {{state}}",
+      "relogin": "Войти заново",
+      "title": "Вход в {{account}}",
+      "codex_hint": "Откройте ссылку, войдите в аккаунт подписки и введите код. Текущая учётка заменится только после успешного входа.",
+      "claude_hint": "Выполните `claude setup-token` на любом компьютере и вставьте токен. Он уходит демону и пишется файлом на хосте, больше нигде не хранится.",
+      "key_hint": "Вставьте новый ключ. Он уходит демону и пишется файлом на хосте, больше нигде не хранится.",
+      "code": "Код:",
+      "waiting": "Ждём завершения входа…",
+      "waiting_host": "Ждём, пока демон запишет учётку…",
+      "start": "Получить ссылку",
+      "cancel_login": "Отменить вход",
+      "token_label": "Токен",
+      "key_label": "Ключ API",
+      "send": "Отправить",
+      "done": "Вход выполнен",
+      "failed": "Вход не завершён, текущая учётка не изменилась"
+    },
+    "menu": {
+      "open": "Действия с «{{title}}»",
+      "caps": "Лимиты агентам…",
+      "disable": "Отключить до…",
+      "enable": "Включить",
+      "runtime": "Порядок трат: {{runtime}}…",
+      "rename": "Переименовать…",
+      "rename_title": "Название подписки",
+      "rename_label": "Название",
+      "delete": "Удалить подписку…",
+      "delete_confirm": "Удалить «{{title}}»? Она уберётся из всех сред, файл учётки на хосте останется.",
+      "deleted": "Подписка «{{title}}» удалена",
+      "disable_title": "Отключить «{{title}}»",
+      "disable_until": "До",
+      "disable_hint": "До этого времени агенты подписку не тратят, потом она включится сама.",
+      "disable_submit": "Отключить"
+    },
+    "pool": {
+      "loading": "Среда",
+      "name": "Название",
+      "shared_hint": "Среда общая: название и порядок меняются во всех workspace, где она есть.",
+      "order_title": "Подписки по порядку",
+      "empty": "За средой нет подписок — агенты на ней не запустятся.",
+      "empty_short": "без подписок",
+      "missing": "такой подписки нет",
+      "move_up": "Выше: {{name}}",
+      "move_down": "Ниже: {{name}}",
+      "remove": "Убрать {{name}}",
+      "add": "Добавить подписку",
+      "add_placeholder": "Выберите подписку…",
+      "spend_title": "Как тратить",
+      "all_workspaces": "во всех workspace",
+      "off": "выключена",
+      "agents": "Агенты на среде: {{names}}",
+      "no_agents": "На этой среде не работает ни один агент."
+    },
+    "new_pool": {
+      "open": "Новая среда",
+      "title": "Новая среда",
+      "family": "На чём работает",
+      "name": "Название",
+      "name_placeholder": "Например, Claude · подписки",
+      "workspaces": "Workspace",
+      "all_workspaces": "Во всех workspace, включая новые",
+      "submit": "Создать",
+      "done": "Среда «{{name}}» создана",
+      "skipped": "В некоторых workspace ({{n}}) среда с таким названием уже есть — там новая не создана."
+    },
+    "add": {
+      "open": "Добавить подписку",
+      "title": "Добавить подписку",
+      "step_kind": "1. Что подключаем",
+      "kind": {
+        "claude": "Claude",
+        "codex": "Codex",
+        "api": "Ключ API"
+      },
+      "kind_hint": {
+        "claude": "подписка Pro / Max",
+        "codex": "подписка ChatGPT",
+        "api": "z.ai, MiniMax, OpenRouter"
+      },
+      "provider": "Провайдер",
+      "providers": {
+        "zai": "z.ai (GLM, coding-план)",
+        "minimax": "MiniMax (coding-план)",
+        "openrouter": "OpenRouter (оплата деньгами)",
+        "loodsen-ai": "Модель Лоции (нужен cisco VPN)"
+      },
+      "step_name": "2. Название",
+      "name_placeholder": "Например, Claude, третья подписка",
+      "step_login": "3. Вход",
+      "codex_login": "После добавления здесь появятся ссылка и код для входа в аккаунт.",
+      "claude_login": "На своём компьютере, войдя в браузере в этот аккаунт Claude, выполните claude setup-token и вставьте токен.",
+      "key_login": "Создайте ключ в кабинете провайдера и вставьте его сюда.",
+      "secret_hint": "Уходит демону и пишется в файл учётки на хосте (права 600), больше нигде не хранится. Можно оставить пустым и войти позже с карточки.",
+      "step_spend": "4. Кто тратит",
+      "spend_mode": {
+        "existing": "В существующую среду",
+        "new": "Новая среда"
+      },
+      "new_item": "новая",
+      "placement": "Место в порядке трат: {{runtime}}",
+      "placement_last": "в конец",
+      "placement_first": "первой",
+      "unpick": "Не включать в {{runtime}}",
+      "runtimes_search": "Выбрать среды ({{family}})…",
+      "runtimes_filter": "Найти среду…",
+      "runtimes_none": "Нет сред этого семейства",
+      "runtimes_hint": "Показаны среды этого workspace на том же CLI. Ничего не выбрано — подписку никто не тратит.",
+      "step_caps": "5. Сколько отдавать агентам",
+      "no_windows": "Окон квот у провайдера нет — агентам до лимита провайдера.",
+      "submit": "Добавить",
+      "submit_login": "Добавить и войти",
+      "done": "Подписка «{{title}}» добавлена",
+      "done_login_later": "Подписка «{{title}}» добавлена — войдите с карточки",
+      "partly_failed": "Подписка «{{title}}» создана, но не всё получилось: {{error}}. Доделайте с карточки.",
+      "model": "Модель",
+      "model_hint": "Необязательно. Станет моделью по умолчанию для всех уровней.",
+      "model_placeholder": "Например, glm-4.6"
+    },
+    "discrepancies": {
+      "title": "Расхождения",
+      "kind": {
+        "credential_missing": "Учётки нет на хосте",
+        "unused_subscription": "Подписку никто не тратит",
+        "runtime_without_subscriptions": "Среда без подписок",
+        "agent_on_disabled_runtime": "Агент на выключенной среде"
+      },
+      "kind_unknown": "Расхождение",
+      "open_pool": "Открыть среду"
+    }
   }
 }

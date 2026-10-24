@@ -8,7 +8,9 @@
     "running": "Multica работает...",
     "unread_one": "{{count}} непрочитанный чат",
     "unread_other": "{{count}} непрочитанных чатов",
-    "default": "Спросить Multica"
+    "default": "Спросить Multica",
+    "unread_few": "{{count}} непрочитанных чата",
+    "unread_many": "{{count}} непрочитанных чатов"
   },
   "input": {
     "placeholder_no_agent": "Создайте агента, чтобы начать общение",
@@ -46,7 +48,9 @@
     "remove": "Удалить сообщение из очереди",
     "more": "Другие действия с очередью",
     "fallback": "Сообщение в очереди",
-    "action_failed_toast": "Не удалось обновить сообщение в очереди"
+    "action_failed_toast": "Не удалось обновить сообщение в очереди",
+    "title_few": "{{count}} сообщения в очереди",
+    "title_many": "{{count}} сообщений в очереди"
   },
   "message_list": {
     "show_details": "Показать детали",
@@ -88,7 +92,11 @@
     "quick_actions_heading": "Дополнительные вопросы",
     "quick_actions_aria": "Предложенные вопросы",
     "quick_actions_regenerate": "Обновить предложения",
-    "quick_actions_regenerate_failed": "Не удалось обновить предложения. Попробуйте ещё раз."
+    "quick_actions_regenerate_failed": "Не удалось обновить предложения. Попробуйте ещё раз.",
+    "tools_few": "{{count}} инструмента",
+    "tools_many": "{{count}} инструментов",
+    "process_steps_few": "{{count}} шага",
+    "process_steps_many": "{{count}} шагов"
   },
   "session_history": {
     "untitled": "Без названия",

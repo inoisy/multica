@@ -451,7 +451,9 @@
       "toast_created": "사용자 지정 런타임이 생성되었습니다",
       "toast_updated": "사용자 지정 런타임이 업데이트되었습니다",
       "error_duplicate_name": "이 표시 이름을 사용하는 런타임이 이미 있습니다.",
-      "error_generic": "런타임 저장에 실패했습니다."
+      "error_generic": "런타임 저장에 실패했습니다.",
+      "subscriptions_hint": "Claude와 Codex 구독은 구독 페이지에서 설정합니다.",
+      "subscriptions_link": "구독 열기"
     },
     "delete_dialog": {
       "title": "사용자 지정 런타임을 워크스페이스에서 삭제하시겠습니까?",

@@ -88,11 +88,14 @@
     "status_archived": "Архивирован",
     "issue_status_blocked": "заблокирована",
     "active_issue_more": "и ещё {{count}}",
-    "last_active_label": "последняя активность {{time}}"
+    "last_active_label": "последняя активность {{time}}",
+    "section_count_few": "{{count}} участника в этой команде",
+    "section_count_many": "{{count}} участников в этой команде"
   },
   "detail_tabs": {
     "members": "Участники",
-    "instructions": "Инструкции"
+    "instructions": "Инструкции",
+    "route": "Маршрут"
   },
   "details": {
     "leader": "Лидер",
@@ -111,7 +114,9 @@
     "leader_updated": "Лидер обновлён",
     "leader_update_failed": "Не удалось обновить лидера",
     "archive_failed": "Не удалось архивировать команду",
-    "instructions_saved": "Инструкции сохранены"
+    "instructions_saved": "Инструкции сохранены",
+    "route_saved": "Маршрут сохранён",
+    "route_save_failed": "Не удалось сохранить маршрут"
   },
   "profile_card": {
     "unavailable": "Команда недоступна",
@@ -121,7 +126,11 @@
     "member_count_other": "{{count}} участников",
     "members_section": "Участники",
     "more_members_one": "+{{count}} ещё",
-    "more_members_other": "+{{count}} ещё"
+    "more_members_other": "+{{count}} ещё",
+    "member_count_few": "{{count}} участника",
+    "member_count_many": "{{count}} участников",
+    "more_members_few": "+{{count}} ещё",
+    "more_members_many": "+{{count}} ещё"
   },
   "instructions_tab": {
     "description": "Инструкции команды добавляются в промпт лидера-агента при работе над любой задачей, назначенной этой команде. Используйте их, чтобы дать лидеру общие для команды указания, рабочие договорённости или контекст, которого нужно придерживаться в каждой задаче.",
@@ -143,6 +152,14 @@
     "filter_label": "Фильтр",
     "filter_active_count_one": "{{count}} фильтр",
     "filter_active_count_other": "{{count}} фильтров",
-    "clear_filters": "Сбросить фильтры"
+    "clear_filters": "Сбросить фильтры",
+    "filter_active_count_few": "{{count}} фильтра",
+    "filter_active_count_many": "{{count}} фильтров"
+  },
+  "route_tab": {
+    "description": "Задача, назначенная этой команде, идёт по маршруту на сервере: каждый шаг стартует сам, лидер просыпается только на возврат, остановку и в конце.",
+    "placeholder": "dev:Бэкенд,qa:Тестировщик,review:Техдиректор,accept:Приёмщик,close:Тимлид",
+    "rules": "Шаги вида шаг:Агент через запятую, в конце close:<координатор>. qa идёт после dev; accept — один раз, прямо перед close и после review, он вливает принятый коммит.",
+    "clear_button": "Выключить"
   }
 }

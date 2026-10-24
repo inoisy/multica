@@ -465,7 +465,9 @@
       "toast_created": "Custom runtime created",
       "toast_updated": "Custom runtime updated",
       "error_duplicate_name": "A runtime with this display name already exists.",
-      "error_generic": "Failed to save the runtime."
+      "error_generic": "Failed to save the runtime.",
+      "subscriptions_hint": "Claude and Codex subscriptions are set up on the Subscriptions page.",
+      "subscriptions_link": "Open Subscriptions"
     },
     "delete_dialog": {
       "title": "Delete custom runtime from workspace?",

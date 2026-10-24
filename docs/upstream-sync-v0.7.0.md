@@ -2,14 +2,23 @@
 
 The integration branch merges `v0.7.0` into `runtime/0.6.1-live`, whose
 starting commit is `23eb8b5c9b4a7fcbd737926b8bf79a598d89a906`. Both histories
-remain ancestors of the branch. Production deployment is a separate decision.
+remain ancestors of the branch. The owner requested this release in STT-411;
+the operational gates below still apply.
 
 ## Route ownership
 
-The fork's `issue_conveyor` remains responsible for routed issues. Upstream
-Project Workflows coexist in the schema; `project_workflows_v1` defaults to
-false. Do not enable that flag during this upgrade or attach workflows to
-existing projects without a separate migration plan.
+The owner approved trying upstream Project Workflows as shipped. No additional
+workflow execution engine is introduced. `FF_PROJECT_WORKFLOWS_V1=true` exposes
+the editor and project workflow picker; the self-host Compose file forwards this
+variable into the backend container and keeps it off when unset. The isolated
+review environment enables it explicitly.
+
+The fork's `issue_conveyor` still owns issues with active routes. Leave existing
+projects on Default without handoffs while those routes finish; test native
+handoffs on a separate project without a route. A project workflow change does
+not itself start agents or migrate the fork's active route state. Switching off
+the editor flag does not disable workflows already attached to projects: revert
+the project's workflow to Default as a separate, reviewed action.
 
 The isolated server smoke test uses simulated executors and the real HTTP
 register, claim, start, result, and completion endpoints. It exercises
@@ -52,17 +61,27 @@ after. Never run rollback experiments against production.
 The inventory in [upstream-sync-branch-inventory.json](upstream-sync-branch-inventory.json)
 lists paths present in those branches and absent from live.
 
-Notably absent from live and this integration are their `/profiles`,
-`/subscriptions`, and `/conveyor` web pages, model selectors, subscription
-wizards, and related core queries/types. The conveyor branch additionally
-contains custom pages and newer subscription hooks. Their backend equivalents
-are already in live. Matching missing Russian translation keys were restored
-from those branches; new upstream messages were translated to keep the Russian
-bundle aligned with the English schema and interpolation parameters.
+The integration now ports the deployed web additions from
+`ru-v0.6.1-conveyor` at `560703762`: `/profiles`, `/subscriptions`, `/conveyor`,
+custom pages, the agent model editor, issue profile and stage controls, squad
+route editing, runtime subscription management, and the hidden acceptance-agent
+name lookup. Web and desktop share these views. Upstream workflow properties,
+handoff history, Qoder restrictions and conversation-starter controls remain.
 
-These features have not been silently imported into an upstream merge. Decide
-whether to port them separately; the integration preserves the live baseline,
-not every change ever made on another fork branch.
+This is a three-way port of the UI changes after `714994d36`, preserving the
+newer upstream content. UI controls use shared Select, RadioGroup, Checkbox,
+Button and Table components. Locale keys are merged structurally; obsolete
+translation keys are omitted and Russian plural categories are normalized by
+the locale parity guard.
+
+The native editor header wraps its actions to fit narrow content areas.
+The compact settings selector keeps its chevron inside the padded control.
+
+Custom pages still use the separate `multica-pages` service at `/pages-api/`.
+Keep the current reverse-proxy mapping when replacing the web image. The
+integration validates that service's responses; malformed permissions remain
+read-only and an unknown embed mode opens a tab. An isolated stand without that
+service can show a load error for pages until a synthetic fixture is supplied.
 
 ## Reproducible checks
 
@@ -101,19 +120,24 @@ baseline remain; compare advisory identifiers, not only the total count.
 isolated PostgreSQL database. It is intended for the stand service, which
 supplies `STAND_URL`, generates `DB_PASSWORD` and `JWT_SECRET`, and publishes
 only the web service. Keep this test environment private: it uses development
-authentication and the fixed verification code `411411`. No production
+authentication and the fixed verification code `411411`. The synthetic
+`release-check-411@example.test` user is an instance admin only on this stand,
+so subscription forms can be verified without provider credentials. No production
 credentials or data belong in it.
 
 ## Deployment and rollback gates
 
-Do not deploy until production-copy migration checks and the final acceptance
-checks pass and the owner approves the rollout. No new application secret or
-production environment variable is required by the merge fixes.
+The owner has approved the rollout. Production-copy migration checks and final
+acceptance checks are still required before deployment. Set
+`FF_PROJECT_WORKFLOWS_V1=true` on the server to expose the native editor;
+the integration requires no new application secret.
 
-The rollback baseline is image tag
-`stt-agent-terminal-fixes-23eb8b5c9`, commit `23eb8b5c9`. Before deploying,
-record immutable digests for both current images and register that baseline as
-the previous healthy release in harness-control. Retain a database backup.
+The backend rollback baseline is image tag
+`stt-agent-terminal-fixes-23eb8b5c9`, commit `23eb8b5c9`. The deployed web was
+built separately from `ru-v0.6.1-conveyor`; do not assume its tag or digest is
+the same as the backend. Before deploying, record the actual immutable digests
+for both current images and register the pair as the previous healthy release
+in harness-control. Retain a database backup.
 
 The required operational sequence is:
 

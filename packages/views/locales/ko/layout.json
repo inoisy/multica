@@ -11,7 +11,11 @@
     "usage": "분석",
     "runtimes": "런타임",
     "skills": "스킬",
-    "settings": "설정"
+    "settings": "설정",
+    "conveyor": "Conveyor",
+    "subscriptions": "Subscriptions",
+    "pages": "Pages",
+    "model_profiles": "Profiles"
   },
   "tab": {
     "issue": "태스크",
@@ -68,5 +72,36 @@
       "title": "Discord 참여하기",
       "dismiss": "닫기"
     }
+  },
+  "custom_pages": {
+    "title": "Pages",
+    "description": "Workspace pages available from the sidebar. Open inside Multica or in a new tab.",
+    "saved": "Pages saved",
+    "save_failed": "Could not save pages",
+    "add": "Add",
+    "save": "Save",
+    "saving": "Saving…",
+    "loading": "Loading…",
+    "empty_readonly": "No pages yet. Workspace owners and admins can add them.",
+    "empty_editable": "No pages yet. Click Add to create one.",
+    "name": "Name",
+    "url": "/takes/ or https://…",
+    "open_mode": "How to open",
+    "embed": "Inside Multica",
+    "tab": "New tab",
+    "up": "Move up",
+    "down": "Move down",
+    "open": "Open",
+    "delete": "Delete",
+    "optional_description": "Description (optional)",
+    "url_hint": "Use a path on this site (for example /takes/) or an HTTPS URL. External sites may block embedding; open those in a new tab.",
+    "configure": "Configure",
+    "page": "Page",
+    "load_failed": "Could not load pages: {{error}}",
+    "not_found": "Page not found.",
+    "all": "All pages",
+    "opens_in_tab": "This page opens in a new tab.",
+    "open_named": "Open “{{title}}”",
+    "add_page": "Add page"
   }
 }

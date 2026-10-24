@@ -451,7 +451,9 @@
       "toast_created": "カスタムランタイムを作成しました",
       "toast_updated": "カスタムランタイムを更新しました",
       "error_duplicate_name": "この表示名のランタイムは既に存在します。",
-      "error_generic": "ランタイムの保存に失敗しました。"
+      "error_generic": "ランタイムの保存に失敗しました。",
+      "subscriptions_hint": "Claude と Codex のサブスクリプションは「サブスクリプション」ページで設定します。",
+      "subscriptions_link": "サブスクリプションを開く"
     },
     "delete_dialog": {
       "title": "カスタムランタイムをワークスペースから削除しますか？",

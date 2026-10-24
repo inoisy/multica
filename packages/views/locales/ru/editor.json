@@ -91,7 +91,15 @@
     "table_columns_other": "{{count}} столбца",
     "address": "Адрес",
     "address_hint": "?query",
-    "reload": "Перезагрузить"
+    "reload": "Перезагрузить",
+    "tree_items_few": "{{count}} элемента",
+    "tree_items_many": "{{count}} элементов",
+    "tree_keys_few": "{{count}} ключа",
+    "tree_keys_many": "{{count}} ключей",
+    "table_rows_few": "{{count}} строки",
+    "table_rows_many": "{{count}} строк",
+    "table_columns_few": "{{count}} столбца",
+    "table_columns_many": "{{count}} столбцов"
   },
   "link_hover": {
     "copy_link": "Скопировать ссылку",
