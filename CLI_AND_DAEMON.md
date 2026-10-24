@@ -785,6 +785,39 @@ The `usage` command returns the aggregated token usage for an issue, summed acro
 
 The `runs` command shows all past and current executions for an issue, including running tasks. Table output uses short task UUID prefixes by default; pass `--full-id` to print canonical task UUIDs. The `run-messages` command accepts full task UUIDs directly; copied short task prefixes must be scoped with `--issue <issue-id>` so the CLI only checks that issue's runs. It shows the detailed message log (tool calls, thinking, text, errors) for a single run. Use `--since` for efficient polling of in-progress runs.
 
+### Add Instructions to a Running Turn
+
+In a human-authenticated terminal, send new instructions without restarting a run:
+
+```bash
+# Select the issue's only running turn; multiple running turns require a choice
+multica issue steer MUL-123 --content-file ./instructions.md --output json
+
+# Select an exact run (a short unambiguous prefix also works) and await delivery
+multica issue steer MUL-123 RUN_ID --content "Continue with the existing test results" --wait --timeout 1m
+
+# Repeat an uncertain submission using the UUID printed to stderr before sending
+multica issue steer MUL-123 RUN_ID --content-file ./instructions.md --client-request-id REQUEST_UUID
+
+# Redeliver an existing failed message without creating another comment
+multica issue steer retry MUL-123 RUN_ID COMMENT_ID --wait --timeout 1m
+```
+
+Content comes from exactly one of `--content`, `--content-file`, or
+`--content-stdin`. JSON stdout contains `comment_id`, `task_id`, `status`, and
+available request/delivery metadata. Status is `pending`, `delivering`,
+`delivered`, or `failed`. `--wait` returns nonzero on failure or timeout and
+still prints the last receipt; a timeout does not cancel delivery. Delivery
+acknowledges receipt of the input, not completion of the agent's work. Confirm
+input in the same run with `multica issue run-messages RUN_ID --issue MUL-123`.
+
+Each submission generates a request UUID. After a lost response, repeat the same
+content with the same explicit run ID and `--client-request-id` to recover the
+original comment. An ended run (409) or unsupported runtime (412) is reported
+without automatically restarting it. Both create and retry require human
+credentials: agent tokens cannot steer, even on behalf of a person, and must
+never fall back to a member credential.
+
 ## Projects
 
 Projects group related issues (e.g. a sprint, an epic, a workstream). Every project

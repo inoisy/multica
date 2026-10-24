@@ -131,10 +131,11 @@ LEARN MORE
   Use ` + "`multica <command> <subcommand> --help`" + ` for more information about a command.
 `
 
-var subHelpTemplate = `{{.Short}}
+var subHelpTemplate = `{{if and .Runnable .Long}}{{.Long}}{{else}}{{.Short}}{{end}}
 
 USAGE
-  {{.CommandPath}} <command> [flags]
+  {{if .Runnable}}{{.UseLine}}
+  {{end}}{{.CommandPath}} <command> [flags]
 
 COMMANDS
 {{formatCommandList .Commands}}
