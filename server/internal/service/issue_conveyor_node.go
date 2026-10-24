@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -21,12 +23,15 @@ import (
 // profile — the model profile of this step's runs (wins over the issue's);
 // cross   — run on another model family than the run that passed that step;
 // back    — changes_requested opens a new round at that step by itself; a
-//           verifier (qa, review, accept) without it goes back to the closest
-//           earlier work step, back=none sends its changes to the coordinator;
+//
+//	verifier (qa, review, accept) without it goes back to the closest
+//	earlier work step, back=none sends its changes to the coordinator;
+//
 // rounds  — how many rounds the route may reach through back (default 2);
 // retries — how many times a run cut short by infrastructure (the daemon
-//           stopped, the runtime went offline, the provider failed) starts
-//           again by itself before the coordinator is woken (default 2, 0..5).
+//
+//	stopped, the runtime went offline, the provider failed) starts
+//	again by itself before the coordinator is woken (default 2, 0..5).
 const (
 	conveyorOptProfile = "profile"
 	conveyorOptCross   = "cross"
@@ -259,7 +264,12 @@ func (s *IssueConveyorService) RunModel(ctx context.Context, q *db.Queries, task
 	if node == nil {
 		return out, nil
 	}
-	out.Node = node
+	return s.nodeRunModel(ctx, q, cv, route, node, action.Round.Int32)
+}
+
+// nodeRunModel is the model setting of a run of node in the given round.
+func (s *IssueConveyorService) nodeRunModel(ctx context.Context, q *db.Queries, cv db.IssueConveyor, route []ConveyorNode, node *ConveyorNode, round int32) (conveyorRunModel, error) {
+	out := conveyorRunModel{Node: node}
 	if node.ProfileID != "" {
 		out.ProfileID, _ = util.ParseUUID(node.ProfileID)
 	}
@@ -270,7 +280,7 @@ func (s *IssueConveyorService) RunModel(ctx context.Context, q *db.Queries, task
 	if crossIdx < 0 {
 		return out, nil
 	}
-	for round := action.Round.Int32; round >= 1; round-- {
+	for ; round >= 1; round-- {
 		prev, err := q.GetLatestConveyorStepTask(ctx, db.GetLatestConveyorStepTaskParams{
 			ConveyorID: cv.ID, Idx: pgtype.Int4{Int32: crossIdx, Valid: true}, Round: pgtype.Int4{Int32: round, Valid: true},
 		})
@@ -305,4 +315,23 @@ func (s *IssueConveyorService) taskFamily(ctx context.Context, q *db.Queries, ta
 		model = agent.Model.String
 	}
 	return ModelFamily(rt.Provider, model), nil
+}
+
+// PreviewRouteStepChoice is the choice for a run of route step idx in the
+// conveyor's current round: the node's profile and cross family apply as they
+// do for a queued run of that step.
+func PreviewRouteStepChoice(ctx context.Context, q *db.Queries, cv db.IssueConveyor, idx int32, agent db.Agent, issue *db.Issue, now time.Time) (ModelChoice, error) {
+	route, err := conveyorRoute(cv)
+	if err != nil {
+		return ModelChoice{}, err
+	}
+	node := conveyorNodeAt(route, idx)
+	if node == nil {
+		return ModelChoice{}, fmt.Errorf("conveyor %s has no step %d", util.UUIDToString(cv.ID), idx)
+	}
+	routeModel, err := (&IssueConveyorService{}).nodeRunModel(ctx, q, cv, route, node, cv.Round)
+	if err != nil {
+		return ModelChoice{}, err
+	}
+	return previewChoice(ctx, q, agent, issue, routeModel, now)
 }

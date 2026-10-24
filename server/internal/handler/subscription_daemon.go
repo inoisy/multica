@@ -231,6 +231,12 @@ const subscriptionUsageMaxAge = time.Hour
 // provider's own limit ("You've hit your usage limit …") is not the pool's
 // verdict and stays until its reset. Returns the lifted refusal rows.
 func (h *Handler) refreshSubscriptionAvailability(ctx context.Context) []db.RuntimeUnavailable {
+	return h.RefreshSubscriptionAvailabilityAt(ctx, time.Now())
+}
+
+// RefreshSubscriptionAvailabilityAt is refreshSubscriptionAvailability judged
+// at now, for tools that must reproduce the verdicts of a past moment.
+func (h *Handler) RefreshSubscriptionAvailabilityAt(ctx context.Context, now time.Time) []db.RuntimeUnavailable {
 	profiles, err := h.Queries.ListRuntimeProfilesWithSubscriptions(ctx)
 	if err != nil {
 		slog.Warn("subscription availability: list profiles failed", "error", err)
@@ -259,7 +265,6 @@ func (h *Handler) refreshSubscriptionAvailability(ctx context.Context) []db.Runt
 	if err != nil {
 		return nil
 	}
-	now := time.Now()
 	verdict := map[string]poolState{}
 	for _, p := range profiles {
 		verdict[uuidToString(p.ID)] = poolVerdict(p, byKey, usage, now)
@@ -316,7 +321,7 @@ func poolVerdict(p db.RuntimeProfile, byKey map[string]db.Subscription, usage ma
 		if !ok {
 			continue
 		}
-		resp := subscriptionToResponse(s, usage[uuidToString(s.ID)], nil)
+		resp := subscriptionToResponseAt(s, usage[uuidToString(s.ID)], nil, now)
 		pool = append(pool, toDaemonSubscription(resp))
 	}
 	if len(pool) == 0 {

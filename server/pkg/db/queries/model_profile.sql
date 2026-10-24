@@ -117,7 +117,7 @@ WHERE workspace_id = $1 AND model_profile_id = $2;
 
 -- name: ListActiveRuntimeUnavailable :many
 SELECT * FROM runtime_unavailable
-WHERE workspace_id = $1 AND until > now()
+WHERE workspace_id = sqlc.arg(workspace_id) AND until > sqlc.arg(now)::timestamptz
 ORDER BY runtime_id, until DESC;
 
 -- name: ListActiveRuntimeUnavailableForRuntimes :many
