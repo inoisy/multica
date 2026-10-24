@@ -72,6 +72,21 @@ describe("HandoffFields", () => {
     expect(onPatch).toHaveBeenCalledWith({ handler: { type: "agent", id: "agent-1" } });
   });
 
+  it("offers automatic acceptance among agents, with next and back but no instructions", async () => {
+    const onPatch = renderFields({ status_key: "in_review", handler: { type: "agent" }, instructions: "" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Choose an agent" }));
+    fireEvent.click(await screen.findByText("Automatic acceptance"));
+    expect(screen.queryByText("No results")).toBeNull();
+    expect(onPatch).toHaveBeenCalledWith({ handler: { type: "accept" } });
+
+    cleanup();
+    renderFields({ status_key: "in_review", handler: { type: "accept" }, instructions: "" });
+    expect(screen.getByText(/Merges the commit the previous step pinned/)).toBeTruthy();
+    expect(screen.queryByRole("textbox")).toBeNull();
+    expect(screen.getAllByRole("combobox").length).toBeGreaterThan(0);
+  });
+
   it("lists the project lead and members for a member handoff, without instructions", async () => {
     const onPatch = renderFields({ status_key: "in_review", handler: { type: "member" }, instructions: "" });
 
