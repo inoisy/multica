@@ -61,7 +61,7 @@ export function PoolTargetFields({
           onChange={(event) => onChange({ ...value, name: event.target.value })}
         />
       </div>
-      <fieldset className="space-y-2" disabled={disabled}>
+      <fieldset className="min-w-0 space-y-2" disabled={disabled}>
         <legend className="mb-2 text-body font-medium">{t(($) => $.subscriptions.new_pool.workspaces)}</legend>
         <label className="flex items-center gap-2 text-body">
           <Checkbox

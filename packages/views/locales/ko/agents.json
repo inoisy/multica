@@ -1451,7 +1451,8 @@
       "found": "{{total}}개 중 {{shown}}개",
       "reset": "초기화",
       "none": "필터와 일치하는 항목이 없습니다."
-    }
+    },
+    "counted_once": "한 번만 집계되며 위에 표시됨"
   },
   "verdict": {
     "reason": {

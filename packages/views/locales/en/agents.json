@@ -1478,7 +1478,8 @@
       "found": "Found {{shown}} of {{total}}",
       "reset": "Reset",
       "none": "Nothing matches the filters."
-    }
+    },
+    "counted_once": "counted once, shown above"
   },
   "verdict": {
     "reason": {

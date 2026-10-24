@@ -28,7 +28,11 @@ vi.mock("@multica/core/paths", async (importOriginal) => ({
 // The row editor's runtime and model pickers talk to daemons; the screen's
 // wiring is what this test covers.
 vi.mock("../../model-profiles/model-rows-editor", () => ({
-  ModelRowsEditor: ({ rows }: { rows: unknown[] }) => <div data-testid="rows-editor">{rows.length} rows</div>,
+  ModelRowsEditor: ({ rows, baseRows }: { rows: unknown[]; baseRows?: unknown[] }) => (
+    <div data-testid="rows-editor" data-base-rows={baseRows ? baseRows.length : "none"}>
+      {rows.length} rows
+    </div>
+  ),
 }));
 
 import { AgentModels as AgentModelsSection } from "./agent-models";
@@ -194,7 +198,9 @@ describe("AgentModels", () => {
     apiMock.setAgentSingleModel.mockResolvedValue(models({ mode: "single" }));
     renderSection();
     fireEvent.click(await screen.findByRole("radio", { name: /^One model/ }));
-    expect((await screen.findByTestId("rows-editor")).textContent).toBe("1 rows");
+    const editor = await screen.findByTestId("rows-editor");
+    expect(editor.textContent).toBe("1 rows");
+    expect(editor.getAttribute("data-base-rows")).toBe("none");
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(apiMock.setAgentSingleModel).toHaveBeenCalledWith("agent-1", expect.objectContaining({ runtime_id: "rt-1", model: "sol" })));
   });
@@ -239,7 +245,10 @@ describe("AgentModels", () => {
     apiMock.setAgentPersonalProfile.mockResolvedValue(personalModels());
     renderSection();
     fireEvent.click(await screen.findByRole("button", { name: "Edit rows" }));
-    expect((await screen.findByTestId("rows-editor")).textContent).toBe("2 rows");
+    const editor = await screen.findByTestId("rows-editor");
+    expect(editor.textContent).toBe("2 rows");
+    // The editor shows each row next to what the shared profile has there.
+    expect(editor.getAttribute("data-base-rows")).toBe("2");
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(apiMock.setAgentPersonalProfile).toHaveBeenCalledWith("agent-1", expect.objectContaining({ from_profile_id: "p1" })));
   });

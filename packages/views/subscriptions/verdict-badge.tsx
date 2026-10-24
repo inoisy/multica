@@ -19,5 +19,9 @@ export function verdictVariant(verdict: Pick<AvailabilityVerdict, "blocked" | "u
  */
 export function VerdictBadge({ verdict }: { verdict: AvailabilityVerdict }) {
   const availability = useAvailabilityText();
-  return <Badge variant={verdictVariant(verdict)}>{availability.describe(verdict)}</Badge>;
+  return (
+    <Badge variant={verdictVariant(verdict)} className="h-auto min-h-5 max-w-full whitespace-normal break-words text-left">
+      {availability.describe(verdict)}
+    </Badge>
+  );
 }

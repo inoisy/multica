@@ -116,6 +116,22 @@ describe("ModelProfilesPage", () => {
     expect(apiMock.listModelProfiles).toHaveBeenCalledWith("personal");
   });
 
+  it("lists profiles as cards on a phone instead of a table that scrolls sideways", async () => {
+    const width = window.innerWidth;
+    window.innerWidth = 375;
+    try {
+      wrap(<ModelProfilesPage />);
+      const list = await screen.findByTestId("model-profiles-list");
+      expect(screen.queryByTestId("model-profiles-table")).toBeNull();
+      const card = within(list).getByText("Strong").closest("li")!;
+      expect(card.textContent).toContain("codex·sol·high → claude·opus");
+      expect(card.textContent).toContain("differs: rows 1");
+      expect(screen.getByTestId("personal-profiles-list").textContent).toContain("Review");
+    } finally {
+      window.innerWidth = width;
+    }
+  });
+
   it("filters by kind from the address and writes the filter back to it", async () => {
     wrap(<ModelProfilesPage />, "kind=personal");
     await screen.findByTestId("personal-profiles-table");

@@ -41,6 +41,7 @@ import {
   SelectValue,
 } from "@multica/ui/components/ui/select";
 import { cn } from "@multica/ui/lib/utils";
+import { useIsMobile } from "@multica/ui/hooks/use-mobile";
 import { CollectionPageHeader, CollectionPageHeaderAction } from "../layout/collection-page";
 import { SectionTabs } from "../layout/section-tabs";
 import { PAGE_GUTTER } from "../layout/page-header";
@@ -121,6 +122,7 @@ export function ModelProfilesPage() {
   const { role, userId } = useCurrentMember(wsId);
   const canManage = role === "owner" || role === "admin";
   const navigation = useNavigation();
+  const mobile = useIsMobile();
   const kind = parseKind(navigation.searchParams.get("kind"));
   const profiles = useQuery(modelProfileListOptions(wsId, "shared"));
   const personalProfiles = useQuery(modelProfileListOptions(wsId, "personal"));
@@ -200,6 +202,84 @@ export function ModelProfilesPage() {
     { value: EMPTY, label: t(($) => $.model_profiles.from_scratch) },
     ...agents.map((a) => ({ value: a.id, label: a.name })),
   ];
+  const renderRefs = (profile: ModelProfile) => (
+    <>
+      <div>
+        {t(($) => $.model_profiles.refs_agents)}:{" "}
+        {profile.agents.length
+          ? profile.agents.map((a, i) => (
+              <span key={a.id}>
+                {i ? ", " : ""}
+                <AppLink href={paths.agentDetail(a.id)} className="hover:underline">{a.name}</AppLink>
+              </span>
+            ))
+          : "—"}
+      </div>
+      <div>
+        {t(($) => $.model_profiles.refs_issues)}: {renderIssues(profile)}
+      </div>
+      {profile.personal_profiles.length ? (
+        <div className="space-y-1 pt-1" data-testid="personal-of-profile">
+          <div className="text-muted-foreground">{t(($) => $.model_profiles.refs_personal)}</div>
+          {profile.personal_profiles.map((personal) => (
+            <div key={personal.profile_id} className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <AppLink href={paths.agentDetail(personal.agent.id)} className="hover:underline">
+                {personal.agent.name}
+              </AppLink>
+              <ProfileDiffBadge matchesBase={personal.matches_base} diffRows={personal.diff_rows} />
+              {canManage ? <ResetPersonalButton wsId={wsId} agent={personal.agent} baseName={profile.name} /> : null}
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </>
+  );
+  const renderIssues = (profile: ModelProfile) =>
+    profile.open_issues.length
+      ? profile.open_issues.map((issue, i) => (
+          <span key={issue.id}>
+            {i ? ", " : ""}
+            <AppLink href={paths.issueDetail(issue.id)} className="hover:underline">{issue.identifier}</AppLink>
+          </span>
+        ))
+      : "—";
+  const renderActions = (profile: ModelProfile) =>
+    canManage ? (
+      <div className="flex shrink-0 justify-end gap-1">
+        <Button
+          size="icon-sm"
+          variant="ghost"
+          aria-label={t(($) => $.model_profiles.edit, { name: profile.name })}
+          onClick={() => open({ id: profile.id, input: inputOf(profile), fromAgent: "" })}
+        >
+          <Pencil />
+        </Button>
+        <Button
+          size="icon-sm"
+          variant="ghost"
+          aria-label={t(($) => $.model_profiles.delete, { name: profile.name })}
+          disabled={remove.isPending}
+          onClick={() => void del(profile)}
+        >
+          <Trash2 />
+        </Button>
+      </div>
+    ) : null;
+  const renderOwner = (profile: ModelProfile) =>
+    profile.owner_agent ? (
+      <AppLink href={paths.agentDetail(profile.owner_agent.id)} className="break-words font-medium hover:underline">
+        {profile.owner_agent.name}
+      </AppLink>
+    ) : (
+      <span className="font-medium">{profile.name}</span>
+    );
+  const renderPersonalActions = (profile: ModelProfile) =>
+    canManage && profile.owner_agent && profile.based_on ? (
+      <div className="flex shrink-0 justify-end">
+        <ResetPersonalButton wsId={wsId} agent={profile.owner_agent} baseName={profile.based_on.name} />
+      </div>
+    ) : null;
+
   // Editing an existing profile needs the preview first: the save reaches
   // every agent and issue on it.
   const needsPreview = Boolean(editor?.id) && changes === null;
@@ -245,96 +325,57 @@ export function ModelProfilesPage() {
           <p className="text-caption text-muted-foreground">{t(($) => $.model_profiles.empty)}</p>
         ) : null}
         {showShared && list.length > 0 ? (
-          <div className="overflow-x-auto rounded-lg border">
-            <Table className="w-full text-body" data-testid="model-profiles-table">
-              <TableHeader className="text-left text-caption text-muted-foreground">
-                <TableRow className="border-b">
-                  <TableHead className="px-3 py-2 font-medium">{t(($) => $.model_profiles.col_name)}</TableHead>
-                  <TableHead className="px-3 py-2 font-medium">{t(($) => $.model_profiles.col_models)}</TableHead>
-                  <TableHead className="px-3 py-2 font-medium">{t(($) => $.model_profiles.col_exhausted)}</TableHead>
-                  <TableHead className="px-3 py-2 font-medium">{t(($) => $.model_profiles.col_refs)}</TableHead>
-                  <TableHead className="px-3 py-2" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {list.map((profile) => (
-                  <TableRow key={profile.id} className="border-b align-top last:border-b-0">
-                    <TableCell className="px-3 py-2">
-                      <div className="font-medium">{profile.name}</div>
-                      {profile.description ? (
-                        <div className="text-caption text-muted-foreground">{profile.description}</div>
-                      ) : null}
-                    </TableCell>
-                    <TableCell className="px-3 py-2 font-mono text-caption">{compactModelRows(profile.options) || "—"}</TableCell>
-                    <TableCell className="px-3 py-2 text-caption">
-                      {profile.when_exhausted_profile_id ? nameOf(profile.when_exhausted_profile_id) : t(($) => $.model_profiles.exhausted_wait)}
-                    </TableCell>
-                    <TableCell className="space-y-1 px-3 py-2 text-caption">
-                      <div>
-                        {t(($) => $.model_profiles.refs_agents)}:{" "}
-                        {profile.agents.length
-                          ? profile.agents.map((a, i) => (
-                              <span key={a.id}>
-                                {i ? ", " : ""}
-                                <AppLink href={paths.agentDetail(a.id)} className="hover:underline">{a.name}</AppLink>
-                              </span>
-                            ))
-                          : "—"}
-                      </div>
-                      <div>
-                        {t(($) => $.model_profiles.refs_issues)}:{" "}
-                        {profile.open_issues.length
-                          ? profile.open_issues.map((issue, i) => (
-                              <span key={issue.id}>
-                                {i ? ", " : ""}
-                                <AppLink href={paths.issueDetail(issue.id)} className="hover:underline">{issue.identifier}</AppLink>
-                              </span>
-                            ))
-                          : "—"}
-                      </div>
-                      {profile.personal_profiles.length ? (
-                        <div className="space-y-1 pt-1" data-testid="personal-of-profile">
-                          <div className="text-muted-foreground">{t(($) => $.model_profiles.refs_personal)}</div>
-                          {profile.personal_profiles.map((personal) => (
-                            <div key={personal.profile_id} className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                              <AppLink href={paths.agentDetail(personal.agent.id)} className="hover:underline">
-                                {personal.agent.name}
-                              </AppLink>
-                              <ProfileDiffBadge matchesBase={personal.matches_base} diffRows={personal.diff_rows} />
-                              {canManage ? <ResetPersonalButton wsId={wsId} agent={personal.agent} baseName={profile.name} /> : null}
-                            </div>
-                          ))}
-                        </div>
-                      ) : null}
-                    </TableCell>
-                    <TableCell className="px-3 py-2">
-                      {canManage ? (
-                        <div className="flex justify-end gap-1">
-                          <Button
-                            size="icon-sm"
-                            variant="ghost"
-                            aria-label={t(($) => $.model_profiles.edit, { name: profile.name })}
-                            onClick={() => open({ id: profile.id, input: inputOf(profile), fromAgent: "" })}
-                          >
-                            <Pencil />
-                          </Button>
-                          <Button
-                            size="icon-sm"
-                            variant="ghost"
-                            aria-label={t(($) => $.model_profiles.delete, { name: profile.name })}
-                            disabled={remove.isPending}
-                            onClick={() => void del(profile)}
-                          >
-                            <Trash2 />
-                          </Button>
-                        </div>
-                      ) : null}
-                    </TableCell>
+          mobile ? (
+            <ul className="space-y-3" data-testid="model-profiles-list">
+              {list.map((profile) => (
+                <li key={profile.id} className="space-y-2 rounded-lg border p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="break-words font-medium">{profile.name}</div>
+                      {profile.description ? <div className="text-caption text-muted-foreground">{profile.description}</div> : null}
+                    </div>
+                    {renderActions(profile)}
+                  </div>
+                  <p className="break-words font-mono text-caption">{compactModelRows(profile.options) || "—"}</p>
+                  <p className="text-caption text-muted-foreground">
+                    {t(($) => $.model_profiles.col_exhausted)}:{" "}
+                    {profile.when_exhausted_profile_id ? nameOf(profile.when_exhausted_profile_id) : t(($) => $.model_profiles.exhausted_wait)}
+                  </p>
+                  <div className="space-y-1 text-caption">{renderRefs(profile)}</div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="overflow-x-auto rounded-lg border">
+              <Table className="w-full text-body" data-testid="model-profiles-table">
+                <TableHeader className="text-left text-caption text-muted-foreground">
+                  <TableRow className="border-b">
+                    <TableHead className="px-3 py-2 font-medium">{t(($) => $.model_profiles.col_name)}</TableHead>
+                    <TableHead className="px-3 py-2 font-medium">{t(($) => $.model_profiles.col_models)}</TableHead>
+                    <TableHead className="px-3 py-2 font-medium">{t(($) => $.model_profiles.col_exhausted)}</TableHead>
+                    <TableHead className="px-3 py-2 font-medium">{t(($) => $.model_profiles.col_refs)}</TableHead>
+                    <TableHead className="px-3 py-2" />
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+                </TableHeader>
+                <TableBody>
+                  {list.map((profile) => (
+                    <TableRow key={profile.id} className="border-b align-top last:border-b-0">
+                      <TableCell className="px-3 py-2">
+                        <div className="font-medium">{profile.name}</div>
+                        {profile.description ? <div className="text-caption text-muted-foreground">{profile.description}</div> : null}
+                      </TableCell>
+                      <TableCell className="px-3 py-2 font-mono text-caption">{compactModelRows(profile.options) || "—"}</TableCell>
+                      <TableCell className="px-3 py-2 text-caption">
+                        {profile.when_exhausted_profile_id ? nameOf(profile.when_exhausted_profile_id) : t(($) => $.model_profiles.exhausted_wait)}
+                      </TableCell>
+                      <TableCell className="space-y-1 whitespace-normal px-3 py-2 text-caption">{renderRefs(profile)}</TableCell>
+                      <TableCell className="px-3 py-2">{renderActions(profile)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )
         ) : null}
         {showPersonal ? (
           <section className="space-y-2" aria-labelledby="personal-profiles-title">
@@ -346,56 +387,52 @@ export function ModelProfilesPage() {
               <p className="text-caption text-muted-foreground">{t(($) => $.model_profiles.personal_empty)}</p>
             ) : null}
             {personalList.length > 0 ? (
-              <div className="overflow-x-auto rounded-lg border">
-                <Table className="w-full text-body" data-testid="personal-profiles-table">
-                  <TableHeader className="text-left text-caption text-muted-foreground">
-                    <TableRow className="border-b">
-                      <TableHead className="px-3 py-2 font-medium">{t(($) => $.model_profiles.col_agent)}</TableHead>
-                      <TableHead className="px-3 py-2 font-medium">{t(($) => $.model_profiles.col_base)}</TableHead>
-                      <TableHead className="px-3 py-2 font-medium">{t(($) => $.model_profiles.col_models)}</TableHead>
-                      <TableHead className="px-3 py-2 font-medium">{t(($) => $.model_profiles.col_refs)}</TableHead>
-                      <TableHead className="px-3 py-2" />
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {personalList.map((profile) => (
-                      <TableRow key={profile.id} className="border-b align-top last:border-b-0">
-                        <TableCell className="px-3 py-2">
-                          {profile.owner_agent ? (
-                            <AppLink href={paths.agentDetail(profile.owner_agent.id)} className="font-medium hover:underline">
-                              {profile.owner_agent.name}
-                            </AppLink>
-                          ) : (
-                            <span className="font-medium">{profile.name}</span>
-                          )}
-                        </TableCell>
-                        <TableCell className="space-y-1 px-3 py-2 text-caption">
-                          <div>{profile.based_on ? profile.based_on.name : "—"}</div>
-                          <ProfileDiffBadge matchesBase={profile.matches_base} diffRows={profile.diff_rows} />
-                        </TableCell>
-                        <TableCell className="px-3 py-2 font-mono text-caption">{compactModelRows(profile.options) || "—"}</TableCell>
-                        <TableCell className="space-y-1 px-3 py-2 text-caption">
-                          {profile.open_issues.length
-                            ? profile.open_issues.map((issue, i) => (
-                                <span key={issue.id}>
-                                  {i ? ", " : ""}
-                                  <AppLink href={paths.issueDetail(issue.id)} className="hover:underline">{issue.identifier}</AppLink>
-                                </span>
-                              ))
-                            : "—"}
-                        </TableCell>
-                        <TableCell className="px-3 py-2">
-                          {canManage && profile.owner_agent && profile.based_on ? (
-                            <div className="flex justify-end">
-                              <ResetPersonalButton wsId={wsId} agent={profile.owner_agent} baseName={profile.based_on.name} />
-                            </div>
-                          ) : null}
-                        </TableCell>
+              mobile ? (
+                <ul className="space-y-3" data-testid="personal-profiles-list">
+                  {personalList.map((profile) => (
+                    <li key={profile.id} className="space-y-2 rounded-lg border p-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">{renderOwner(profile)}</div>
+                        {renderPersonalActions(profile)}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 text-caption">
+                        <span className="text-muted-foreground">{profile.based_on ? profile.based_on.name : "—"}</span>
+                        <ProfileDiffBadge matchesBase={profile.matches_base} diffRows={profile.diff_rows} />
+                      </div>
+                      <p className="break-words font-mono text-caption">{compactModelRows(profile.options) || "—"}</p>
+                      <div className="text-caption">{renderIssues(profile)}</div>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <div className="overflow-x-auto rounded-lg border">
+                  <Table className="w-full text-body" data-testid="personal-profiles-table">
+                    <TableHeader className="text-left text-caption text-muted-foreground">
+                      <TableRow className="border-b">
+                        <TableHead className="px-3 py-2 font-medium">{t(($) => $.model_profiles.col_agent)}</TableHead>
+                        <TableHead className="px-3 py-2 font-medium">{t(($) => $.model_profiles.col_base)}</TableHead>
+                        <TableHead className="px-3 py-2 font-medium">{t(($) => $.model_profiles.col_models)}</TableHead>
+                        <TableHead className="px-3 py-2 font-medium">{t(($) => $.model_profiles.col_refs)}</TableHead>
+                        <TableHead className="px-3 py-2" />
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+                    </TableHeader>
+                    <TableBody>
+                      {personalList.map((profile) => (
+                        <TableRow key={profile.id} className="border-b align-top last:border-b-0">
+                          <TableCell className="px-3 py-2">{renderOwner(profile)}</TableCell>
+                          <TableCell className="space-y-1 px-3 py-2 text-caption">
+                            <div>{profile.based_on ? profile.based_on.name : "—"}</div>
+                            <ProfileDiffBadge matchesBase={profile.matches_base} diffRows={profile.diff_rows} />
+                          </TableCell>
+                          <TableCell className="px-3 py-2 font-mono text-caption">{compactModelRows(profile.options) || "—"}</TableCell>
+                          <TableCell className="space-y-1 whitespace-normal px-3 py-2 text-caption">{renderIssues(profile)}</TableCell>
+                          <TableCell className="px-3 py-2">{renderPersonalActions(profile)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )
             ) : null}
           </section>
         ) : null}

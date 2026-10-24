@@ -135,7 +135,7 @@ export function PoolEditor({
   const environments = pool.environments;
 
   return (
-    <div className="space-y-4" data-testid="pool-editor" data-revision={pool.revision}>
+    <div className="min-w-0 space-y-4" data-testid="pool-editor" data-revision={pool.revision}>
       <div className="flex flex-wrap items-center gap-2">
         <VerdictBadge verdict={pool.availability} />
         {!pool.availability.usable ? (
@@ -177,7 +177,7 @@ export function PoolEditor({
         disabled={!canManage || busy}
       />
 
-      <fieldset className="space-y-2" disabled={!canManage || busy}>
+      <fieldset className="min-w-0 space-y-2" disabled={!canManage || busy}>
         <legend className="mb-2 text-body font-medium">{t(($) => $.subscriptions.pool.grants_title)}</legend>
         {canManage ? (
           <>
