@@ -157,6 +157,64 @@ mutate durable workspace state and affect future tasks. Ask before changing
 
 ## Project workflows
 
+Manage workflows through the CLI. Commands keep the current workspace and
+task identity; server-side permissions still apply (workflow owner/admin for
+edits, project lead/admin for binding).
+
+```bash
+multica workflow list --output json
+multica workflow get default --output json
+multica workflow get <workflow-id> --definition > ./workflow.json
+multica workflow create --file ./workflow.json --name "Pilot" --output json
+multica workflow update <workflow-id> --file ./workflow.json --dry-run --output json
+multica workflow update <workflow-id> --file ./workflow.json --status-mapping ./mapping.json --output json
+multica workflow update default --description "Workspace process" --output json
+multica project workflow get <project-id> --output json
+multica project workflow set <project-id> --workflow <workflow-id> --dry-run --output json
+multica project workflow set <project-id> --workflow <workflow-id> --status-mapping ./mapping.json --output json
+multica project workflow set <project-id> --default --output json
+multica workflow delete <unused-workflow-id> --output json
+```
+
+`--definition` exports only writable fields (`name`, `description`, `steps`)
+for reuse with `--file`. Files must be inside the current working directory;
+`--allow-external-file` explicitly overrides that guard. `--name` and
+`--description` override file values. An update preserves omitted fields;
+supplying `steps` replaces the entire ordered step list and its handoffs.
+Unknown JSON fields and trailing data are errors.
+
+Example definition (handler IDs must belong to the current workspace):
+
+```json
+{
+  "name": "Pilot",
+  "description": "Development and verification",
+  "steps": [
+    {"status_key": "todo"},
+    {"status_key": "dev", "handler": {"type": "agent", "id": "<agent-id>"}, "instructions": "Implement and pin the commit.", "next_status_key": "qa"},
+    {"status_key": "qa", "handler": {"type": "agent", "id": "<qa-agent-id>"}, "instructions": "Verify the pinned commit.", "next_status_key": "done", "back_status_key": "dev"},
+    {"status_key": "done"},
+    {"status_key": "cancelled"}
+  ]
+}
+```
+
+Use existing workspace status keys, or `new_status` with `name`, `category`
+and optional `color` instead of `status_key` to create a catalog status as
+part of a write. Handlers support `none`, `agent`, `squad`, `member`,
+`project_lead`, `creator` and the fork's `accept` handler. Todo, done and
+cancelled are added by the server when absent. Agent/squad/member handlers
+require their UUID in `id`.
+
+`--dry-run` is supported on workflow **update** and project workflow **set**;
+it validates and returns the server's mapping plan without saving. Creation
+has no preview endpoint and rejects `dry_run` in the file. A mapping file is
+an object such as `{"review":"dev"}`. Applying edits/bindings that remove
+occupied statuses requires mapping every affected status; the server rejects
+incomplete mappings. Administrative remaps do not start runs. Default cannot
+be deleted, and named workflows must be detached from all projects before
+deletion. Returning a project to Default sends `workflow_id: null`.
+
 A project can use a workflow: its ordered status columns, where a column may
 hand the issue off to a handler — a fixed agent, squad or member, the project
 lead, or the issue's creator. When the issue's project uses one, the per-turn
