@@ -101,7 +101,7 @@ func (r *acceptRig) main() string { return r.git(r.origin, "rev-parse", "test/ba
 func (r *acceptRig) accept(commit, branch string) (acceptOutcome, string) {
 	var log bytes.Buffer
 	out := runAcceptance(context.Background(), acceptSpec{
-		Dir: r.work, Repo: r.origin, Commit: commit, Branch: branch, Issue: "STT-1", Log: &log,
+		Dir: r.work, Repo: r.origin, Commit: commit, Branch: branch, Issue: "test-issue", Log: &log,
 		Sleep: func(context.Context, time.Duration) error { return nil },
 	})
 	return out, log.String()
@@ -121,7 +121,7 @@ func TestAcceptMergesExactlyTheCheckedCommit(t *testing.T) {
 	if parent := r.git(r.origin, "rev-parse", "test/base^2"); parent != sha {
 		t.Fatalf("the merge brought %s, not the accepted %s", parent, sha)
 	}
-	if msg := r.git(r.origin, "log", "-1", "--format=%B", "test/base"); !strings.Contains(msg, "Merge t-1-feature into test/base") || !strings.Contains(msg, "STT-1") {
+	if msg := r.git(r.origin, "log", "-1", "--format=%B", "test/base"); !strings.Contains(msg, "Merge t-1-feature into test/base") || !strings.Contains(msg, "test-issue") {
 		t.Fatalf("merge message %q", msg)
 	}
 	if len(out.Checks) != 4 || !out.Checks[2].OK || out.Checks[2].Command != "test -f feature.txt" {
