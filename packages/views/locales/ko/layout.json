@@ -111,5 +111,9 @@
     "modelProfiles": "모델 프로필",
     "runtimes": "런타임",
     "subscriptions": "구독"
+  },
+  "section_tabs_short": {
+    "modelProfiles": "프로필",
+    "runtimes": "런타임"
   }
 }

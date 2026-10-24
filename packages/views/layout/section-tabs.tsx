@@ -41,8 +41,20 @@ export function SectionTabs({ section, current, count }: { section: Section; cur
   const { t } = useT("layout");
   const p = useWorkspacePaths();
   const label = (page: SectionPage) => t(($) => $.section_tabs[page]);
+  // Long names lose to the header's actions at phone width; short ones fit.
+  const text = (page: SectionPage) => {
+    const short = page === "modelProfiles" || page === "runtimes" ? t(($) => $.section_tabs_short[page]) : null;
+    return short ? (
+      <>
+        <span className="sm:hidden">{short}</span>
+        <span className="hidden sm:inline">{label(page)}</span>
+      </>
+    ) : (
+      label(page)
+    );
+  };
   return (
-    <nav aria-label={label(SECTION_PAGES[section][0]!)} className="min-w-0">
+    <nav aria-label={label(SECTION_PAGES[section][0]!)} className="min-w-0 shrink-0">
       <div className="inline-flex max-w-full items-center gap-0.5 overflow-x-auto rounded-lg bg-muted p-0.5">
         {SECTION_PAGES[section].map((page) => {
           const active = page === current;
@@ -52,8 +64,8 @@ export function SectionTabs({ section, current, count }: { section: Section; cur
           );
           if (active) {
             return (
-              <h1 key={page} aria-current="page" className={className}>
-                {label(page)}
+              <h1 key={page} aria-current="page" aria-label={label(page)} className={className}>
+                {text(page)}
                 {typeof count === "number" && count > 0 ? (
                   <span className="font-mono text-caption font-normal tabular-nums text-muted-foreground">{count}</span>
                 ) : null}
@@ -61,8 +73,8 @@ export function SectionTabs({ section, current, count }: { section: Section; cur
             );
           }
           return (
-            <AppLink key={page} href={p[page]()} className={className}>
-              {label(page)}
+            <AppLink key={page} href={p[page]()} className={className} aria-label={label(page)}>
+              {text(page)}
             </AppLink>
           );
         })}

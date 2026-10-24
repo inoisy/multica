@@ -27,7 +27,8 @@ describe("SectionTabs", () => {
 
   it("shows the current page's count only", () => {
     renderWithI18n(<SectionTabs section="runtimes" current="runtimes" count={3} />);
-    expect(screen.getByRole("heading")).toHaveTextContent("Runtimes3");
+    const heading = screen.getByRole("heading", { name: "Runtimes" });
+    expect(heading).toHaveTextContent("3");
     expect(screen.getByRole("link", { name: "Subscriptions" })).toHaveAttribute("href", "/acme/subscriptions");
   });
 });
