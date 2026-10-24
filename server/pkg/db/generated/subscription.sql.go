@@ -18,7 +18,7 @@ INSERT INTO runtime_profile (
     subscriptions, spend_order, share_key, all_workspaces
 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 ON CONFLICT DO NOTHING
-RETURNING id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, subscriptions, spend_order, share_key, all_workspaces
+RETURNING id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, subscriptions, spend_order, share_key, all_workspaces, pool_id
 `
 
 type CreateSharedRuntimeProfileParams struct {
@@ -74,6 +74,7 @@ func (q *Queries) CreateSharedRuntimeProfile(ctx context.Context, arg CreateShar
 		&i.SpendOrder,
 		&i.ShareKey,
 		&i.AllWorkspaces,
+		&i.PoolID,
 	)
 	return i, err
 }
@@ -185,7 +186,7 @@ const deleteRuntimeLocalRefusals = `-- name: DeleteRuntimeLocalRefusals :many
 DELETE FROM runtime_unavailable
 WHERE runtime_id = $1 AND task_id IS NOT NULL
   AND (strpos(reason, $2::text) > 0 OR strpos(reason, $3::text) > 0)
-RETURNING id, workspace_id, runtime_id, until, reason, task_id, created_at
+RETURNING id, workspace_id, runtime_id, until, reason, task_id, created_at, reason_code, subscription_id
 `
 
 type DeleteRuntimeLocalRefusalsParams struct {
@@ -214,6 +215,8 @@ func (q *Queries) DeleteRuntimeLocalRefusals(ctx context.Context, arg DeleteRunt
 			&i.Reason,
 			&i.TaskID,
 			&i.CreatedAt,
+			&i.ReasonCode,
+			&i.SubscriptionID,
 		); err != nil {
 			return nil, err
 		}
@@ -398,7 +401,7 @@ func (q *Queries) ListAllWorkspaceIDs(ctx context.Context) ([]pgtype.UUID, error
 }
 
 const listAllWorkspaceRuntimeProfiles = `-- name: ListAllWorkspaceRuntimeProfiles :many
-SELECT DISTINCT ON (share_key) id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, subscriptions, spend_order, share_key, all_workspaces FROM runtime_profile
+SELECT DISTINCT ON (share_key) id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, subscriptions, spend_order, share_key, all_workspaces, pool_id FROM runtime_profile
 WHERE all_workspaces = true AND share_key IS NOT NULL
 ORDER BY share_key, created_at ASC
 `
@@ -431,6 +434,7 @@ func (q *Queries) ListAllWorkspaceRuntimeProfiles(ctx context.Context) ([]Runtim
 			&i.SpendOrder,
 			&i.ShareKey,
 			&i.AllWorkspaces,
+			&i.PoolID,
 		); err != nil {
 			return nil, err
 		}
@@ -443,7 +447,7 @@ func (q *Queries) ListAllWorkspaceRuntimeProfiles(ctx context.Context) ([]Runtim
 }
 
 const listEnabledRuntimeProfilesWithSubscriptionsForWorkspace = `-- name: ListEnabledRuntimeProfilesWithSubscriptionsForWorkspace :many
-SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, subscriptions, spend_order, share_key, all_workspaces FROM runtime_profile
+SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, subscriptions, spend_order, share_key, all_workspaces, pool_id FROM runtime_profile
 WHERE workspace_id = $1 AND enabled = true AND jsonb_array_length(subscriptions) > 0
 ORDER BY created_at
 `
@@ -475,6 +479,7 @@ func (q *Queries) ListEnabledRuntimeProfilesWithSubscriptionsForWorkspace(ctx co
 			&i.SpendOrder,
 			&i.ShareKey,
 			&i.AllWorkspaces,
+			&i.PoolID,
 		); err != nil {
 			return nil, err
 		}
@@ -523,7 +528,7 @@ func (q *Queries) ListLatestSubscriptionUsage(ctx context.Context) ([]Subscripti
 }
 
 const listRuntimeProfilesByShareKey = `-- name: ListRuntimeProfilesByShareKey :many
-SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, subscriptions, spend_order, share_key, all_workspaces FROM runtime_profile
+SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, subscriptions, spend_order, share_key, all_workspaces, pool_id FROM runtime_profile
 WHERE share_key = $1
 ORDER BY created_at ASC
 `
@@ -555,6 +560,7 @@ func (q *Queries) ListRuntimeProfilesByShareKey(ctx context.Context, shareKey pg
 			&i.SpendOrder,
 			&i.ShareKey,
 			&i.AllWorkspaces,
+			&i.PoolID,
 		); err != nil {
 			return nil, err
 		}
@@ -567,7 +573,7 @@ func (q *Queries) ListRuntimeProfilesByShareKey(ctx context.Context, shareKey pg
 }
 
 const listRuntimeProfilesUsingSubscription = `-- name: ListRuntimeProfilesUsingSubscription :many
-SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, subscriptions, spend_order, share_key, all_workspaces FROM runtime_profile
+SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, subscriptions, spend_order, share_key, all_workspaces, pool_id FROM runtime_profile
 WHERE subscriptions ? $1::text
 ORDER BY workspace_id, created_at
 `
@@ -601,6 +607,7 @@ func (q *Queries) ListRuntimeProfilesUsingSubscription(ctx context.Context, key 
 			&i.SpendOrder,
 			&i.ShareKey,
 			&i.AllWorkspaces,
+			&i.PoolID,
 		); err != nil {
 			return nil, err
 		}
@@ -613,7 +620,7 @@ func (q *Queries) ListRuntimeProfilesUsingSubscription(ctx context.Context, key 
 }
 
 const listRuntimeProfilesWithSubscriptions = `-- name: ListRuntimeProfilesWithSubscriptions :many
-SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, subscriptions, spend_order, share_key, all_workspaces FROM runtime_profile
+SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, subscriptions, spend_order, share_key, all_workspaces, pool_id FROM runtime_profile
 WHERE jsonb_array_length(subscriptions) > 0
 ORDER BY workspace_id, created_at
 `
@@ -645,6 +652,7 @@ func (q *Queries) ListRuntimeProfilesWithSubscriptions(ctx context.Context) ([]R
 			&i.SpendOrder,
 			&i.ShareKey,
 			&i.AllWorkspaces,
+			&i.PoolID,
 		); err != nil {
 			return nil, err
 		}
@@ -657,7 +665,7 @@ func (q *Queries) ListRuntimeProfilesWithSubscriptions(ctx context.Context) ([]R
 }
 
 const listSharedRuntimeProfiles = `-- name: ListSharedRuntimeProfiles :many
-SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, subscriptions, spend_order, share_key, all_workspaces FROM runtime_profile
+SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, subscriptions, spend_order, share_key, all_workspaces, pool_id FROM runtime_profile
 WHERE share_key IS NOT NULL
 ORDER BY workspace_id, created_at
 `
@@ -690,6 +698,7 @@ func (q *Queries) ListSharedRuntimeProfiles(ctx context.Context) ([]RuntimeProfi
 			&i.SpendOrder,
 			&i.ShareKey,
 			&i.AllWorkspaces,
+			&i.PoolID,
 		); err != nil {
 			return nil, err
 		}
@@ -873,7 +882,7 @@ SET subscriptions = COALESCE((
     ), '[]'::jsonb),
     updated_at = now()
 WHERE subscriptions ? $1::text
-RETURNING id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, subscriptions, spend_order, share_key, all_workspaces
+RETURNING id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, subscriptions, spend_order, share_key, all_workspaces, pool_id
 `
 
 // Drops one key from every profile's ordered list, keeping the order of the rest.
@@ -904,6 +913,7 @@ func (q *Queries) RemoveSubscriptionFromRuntimeProfiles(ctx context.Context, key
 			&i.SpendOrder,
 			&i.ShareKey,
 			&i.AllWorkspaces,
+			&i.PoolID,
 		); err != nil {
 			return nil, err
 		}
@@ -921,7 +931,7 @@ SET share_key      = COALESCE(share_key, $1::text),
     all_workspaces = $2::bool,
     updated_at     = now()
 WHERE id = $3
-RETURNING id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, subscriptions, spend_order, share_key, all_workspaces
+RETURNING id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, subscriptions, spend_order, share_key, all_workspaces, pool_id
 `
 
 type SetRuntimeProfileSharingParams struct {
@@ -953,6 +963,7 @@ func (q *Queries) SetRuntimeProfileSharing(ctx context.Context, arg SetRuntimePr
 		&i.SpendOrder,
 		&i.ShareKey,
 		&i.AllWorkspaces,
+		&i.PoolID,
 	)
 	return i, err
 }
@@ -964,7 +975,7 @@ SET subscriptions = $1::jsonb,
     updated_at    = now()
 WHERE rp.id = $3
    OR ($4::text <> '' AND rp.share_key = $4::text)
-RETURNING id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, subscriptions, spend_order, share_key, all_workspaces
+RETURNING id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, subscriptions, spend_order, share_key, all_workspaces, pool_id
 `
 
 type SetRuntimeProfileSubscriptionsParams struct {
@@ -1008,6 +1019,7 @@ func (q *Queries) SetRuntimeProfileSubscriptions(ctx context.Context, arg SetRun
 			&i.SpendOrder,
 			&i.ShareKey,
 			&i.AllWorkspaces,
+			&i.PoolID,
 		); err != nil {
 			return nil, err
 		}
@@ -1035,7 +1047,7 @@ WHERE src.id = $1
   AND src.share_key IS NOT NULL
   AND rp.share_key = src.share_key
   AND rp.id <> src.id
-RETURNING rp.id, rp.workspace_id, rp.display_name, rp.protocol_family, rp.command_name, rp.description, rp.fixed_args, rp.visibility, rp.created_by, rp.enabled, rp.created_at, rp.updated_at, rp.runtime_type, rp.subscriptions, rp.spend_order, rp.share_key, rp.all_workspaces
+RETURNING rp.id, rp.workspace_id, rp.display_name, rp.protocol_family, rp.command_name, rp.description, rp.fixed_args, rp.visibility, rp.created_by, rp.enabled, rp.created_at, rp.updated_at, rp.runtime_type, rp.subscriptions, rp.spend_order, rp.share_key, rp.all_workspaces, rp.pool_id
 `
 
 // Copies the editable fields of one profile onto every other copy with the
@@ -1067,6 +1079,7 @@ func (q *Queries) SyncRuntimeProfileCopies(ctx context.Context, id pgtype.UUID) 
 			&i.SpendOrder,
 			&i.ShareKey,
 			&i.AllWorkspaces,
+			&i.PoolID,
 		); err != nil {
 			return nil, err
 		}

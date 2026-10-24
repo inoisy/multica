@@ -195,6 +195,8 @@ type AgentTaskQueue struct {
 	ModelPosition             pgtype.Int4 `json:"model_position"`
 	ModelChoice               []byte      `json:"model_choice"`
 	WorkflowStep              pgtype.Text `json:"workflow_step"`
+	AccountFact               []byte      `json:"account_fact"`
+	AccountOffer              []byte      `json:"account_offer"`
 }
 
 type AgentToLabel struct {
@@ -1309,6 +1311,8 @@ type ModelProfile struct {
 	CreatedBy              pgtype.UUID        `json:"created_by"`
 	CreatedAt              pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
+	OwnerAgentID           pgtype.UUID        `json:"owner_agent_id"`
+	BasedOnProfileID       pgtype.UUID        `json:"based_on_profile_id"`
 }
 
 type ModelProfileOption struct {
@@ -1517,16 +1521,19 @@ type RuntimeProfile struct {
 	SpendOrder     string             `json:"spend_order"`
 	ShareKey       pgtype.Text        `json:"share_key"`
 	AllWorkspaces  bool               `json:"all_workspaces"`
+	PoolID         pgtype.UUID        `json:"pool_id"`
 }
 
 type RuntimeUnavailable struct {
-	ID          pgtype.UUID        `json:"id"`
-	WorkspaceID pgtype.UUID        `json:"workspace_id"`
-	RuntimeID   pgtype.UUID        `json:"runtime_id"`
-	Until       pgtype.Timestamptz `json:"until"`
-	Reason      string             `json:"reason"`
-	TaskID      pgtype.UUID        `json:"task_id"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	ID             pgtype.UUID        `json:"id"`
+	WorkspaceID    pgtype.UUID        `json:"workspace_id"`
+	RuntimeID      pgtype.UUID        `json:"runtime_id"`
+	Until          pgtype.Timestamptz `json:"until"`
+	Reason         string             `json:"reason"`
+	TaskID         pgtype.UUID        `json:"task_id"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	ReasonCode     string             `json:"reason_code"`
+	SubscriptionID pgtype.UUID        `json:"subscription_id"`
 }
 
 type SearchIndexChange struct {
@@ -1642,6 +1649,39 @@ type SubscriptionHostState struct {
 	CredentialState string             `json:"credential_state"`
 	Error           string             `json:"error"`
 	CheckedAt       pgtype.Timestamptz `json:"checked_at"`
+}
+
+type SubscriptionLimitBackup struct {
+	ID      pgtype.UUID        `json:"id"`
+	Caps    []byte             `json:"caps"`
+	Reserve int32              `json:"reserve"`
+	SavedAt pgtype.Timestamptz `json:"saved_at"`
+}
+
+type SubscriptionPool struct {
+	ID             pgtype.UUID        `json:"id"`
+	Name           string             `json:"name"`
+	RuntimeType    string             `json:"runtime_type"`
+	Description    string             `json:"description"`
+	SpendOrder     string             `json:"spend_order"`
+	AllWorkspaces  bool               `json:"all_workspaces"`
+	Revision       int32              `json:"revision"`
+	LegacyShareKey pgtype.Text        `json:"legacy_share_key"`
+	CreatedBy      pgtype.UUID        `json:"created_by"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
+type SubscriptionPoolGrant struct {
+	PoolID      pgtype.UUID        `json:"pool_id"`
+	WorkspaceID pgtype.UUID        `json:"workspace_id"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
+type SubscriptionPoolMember struct {
+	PoolID         pgtype.UUID `json:"pool_id"`
+	SubscriptionID pgtype.UUID `json:"subscription_id"`
+	Position       int32       `json:"position"`
 }
 
 type SubscriptionUsage struct {
