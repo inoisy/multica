@@ -645,7 +645,7 @@ export function BriefPreviewDialog({
   const { t } = useT("issues");
   const wsId = useWorkspaceId();
   const labelOf = useStatusLabel(wsId);
-  const { data: brief, isPending } = useQuery({
+  const { data: brief, isPending, error } = useQuery({
     queryKey: ["issue-workflows", wsId, "brief-preview", workflowId, projectId ?? "", JSON.stringify(step)],
     queryFn: () =>
       api.previewWorkflowBrief(workflowId, {
@@ -665,7 +665,13 @@ export function BriefPreviewDialog({
           <DialogTitle>{t(($) => $.workflows.editor.preview_title, { status: labelOf(step.status_key) })}</DialogTitle>
           <DialogDescription>{t(($) => $.workflows.editor.preview_description)}</DialogDescription>
         </DialogHeader>
-        <BriefBlock brief={brief} loading={isPending} />
+        {error ? (
+          <p role="alert" className="text-body text-destructive">
+            {clientErrorMessage(error) ?? t(($) => $.workflows.editor.preview_error)}
+          </p>
+        ) : (
+          <BriefBlock brief={brief} loading={isPending} />
+        )}
       </DialogContent>
     </Dialog>
   );

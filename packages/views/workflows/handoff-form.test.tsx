@@ -8,11 +8,11 @@ import { agentListOptions, memberListOptions } from "@multica/core/workspace/que
 import { projectListOptions } from "@multica/core/projects/queries";
 import type { IssueWorkflow, IssueWorkflowStep } from "@multica/core/types";
 import { renderWithI18n } from "../test/i18n";
-import { HandoffFields, WorkflowHandoffForm } from "./handoff-form";
+import { BriefPreviewDialog, HandoffFields, WorkflowHandoffForm } from "./handoff-form";
 
-const { mutateAsync } = vi.hoisted(() => ({ mutateAsync: vi.fn() }));
+const { mutateAsync, previewWorkflowBrief } = vi.hoisted(() => ({ mutateAsync: vi.fn(), previewWorkflowBrief: vi.fn() }));
 
-vi.mock("@multica/core/api", () => ({ api: {}, clientErrorMessage: () => null }));
+vi.mock("@multica/core/api", () => ({ api: { previewWorkflowBrief }, clientErrorMessage: () => null }));
 vi.mock("@multica/core/issue-workflows", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@multica/core/issue-workflows")>()),
   useSetWorkflowHandoff: () => ({ mutateAsync, isPending: false }),
@@ -186,5 +186,24 @@ describe("WorkflowHandoffForm", () => {
 
     await vi.waitFor(() => expect(mutateAsync).toHaveBeenCalled());
     expect(mutateAsync.mock.calls[0]![0].copyForProjectId).toBeUndefined();
+  });
+});
+
+describe("BriefPreviewDialog", () => {
+  it("says the brief could not load instead of showing an empty block", async () => {
+    previewWorkflowBrief.mockRejectedValueOnce(new Error("an online acceptance runtime is required"));
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    renderWithI18n(
+      <QueryClientProvider client={qc}>
+        <BriefPreviewDialog
+          open
+          onOpenChange={() => {}}
+          workflowId="wf-1"
+          step={{ status_key: "in_review", handler: { type: "accept" }, instructions: "" }}
+        />
+      </QueryClientProvider>,
+    );
+
+    expect((await screen.findByRole("alert")).textContent).toContain("Couldn't load the brief");
   });
 });

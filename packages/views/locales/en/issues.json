@@ -1581,6 +1581,7 @@
       "preview_brief": "Preview the agent’s brief",
       "preview_title": "Brief for the “{{status}}” step",
       "preview_description": "What the handler’s run receives when an issue enters this step. Saved changes are not required to preview.",
+      "preview_error": "Couldn't load the brief. Check the step's handler and try again.",
       "description_placeholder": "Add a description",
       "select_step": "Select a column to set who it hands issues to.",
       "unsaved": "Unsaved changes",
