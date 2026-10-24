@@ -183,9 +183,14 @@ export function CustomPagesSettingsTab() {
       title={t(($) => $.custom_pages.title)}
       description={t(($) => $.custom_pages.description)}
       scope="workspace"
-      actions={<CustomPagesActions state={state} />}
     >
-      <CustomPagesBody state={state} />
+      <div className="space-y-4">
+        {/* Two buttons beside the title would squeeze the description on narrow screens. */}
+        <div className="flex justify-end">
+          <CustomPagesActions state={state} />
+        </div>
+        <CustomPagesBody state={state} />
+      </div>
     </SettingsTab>
   );
 }
