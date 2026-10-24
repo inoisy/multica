@@ -361,16 +361,19 @@ export type { IssueWakeup, IssueWakeupInput, SystemWakeup, WorkspaceSystemWakeup
 
 export type { WorkspaceWakeup, WorkspaceWakeupPage, WorkspaceWakeupFilters, WakeupScope } from "./issue-wakeup";
 export type {
-  AgentModelChoiceEntry, AgentModels, CreateModelProfileInput, IssueModelProfile, ModelChoice, ModelChoiceReason, ModelChoiceSource,
-  ModelOption, ModelOptionInput, ModelProfile, ModelProfileChange, ModelProfileInput, ModelRef,
-  ModelRowState, ModelRowStateName, RuntimeUnavailable, UpdateAgentModelsInput,
+  AccountFact, AgentModelChoiceEntry, AgentModelMode, AgentModels, CreateModelProfileInput, CreatePersonalProfileInput,
+  IssueModelProfile, KnownReasonCode, ModelChoice, ModelChoiceReason, ModelChoiceSource,
+  ModelOption, ModelOptionInput, ModelProfile, ModelProfileChange, ModelProfileInput, ModelProfileKind, ModelRef,
+  ModelRowState, ModelRowStateName, PersonalProfileRef, ReasonCode, RuntimeUnavailable, SetPersonalProfileInput,
+  SingleModelInput, UpdateAgentModelsInput,
 } from "./model-profile";
+export { AGENT_MODEL_MODES, REASON_CODES } from "./model-profile";
 export type { IssueStageDispatch, StageDispatchEpic } from "./stage-dispatch";
 export type { IssueRoute } from "./issue";
 export type {
-  CreateRuntimePoolInput, CreateRuntimePoolResult, CreateSubscriptionInput, DeleteSubscriptionResult,
-  RuntimeProfileSubscriptions, SpendOrder, StartSubscriptionLoginInput, Subscription, SubscriptionAuth,
+  AvailabilityVerdict, CreatePoolInput, CreateSubscriptionInput, DeleteSubscriptionResult, Pool, PoolAccount,
+  PoolEnvironment, PoolList, PoolRevisionConflict, RuntimeProfileSubscriptions, SetPoolGrantsInput, UpdatePoolInput, SpendOrder, StartSubscriptionLoginInput, Subscription, SubscriptionAuth,
   SubscriptionCredentialState, SubscriptionDiscrepancy, SubscriptionDiscrepancyKind, SubscriptionFamily,
   SubscriptionHost, SubscriptionList, SubscriptionLoginSession, SubscriptionLoginSessionState, SubscriptionLoginState,
-  SubscriptionUsage, SubscriptionUser, UpdateRuntimeProfileSubscriptionsInput, UpdateSubscriptionInput,
+  SubscriptionUsage, SubscriptionUser, UpdateSubscriptionInput,
 } from "./subscription";

@@ -2,12 +2,13 @@ import type { ZodType } from "zod";
 import { AgentRuntimeSchema, EMPTY_RUNTIME } from "../runtimes/schema";
 import type { IssueWakeup, IssueWakeupInput, IssueWakeupSummaryRow, PausedWakeup, SystemWakeup, WakeupRun, WorkspaceSystemWakeup } from "../types/issue-wakeup";
 import type { WorkspaceWakeupPage, WorkspaceWakeupFilters } from "../types/issue-wakeup";
-import type { AgentModels, CreateModelProfileInput, IssueModelProfile, ModelProfile, ModelProfileChange, ModelProfileInput, RuntimeUnavailable, UpdateAgentModelsInput } from "../types/model-profile";
+import type { AgentModels, CreateModelProfileInput, CreatePersonalProfileInput, IssueModelProfile, ModelProfile, ModelProfileChange, ModelProfileInput, ModelProfileKind, RuntimeUnavailable, SetPersonalProfileInput, SingleModelInput, UpdateAgentModelsInput } from "../types/model-profile";
 import { AgentModelsSchema, IssueModelProfileSchema, ModelProfilePreviewSchema, ModelProfileSchema, RuntimeUnavailableSchema } from "./schemas";
 import { IssueStageDispatchSchema, StageDispatchListSchema } from "./schemas";
 import {
-  CreateRuntimePoolResultSchema,
   DeleteSubscriptionResultSchema,
+  PoolListSchema,
+  PoolSchema,
   RuntimeProfileSubscriptionsSchema,
   SubscriptionDiscrepancyListSchema,
   SubscriptionListSchema,
@@ -15,17 +16,19 @@ import {
   SubscriptionSchema,
 } from "./schemas";
 import type {
-  CreateRuntimePoolInput,
-  CreateRuntimePoolResult,
+  CreatePoolInput,
   CreateSubscriptionInput,
   DeleteSubscriptionResult,
+  Pool,
+  PoolList,
   RuntimeProfileSubscriptions,
+  SetPoolGrantsInput,
+  UpdatePoolInput,
   StartSubscriptionLoginInput,
   Subscription,
   SubscriptionDiscrepancy,
   SubscriptionList,
   SubscriptionLoginSession,
-  UpdateRuntimeProfileSubscriptionsInput,
   UpdateSubscriptionInput,
 } from "../types/subscription";
 import type { IssueStageDispatch, StageDispatchEpic } from "../types/stage-dispatch";
@@ -1363,8 +1366,9 @@ export class ApiClient {
 
   // Model profiles and agent model lists. The server chooses a run's model
   // from these at every claim; edits apply from the next run.
-  async listModelProfiles(): Promise<ModelProfile[]> {
-    const raw = await this.fetch<unknown>("/api/model-profiles");
+  /** Shared profiles by default; `personal` lists the agents' personal profiles, `all` both. */
+  async listModelProfiles(kind: ModelProfileKind = "shared"): Promise<ModelProfile[]> {
+    const raw = await this.fetch<unknown>(kind === "shared" ? "/api/model-profiles" : `/api/model-profiles?kind=${kind}`);
     const parsed = parseWithFallback<ModelProfile[] | null>(raw, ModelProfileSchema.array(), null, { endpoint: "GET /api/model-profiles" });
     if (!parsed) throw new Error("Could not load model profiles");
     return parsed;
@@ -1411,6 +1415,35 @@ export class ApiClient {
     const parsed = parseWithFallback<AgentModels | null>(raw, AgentModelsSchema, null, { endpoint: "PUT /api/agents/:id/models" });
     if (!parsed) throw new Error("Could not read the agent's models");
     return parsed;
+  }
+
+  private async sendAgentModels(agentId: string, path: string, method: "POST" | "PUT" | "DELETE", body?: unknown): Promise<AgentModels> {
+    const endpoint = `${method} /api/agents/:id/models${path}`;
+    const raw = await this.fetch<unknown>(`/api/agents/${encodeURIComponent(agentId)}/models${path}`, {
+      method,
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+    const parsed = parseWithFallback<AgentModels | null>(raw, AgentModelsSchema, null, { endpoint });
+    if (!parsed) throw new Error("Could not read the agent's models");
+    return parsed;
+  }
+
+  /** Copies a shared profile into the agent's personal profile, which the agent then runs from. */
+  createAgentPersonalProfile(agentId: string, input: CreatePersonalProfileInput = {}): Promise<AgentModels> {
+    return this.sendAgentModels(agentId, "/personal", "POST", input);
+  }
+
+  setAgentPersonalProfile(agentId: string, input: SetPersonalProfileInput): Promise<AgentModels> {
+    return this.sendAgentModels(agentId, "/personal", "PUT", input);
+  }
+
+  /** Back to the shared profile the personal one was made from; the personal profile is deleted. */
+  resetAgentPersonalProfile(agentId: string): Promise<AgentModels> {
+    return this.sendAgentModels(agentId, "/personal", "DELETE");
+  }
+
+  setAgentSingleModel(agentId: string, input: SingleModelInput): Promise<AgentModels> {
+    return this.sendAgentModels(agentId, "/single", "PUT", input);
   }
 
   /** The epic's stage dispatch; a backend without it reads as off. */
@@ -2736,13 +2769,43 @@ export class ApiClient {
     await this.fetch(`/api/subscriptions/${encodeURIComponent(key)}/login`, { method: "DELETE" });
   }
 
-  async createRuntimePool(input: CreateRuntimePoolInput): Promise<CreateRuntimePoolResult> {
-    const raw = await this.fetch<unknown>("/api/runtime-pools", { method: "POST", body: JSON.stringify(input) });
-    const parsed = parseWithFallback<CreateRuntimePoolResult | null>(raw, CreateRuntimePoolResultSchema, null, {
-      endpoint: "POST /api/runtime-pools",
-    });
-    if (!parsed) throw new Error("Could not read the new runtime");
+  // -------------------------------------------------------------------
+  // Pools of accounts: the order the accounts are spent in and the
+  // workspaces that have an environment on them. A write carries the
+  // revision the editor read; a pool that moved on answers 409
+  // `pool_revision_conflict` with `current_revision`.
+  // -------------------------------------------------------------------
+
+  async listPools(): Promise<PoolList> {
+    const raw = await this.fetch<unknown>("/api/pools");
+    const parsed = parseWithFallback<PoolList | null>(raw, PoolListSchema, null, { endpoint: "GET /api/pools" });
+    if (!parsed) throw new Error("Could not load pools");
     return parsed;
+  }
+
+  private parsePool(raw: unknown, endpoint: string): Pool {
+    const parsed = parseWithFallback<Pool | null>(raw, PoolSchema, null, { endpoint });
+    if (!parsed) throw new Error("Could not read the pool");
+    return parsed;
+  }
+
+  async createPool(input: CreatePoolInput): Promise<Pool> {
+    const raw = await this.fetch<unknown>("/api/pools", { method: "POST", body: JSON.stringify(input) });
+    return this.parsePool(raw, "POST /api/pools");
+  }
+
+  async updatePool(id: string, input: UpdatePoolInput): Promise<Pool> {
+    const raw = await this.fetch<unknown>(`/api/pools/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(input) });
+    return this.parsePool(raw, "PATCH /api/pools/:id");
+  }
+
+  async setPoolGrants(id: string, input: SetPoolGrantsInput): Promise<Pool> {
+    const raw = await this.fetch<unknown>(`/api/pools/${encodeURIComponent(id)}/grants`, { method: "PUT", body: JSON.stringify(input) });
+    return this.parsePool(raw, "PUT /api/pools/:id/grants");
+  }
+
+  async deletePool(id: string): Promise<void> {
+    await this.fetch(`/api/pools/${encodeURIComponent(id)}`, { method: "DELETE" });
   }
 
   private parseProfileSubscriptions(raw: unknown, endpoint: string): RuntimeProfileSubscriptions {
@@ -2761,19 +2824,6 @@ export class ApiClient {
       `/api/workspaces/${workspaceId}/runtime-profiles/${encodeURIComponent(profileId)}/subscriptions`,
     );
     return this.parseProfileSubscriptions(raw, "GET /api/workspaces/:ws/runtime-profiles/:id/subscriptions");
-  }
-
-  /** Changes every copy of the pool (same share_key) in every workspace. */
-  async updateRuntimeProfileSubscriptions(
-    workspaceId: string,
-    profileId: string,
-    input: UpdateRuntimeProfileSubscriptionsInput,
-  ): Promise<RuntimeProfileSubscriptions> {
-    const raw = await this.fetch<unknown>(
-      `/api/workspaces/${workspaceId}/runtime-profiles/${encodeURIComponent(profileId)}/subscriptions`,
-      { method: "PUT", body: JSON.stringify(input) },
-    );
-    return this.parseProfileSubscriptions(raw, "PUT /api/workspaces/:ws/runtime-profiles/:id/subscriptions");
   }
 
   async getRuntimeUsage(
