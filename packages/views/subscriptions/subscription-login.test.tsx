@@ -19,7 +19,7 @@ import { SubscriptionLoginStatus } from "./subscription-login";
 function sub(extra: Partial<Subscription>): Subscription {
   return {
     id: "s1", key: "acc-a", provider: "claude", family: "claude", title: "Plan A", owner_note: "", auth: "claude_oauth",
-    credential_path: "", windows: [], caps: {}, reserve: 0, effective_caps: {}, account_group: "", disabled_until: null,
+    credential_path: "", windows: [], caps: {}, effective_caps: {}, account_group: "", disabled_until: null,
     disabled: false, usage: [], used_by: [], hosts: [], login_state: "unchecked", login: null, created_at: "", updated_at: "",
     ...extra,
   };
