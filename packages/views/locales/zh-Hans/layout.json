@@ -12,10 +12,10 @@
     "runtimes": "运行时",
     "skills": "Skills",
     "settings": "设置",
-    "conveyor": "Conveyor",
+    "conveyor": "史诗",
     "subscriptions": "Subscriptions",
     "pages": "Pages",
-    "model_profiles": "Profiles"
+    "model_profiles": "模型配置"
   },
   "tab": {
     "issue": "任务",
@@ -103,5 +103,13 @@
     "opens_in_tab": "This page opens in a new tab.",
     "open_named": "Open “{{title}}”",
     "add_page": "Add page"
+  },
+  "section_tabs": {
+    "issues": "任务",
+    "conveyor": "史诗",
+    "agents": "智能体",
+    "modelProfiles": "模型配置",
+    "runtimes": "运行时",
+    "subscriptions": "订阅"
   }
 }

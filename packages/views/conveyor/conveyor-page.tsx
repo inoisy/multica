@@ -32,6 +32,7 @@ import {
 import { Textarea } from "@multica/ui/components/ui/textarea";
 import { cn } from "@multica/ui/lib/utils";
 import { CollectionPageHeader } from "../layout/collection-page";
+import { SectionTabs } from "../layout/section-tabs";
 import { PAGE_GUTTER } from "../layout/page-header";
 import { AppLink } from "../navigation";
 import { useT } from "../i18n";
@@ -227,6 +228,7 @@ export function ConveyorPage() {
       <CollectionPageHeader
         icon={Workflow}
         title={t(($) => $.conveyor.title)}
+        tabs={<SectionTabs section="issues" current="conveyor" />}
         actions={
           <Button variant="ghost" size="icon-sm" aria-label={t(($) => $.conveyor.refresh)} onClick={refresh} disabled={fetching}>
             <RefreshCw className={fetching ? "animate-spin" : undefined} />

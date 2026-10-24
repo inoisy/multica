@@ -411,7 +411,8 @@
       "code": "코드",
       "channels": "메신저",
       "apps": "연결된 앱",
-      "workflows": "워크플로"
+      "workflows": "워크플로",
+      "pages": "페이지"
     },
     "groups": {
       "personal": "개인",

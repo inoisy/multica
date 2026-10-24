@@ -12,10 +12,10 @@
     "runtimes": "ランタイム",
     "skills": "スキル",
     "settings": "設定",
-    "conveyor": "Conveyor",
+    "conveyor": "エピック",
     "subscriptions": "Subscriptions",
     "pages": "Pages",
-    "model_profiles": "Profiles"
+    "model_profiles": "モデルプロファイル"
   },
   "tab": {
     "issue": "タスク",
@@ -103,5 +103,13 @@
     "opens_in_tab": "This page opens in a new tab.",
     "open_named": "Open “{{title}}”",
     "add_page": "Add page"
+  },
+  "section_tabs": {
+    "issues": "タスク",
+    "conveyor": "エピック",
+    "agents": "エージェント",
+    "modelProfiles": "モデルプロファイル",
+    "runtimes": "ランタイム",
+    "subscriptions": "サブスクリプション"
   }
 }

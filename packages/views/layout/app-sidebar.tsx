@@ -19,7 +19,6 @@ import {
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Layers,
-  Settings2,
   ChevronDown,
   ChevronRight,
   LogOut,
@@ -65,7 +64,8 @@ import {
   issueViewContainerKey,
   useActiveIssueViewStore,
 } from "@multica/core/issue-views/active-view-store";
-import { useCurrentWorkspace, useWorkspacePaths, useWorkspaceSlug, paths } from "@multica/core/paths";
+import { useCurrentWorkspace, useWorkspacePaths, useWorkspaceSlug, paths, type WorkspacePaths } from "@multica/core/paths";
+import { sectionHrefsFor } from "./section-tabs";
 import { workspaceListOptions, myInvitationListOptions, workspaceKeys } from "@multica/core/workspace/queries";
 import { resolvePublicFileUrl } from "@multica/core/workspace/avatar-url";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -97,6 +97,11 @@ import { useAppForeground } from "../common/use-app-foreground";
 // sub-pages of itself.
 function isNavActive(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(href + "/");
+}
+
+/** A section entry stays active on the fork pages it hosts (see SectionTabs). */
+function isSectionActive(p: WorkspacePaths, pathname: string, href: string): boolean {
+  return sectionHrefsFor(p, href).some((h) => isNavActive(pathname, h));
 }
 
 // Stable empty arrays for query defaults. Using an inline `= []` default on
@@ -162,9 +167,6 @@ const workNav: { key: NavKey; labelKey: NavLabelKey }[] = [
   { key: "issues", labelKey: "issues" },
   { key: "projects", labelKey: "projects" },
   { key: "autopilots", labelKey: "autopilots" },
-  { key: "conveyor", labelKey: "conveyor" },
-  { key: "subscriptions", labelKey: "subscriptions" },
-  { key: "modelProfiles", labelKey: "model_profiles" },
 ];
 
 const aiTeamNav: { key: NavKey; labelKey: NavLabelKey }[] = [
@@ -182,12 +184,12 @@ const utilityNav: { key: NavKey; labelKey: NavLabelKey }[] = [
 const NAV_ITEM_CLASS_NAME =
   "text-muted-foreground hover:not-data-active:bg-sidebar-accent/70 data-active:bg-sidebar-accent data-active:text-sidebar-accent-foreground";
 
-/** Workspace links and their management entry for authorized members. */
+/** Workspace links; they are managed in Settings → Pages. */
 function CustomPagesGroup({ pathname }: { pathname: string }) {
   const { t } = useT("layout");
   const p = useWorkspacePaths();
   const { data } = useQuery(customPagesOptions(useWorkspaceSlug()));
-  if (!data || (!data.pages.length && !data.can_edit)) return null;
+  if (!data?.pages.length) return null;
   const Icon = routeIconForPath(p.pages());
   return (
     <SidebarGroup>
@@ -212,18 +214,6 @@ function CustomPagesGroup({ pathname }: { pathname: string }) {
               </SidebarMenuItem>
             );
           })}
-          {data.can_edit ? (
-            <SidebarMenuItem>
-              <SidebarMenuButton
-                isActive={pathname === p.pages()}
-                render={<AppLink href={p.pages()} />}
-                className={NAV_ITEM_CLASS_NAME}
-              >
-                <Settings2 />
-                <span>{data.pages.length ? t(($) => $.custom_pages.configure) : t(($) => $.custom_pages.add_page)}</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          ) : null}
         </SidebarMenu>
       </SidebarGroupContent>
     </SidebarGroup>
@@ -923,7 +913,7 @@ export function AppSidebar({ topSlot, searchSlot, headerClassName, headerStyle }
                 {workNav.map((item) => {
                   const href = p[item.key]();
                   const Icon = routeIconForPath(href);
-                  const isActive = !isActivePinnedRoute && isNavActive(pathname, href);
+                  const isActive = !isActivePinnedRoute && isSectionActive(p, pathname, href);
                   return (
                     <SidebarMenuItem key={item.key}>
                       <SidebarMenuButton
@@ -950,7 +940,7 @@ export function AppSidebar({ topSlot, searchSlot, headerClassName, headerStyle }
                 {aiTeamNav.map((item) => {
                   const href = p[item.key]();
                   const Icon = routeIconForPath(href);
-                  const isActive = isNavActive(pathname, href);
+                  const isActive = isSectionActive(p, pathname, href);
                   return (
                     <SidebarMenuItem key={item.key}>
                       <SidebarMenuButton

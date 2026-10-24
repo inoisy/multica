@@ -411,7 +411,8 @@
       "code": "代码",
       "channels": "消息渠道",
       "apps": "已连接应用",
-      "workflows": "工作流"
+      "workflows": "工作流",
+      "pages": "页面"
     },
     "groups": {
       "personal": "个人",

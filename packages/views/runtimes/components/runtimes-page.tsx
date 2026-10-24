@@ -74,6 +74,7 @@ import {
 } from "./mika-runtime-choice";
 import { Skeleton } from "@multica/ui/components/ui/skeleton";
 import { CollectionPageHeader } from "../../layout/collection-page";
+import { SectionTabs } from "../../layout/section-tabs";
 import { PAGE_GUTTER, PAGE_RAIL, PageHeader } from "../../layout/page-header";
 import { cn } from "@multica/ui/lib/utils";
 import {
@@ -311,6 +312,7 @@ export function RuntimesPage({
         icon={Server}
         title={t(($) => $.page.title)}
         count={totalCount}
+        tabs={<SectionTabs section="runtimes" current="runtimes" count={totalCount} />}
         learnMore={{
           href: daemonRuntimesDocsHref(i18n.language),
           label: t(($) => $.page.learn_more),

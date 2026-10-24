@@ -12,10 +12,10 @@
     "runtimes": "Runtimes",
     "skills": "Skills",
     "settings": "Settings",
-    "conveyor": "Conveyor",
+    "conveyor": "Epics",
     "subscriptions": "Subscriptions",
     "pages": "Pages",
-    "model_profiles": "Profiles"
+    "model_profiles": "Model profiles"
   },
   "tab": {
     "issue": "Issue",
@@ -103,5 +103,13 @@
     "opens_in_tab": "This page opens in a new tab.",
     "open_named": "Open “{{title}}”",
     "add_page": "Add page"
+  },
+  "section_tabs": {
+    "issues": "Issues",
+    "conveyor": "Epics",
+    "agents": "Agents",
+    "modelProfiles": "Model profiles",
+    "runtimes": "Runtimes",
+    "subscriptions": "Subscriptions"
   }
 }

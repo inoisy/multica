@@ -68,6 +68,7 @@ import {
   CollectionPageHeaderAction,
   CollectionPageState,
 } from "../../layout/collection-page";
+import { SectionTabs } from "../../layout/section-tabs";
 import { availabilityConfig } from "../presence";
 import { AgentRowActions } from "./agent-row-actions";
 import {
@@ -260,6 +261,7 @@ function PageHeaderBar({
       icon={Bot}
       title={t(($) => $.page.title)}
       count={totalCount}
+      tabs={<SectionTabs section="agents" current="agents" count={totalCount} />}
       learnMore={{
         href: `https://multica.ai/docs${docsLocalePrefix(i18n.language)}/agents`,
         label: t(($) => $.page.learn_more),

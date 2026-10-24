@@ -12,10 +12,10 @@
     "runtimes": "Среды выполнения",
     "skills": "Навыки",
     "settings": "Настройки",
-    "conveyor": "Конвейер",
+    "conveyor": "Эпики",
     "subscriptions": "Подписки",
     "pages": "Страницы",
-    "model_profiles": "Профили"
+    "model_profiles": "Профили моделей"
   },
   "tab": {
     "issue": "Задача",
@@ -103,5 +103,13 @@
     "opens_in_tab": "Эта страница открывается в новой вкладке.",
     "open_named": "Открыть «{{title}}»",
     "add_page": "Добавить страницу"
+  },
+  "section_tabs": {
+    "issues": "Задачи",
+    "conveyor": "Эпики",
+    "agents": "Агенты",
+    "modelProfiles": "Профили моделей",
+    "runtimes": "Среды выполнения",
+    "subscriptions": "Подписки"
   }
 }

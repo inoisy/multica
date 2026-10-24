@@ -440,6 +440,20 @@ describe("personal nav — Chat", () => {
     expect(currentChatBadge?.animated).toBe(false);
   });
 
+  it("hosts the fork pages under their sections instead of listing them", () => {
+    navigation.current = { pathname: "/acme/profiles" };
+    const agents = render(<AppSidebar />);
+    for (const href of ["/acme/conveyor", "/acme/subscriptions", "/acme/profiles"]) {
+      expect(agents.container.querySelector(`[data-href="${href}"]`)).toBeNull();
+    }
+    expect(agents.container.querySelector('button[data-href="/acme/agents"]')).toHaveAttribute("data-active", "true");
+    agents.unmount();
+
+    navigation.current = { pathname: "/acme/subscriptions" };
+    const runtimes = render(<AppSidebar />);
+    expect(runtimes.container.querySelector('button[data-href="/acme/runtimes"]')).toHaveAttribute("data-active", "true");
+  });
+
   it("renders a Chat nav link to the workspace chat route", () => {
     const { container } = render(<AppSidebar />);
     expect(chatNav(container)).not.toBeNull();

@@ -41,6 +41,7 @@ import {
 } from "@multica/ui/components/ui/select";
 import { cn } from "@multica/ui/lib/utils";
 import { CollectionPageHeader } from "../layout/collection-page";
+import { SectionTabs } from "../layout/section-tabs";
 import { PAGE_GUTTER } from "../layout/page-header";
 import { AppLink } from "../navigation";
 import { useT } from "../i18n";
@@ -155,6 +156,7 @@ export function ModelProfilesPage() {
       <CollectionPageHeader
         icon={Layers}
         title={t(($) => $.model_profiles.title)}
+        tabs={<SectionTabs section="agents" current="modelProfiles" />}
         description={t(($) => $.model_profiles.description)}
         actions={
           canManage ? (

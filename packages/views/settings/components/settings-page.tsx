@@ -26,6 +26,7 @@ import {
   X,
   Workflow,
   Zap,
+  AppWindow,
 } from "lucide-react";
 import { useAuthStore } from "@multica/core/auth";
 import { useCurrentWorkspace } from "@multica/core/paths";
@@ -55,6 +56,7 @@ import { NotificationsTab } from "./notifications-tab";
 import { LabelsTab } from "./labels-tab";
 import { IssueStatusesTab } from "./issue-statuses-tab";
 import { WorkflowsTab } from "../../workflows/workflows-tab";
+import { CustomPagesSettingsTab } from "../../custom-pages";
 import { PropertiesTab } from "./properties-tab";
 import { QuickActionsTab } from "./quick-actions-tab";
 import { KeyboardShortcutsTab } from "./keyboard-shortcuts-tab";
@@ -194,6 +196,9 @@ export function SettingsPage({ extraDeviceTabs = [] }: SettingsPageProps = {}) {
             }),
             entry("members", t(($) => $.page.tabs.members), Users, <MembersTab />, {
               adminOnly: true,
+            }),
+            entry("pages", t(($) => $.page.tabs.pages), AppWindow, <CustomPagesSettingsTab />, {
+              wide: true,
             }),
             ...(billingEnabled
               ? [
