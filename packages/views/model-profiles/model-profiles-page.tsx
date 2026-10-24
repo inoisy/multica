@@ -40,7 +40,7 @@ import {
   SelectValue,
 } from "@multica/ui/components/ui/select";
 import { cn } from "@multica/ui/lib/utils";
-import { CollectionPageHeader } from "../layout/collection-page";
+import { CollectionPageHeader, CollectionPageHeaderAction } from "../layout/collection-page";
 import { SectionTabs } from "../layout/section-tabs";
 import { PAGE_GUTTER } from "../layout/page-header";
 import { AppLink } from "../navigation";
@@ -160,10 +160,12 @@ export function ModelProfilesPage() {
         description={t(($) => $.model_profiles.description)}
         actions={
           canManage ? (
-            <Button size="sm" onClick={() => open({ id: null, input: emptyInput(), fromAgent: "" })}>
-              <Plus />
-              {t(($) => $.model_profiles.create)}
-            </Button>
+            <CollectionPageHeaderAction
+              icon={Plus}
+              variant="default"
+              label={t(($) => $.model_profiles.create)}
+              onClick={() => open({ id: null, input: emptyInput(), fromAgent: "" })}
+            />
           ) : null
         }
       />

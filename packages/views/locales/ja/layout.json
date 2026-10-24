@@ -111,5 +111,9 @@
     "modelProfiles": "モデルプロファイル",
     "runtimes": "ランタイム",
     "subscriptions": "サブスクリプション"
+  },
+  "section_tabs_short": {
+    "modelProfiles": "プロファイル",
+    "runtimes": "ランタイム"
   }
 }

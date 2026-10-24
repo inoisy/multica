@@ -111,5 +111,9 @@
     "modelProfiles": "模型配置",
     "runtimes": "运行时",
     "subscriptions": "订阅"
+  },
+  "section_tabs_short": {
+    "modelProfiles": "配置",
+    "runtimes": "运行时"
   }
 }

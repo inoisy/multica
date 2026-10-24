@@ -111,5 +111,9 @@
     "modelProfiles": "Profils de modèles",
     "runtimes": "Runtimes",
     "subscriptions": "Abonnements"
+  },
+  "section_tabs_short": {
+    "modelProfiles": "Profils",
+    "runtimes": "Runtimes"
   }
 }

@@ -111,5 +111,9 @@
     "modelProfiles": "Профили моделей",
     "runtimes": "Среды выполнения",
     "subscriptions": "Подписки"
+  },
+  "section_tabs_short": {
+    "modelProfiles": "Профили",
+    "runtimes": "Среды"
   }
 }
