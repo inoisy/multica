@@ -122,7 +122,7 @@ const COMING_SOON_SERVICES = [
 // `hidden @2xl:flex` and drop out of subgrid placement. MUST stay a literal
 // string so Tailwind sees the arbitrary template.
 const GRID_COLS =
-  "grid-cols-[0.5rem_minmax(0,1fr)_auto_2rem_0.5rem] " +
+  "grid-cols-[0.5rem_minmax(0,1fr)_96px_2rem_0.5rem] " +
   "@sm:grid-cols-[0.5rem_minmax(160px,1fr)_112px_2rem_0.5rem] " +
   "@2xl:grid-cols-[0.5rem_minmax(120px,1fr)_128px_64px_112px_136px_5.5rem_0.5rem]";
 
@@ -496,9 +496,9 @@ function AddRuntimeMenu({
     <DropdownMenu>
       <DropdownMenuTrigger
         render={
-          <Button size="sm" className="gap-1">
+          <Button size="sm" className="gap-1" aria-label={t(($) => $.page.add)}>
             <Plus aria-hidden="true" className="size-3.5" />
-            {t(($) => $.page.add)}
+            <span className="hidden sm:inline">{t(($) => $.page.add)}</span>
             <ChevronDown aria-hidden="true" className="size-3.5 opacity-70" />
           </Button>
         }
@@ -913,9 +913,9 @@ function MachineRow({
             <HealthIcon health={machine.health} />
             <span className={cn("truncate", !online && "text-muted-foreground")}>
               {healthLabel(machine.health)}
-              {!online && machine.lastSeenAt
-                ? ` · ${timeAgo(machine.lastSeenAt)}`
-                : ""}
+              {!online && machine.lastSeenAt ? (
+                <span className="hidden @sm:inline">{` · ${timeAgo(machine.lastSeenAt)}`}</span>
+              ) : null}
             </span>
           </>
         )}
