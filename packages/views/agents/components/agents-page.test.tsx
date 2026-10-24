@@ -125,13 +125,10 @@ vi.mock("@multica/core/hooks", () => ({
   useWorkspaceId: () => "workspace-1",
 }));
 
-vi.mock("@multica/core/paths", () => ({
-  useWorkspacePaths: () => ({
-    newAgent: () => "/test-workspace/agents/new",
-    newAgentManual: () => "/test-workspace/agents/new/manual",
-    agentDetail: (id: string) => `/test-workspace/agents/${id}`,
-  }),
-}));
+vi.mock("@multica/core/paths", async () => {
+  const actual = await vi.importActual<typeof import("@multica/core/paths")>("@multica/core/paths");
+  return { useWorkspacePaths: () => actual.paths.workspace("test-workspace") };
+});
 
 vi.mock("@multica/core/workspace/queries", () => ({
   agentListOptions: () => ({ queryKey: ["agents"] }),

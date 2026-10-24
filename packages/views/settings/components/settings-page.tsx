@@ -6,6 +6,7 @@ import {
   Bell,
   Blocks,
   CircleDot,
+  ChevronDown,
   CreditCard,
   FolderGit2,
   Keyboard,
@@ -23,7 +24,9 @@ import {
   User,
   Users,
   X,
+  Workflow,
   Zap,
+  AppWindow,
 } from "lucide-react";
 import { useAuthStore } from "@multica/core/auth";
 import { useCurrentWorkspace } from "@multica/core/paths";
@@ -32,9 +35,11 @@ import { useCurrentMember } from "@multica/core/permissions";
 import {
   BILLING_WORKSPACE_SUBSCRIPTIONS_FLAG,
   PLUGINS_V1_FLAG,
+  PROJECT_WORKFLOWS_V1_FLAG,
 } from "@multica/core/feature-flags";
 import { resolvePublicFileUrl } from "@multica/core/workspace/avatar-url";
 import { ActorAvatar } from "@multica/ui/components/common/actor-avatar";
+import { TooltipHint } from "@multica/ui/components/common/tooltip-hint";
 import { cn } from "@multica/ui/lib/utils";
 import { resolveSettingsLocation, settingsHref } from "./settings-navigation";
 import { AppLink, useNavigation } from "../../navigation";
@@ -50,6 +55,8 @@ import { ConnectedAppsTab, useComposioAvailable } from "./connected-apps-tab";
 import { NotificationsTab } from "./notifications-tab";
 import { LabelsTab } from "./labels-tab";
 import { IssueStatusesTab } from "./issue-statuses-tab";
+import { WorkflowsTab } from "../../workflows/workflows-tab";
+import { CustomPagesSettingsTab } from "../../custom-pages";
 import { PropertiesTab } from "./properties-tab";
 import { QuickActionsTab } from "./quick-actions-tab";
 import { KeyboardShortcutsTab } from "./keyboard-shortcuts-tab";
@@ -110,6 +117,7 @@ export function SettingsPage({ extraDeviceTabs = [] }: SettingsPageProps = {}) {
   const isMember = role === "member";
   const navigation = useNavigation();
   const pluginsEnabled = useFeatureEnabled(PLUGINS_V1_FLAG, false);
+  const workflowsEnabled = useFeatureEnabled(PROJECT_WORKFLOWS_V1_FLAG, false);
   const billingEnabled = useFeatureEnabled(
     BILLING_WORKSPACE_SUBSCRIPTIONS_FLAG,
     false,
@@ -189,6 +197,9 @@ export function SettingsPage({ extraDeviceTabs = [] }: SettingsPageProps = {}) {
             entry("members", t(($) => $.page.tabs.members), Users, <MembersTab />, {
               adminOnly: true,
             }),
+            entry("pages", t(($) => $.page.tabs.pages), AppWindow, <CustomPagesSettingsTab />, {
+              wide: true,
+            }),
             ...(billingEnabled
               ? [
                   entry(
@@ -205,13 +216,14 @@ export function SettingsPage({ extraDeviceTabs = [] }: SettingsPageProps = {}) {
           key: "issues",
           label: t(($) => $.page.groups.issues),
           entries: [
-            entry(
-              "issue-statuses",
-              t(($) => $.page.tabs.issue_statuses),
-              CircleDot,
-              <IssueStatusesTab />,
-              { wide: true, adminOnly: true },
-            ),
+            ...(workflowsEnabled
+              ? [entry("workflows", t(($) => $.page.tabs.workflows), Workflow, <WorkflowsTab />, {
+                  wide: true,
+                })]
+              : [entry("issue-statuses", t(($) => $.page.tabs.issue_statuses), CircleDot, <IssueStatusesTab />, {
+                  wide: true,
+                  adminOnly: true,
+                })]),
             entry("wakeups", t(($) => $.page.tabs.wakeups), AlarmClock, <WakeupsTab />, {
               wide: true,
               adminOnly: true,
@@ -434,13 +446,13 @@ export function SettingsPage({ extraDeviceTabs = [] }: SettingsPageProps = {}) {
             {t(($) => $.page.title)}
           </h1>
         </div>
-        <div className="px-4 pb-4 md:hidden">
+        <div className="relative px-4 pb-4 md:hidden">
           <label className="sr-only" htmlFor="settings-navigation">
             {t(($) => $.page.navigate)}
           </label>
           <select
             id="settings-navigation"
-            className="h-10 w-full rounded-lg border border-input bg-background px-3 text-body text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+            className="h-10 w-full appearance-none rounded-lg border border-input bg-background pl-3 pr-9 text-body text-foreground focus-visible:outline-2 focus-visible:outline-ring"
             value={active.value}
             onChange={(event) => navigation.push(href(event.target.value))}
           >
@@ -459,6 +471,7 @@ export function SettingsPage({ extraDeviceTabs = [] }: SettingsPageProps = {}) {
               )),
             )}
           </select>
+          <ChevronDown aria-hidden="true" className="pointer-events-none absolute right-7 top-3 size-4 text-muted-foreground" />
         </div>
         <div className="relative mx-3 mb-3 hidden shrink-0 md:block">
           <Search
@@ -496,14 +509,16 @@ export function SettingsPage({ extraDeviceTabs = [] }: SettingsPageProps = {}) {
             className="h-8 w-full rounded-lg border border-input bg-transparent pl-8 pr-8 text-body outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30 [&::-webkit-search-cancel-button]:hidden"
           />
           {query ? (
-            <button
-              type="button"
-              onClick={() => setQuery("")}
-              aria-label={t(($) => $.page.search_clear)}
-              className="absolute right-1.5 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:bg-surface-hover hover:text-foreground"
-            >
-              <X className="size-3.5" aria-hidden="true" />
-            </button>
+            <TooltipHint label={t(($) => $.page.search_clear)}>
+              <button
+                type="button"
+                onClick={() => setQuery("")}
+                aria-label={t(($) => $.page.search_clear)}
+                className="absolute right-1.5 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:bg-surface-hover hover:text-foreground"
+              >
+                <X className="size-3.5" aria-hidden="true" />
+              </button>
+            </TooltipHint>
           ) : null}
         </div>
         <nav

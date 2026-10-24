@@ -8,6 +8,14 @@ const state = vi.hoisted(() => ({ refreshing: false, user: { id: "user-1" } as {
 vi.mock("@multica/core/auth", () => ({
   useAuthStore: (select: (s: typeof state) => unknown) => select(state),
 }));
+vi.mock("@multica/core/paths", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@multica/core/paths")>();
+  return { ...actual, useWorkspacePaths: () => actual.paths.workspace("acme") };
+});
+vi.mock("../navigation", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../navigation")>()),
+  AppLink: ({ href, children, ...props }: { href: string; children?: React.ReactNode }) => <a href={href} {...props}>{children}</a>,
+}));
 vi.mock("@multica/core/issues/stores/issues-scope-store", () => ({
   useIssuesScope: () => "all",
 }));

@@ -29,13 +29,13 @@ func newAcceptRig(t *testing.T) *acceptRig {
 	}
 	root := t.TempDir()
 	r := &acceptRig{t: t, origin: filepath.Join(root, "origin.git"), work: filepath.Join(root, "work"), dev: filepath.Join(root, "dev")}
-	r.git(root, "init", "--quiet", "--bare", "--initial-branch=main", r.origin)
+	r.git(root, "init", "--quiet", "--bare", "--initial-branch=test/base", r.origin)
 	r.git(root, "clone", "--quiet", r.origin, r.dev)
 	r.identity(r.dev)
 	r.write(r.dev, "README.md", "hello\n")
 	r.git(r.dev, "add", ".")
 	r.git(r.dev, "commit", "--quiet", "-m", "init")
-	r.git(r.dev, "push", "--quiet", "origin", "main")
+	r.git(r.dev, "push", "--quiet", "origin", "test/base")
 	r.git(root, "clone", "--quiet", r.origin, r.work)
 	r.identity(r.work)
 	return r
@@ -72,7 +72,7 @@ func (r *acceptRig) write(dir, name, content string) {
 func (r *acceptRig) branch(name string, cfg acceptConfig, files map[string]string) string {
 	r.t.Helper()
 	r.git(r.dev, "fetch", "--quiet", "origin")
-	r.git(r.dev, "checkout", "--quiet", "-B", name, "origin/main")
+	r.git(r.dev, "checkout", "--quiet", "-B", name, "origin/test/base")
 	raw, _ := json.Marshal(cfg)
 	r.write(r.dev, acceptanceFile, string(raw))
 	for f, c := range files {
@@ -88,20 +88,20 @@ func (r *acceptRig) branch(name string, cfg acceptConfig, files map[string]strin
 func (r *acceptRig) pushToMain(file string) string {
 	r.t.Helper()
 	r.git(r.dev, "fetch", "--quiet", "origin")
-	r.git(r.dev, "checkout", "--quiet", "-B", "other-"+file, "origin/main")
+	r.git(r.dev, "checkout", "--quiet", "-B", "other-"+file, "origin/test/base")
 	r.write(r.dev, file, file+"\n")
 	r.git(r.dev, "add", ".")
 	r.git(r.dev, "commit", "--quiet", "-m", "other "+file)
-	r.git(r.dev, "push", "--quiet", "origin", "HEAD:main")
+	r.git(r.dev, "push", "--quiet", "origin", "HEAD:test/base")
 	return r.git(r.dev, "rev-parse", "HEAD")
 }
 
-func (r *acceptRig) main() string { return r.git(r.origin, "rev-parse", "main") }
+func (r *acceptRig) main() string { return r.git(r.origin, "rev-parse", "test/base") }
 
 func (r *acceptRig) accept(commit, branch string) (acceptOutcome, string) {
 	var log bytes.Buffer
 	out := runAcceptance(context.Background(), acceptSpec{
-		Dir: r.work, Repo: r.origin, Commit: commit, Branch: branch, Issue: "STT-1", Log: &log,
+		Dir: r.work, Repo: r.origin, Commit: commit, Branch: branch, Issue: "test-issue", Log: &log,
 		Sleep: func(context.Context, time.Duration) error { return nil },
 	})
 	return out, log.String()
@@ -118,10 +118,10 @@ func TestAcceptMergesExactlyTheCheckedCommit(t *testing.T) {
 	if head != out.Merged {
 		t.Fatalf("main is %s, the checked merge is %s", head, out.Merged)
 	}
-	if parent := r.git(r.origin, "rev-parse", "main^2"); parent != sha {
+	if parent := r.git(r.origin, "rev-parse", "test/base^2"); parent != sha {
 		t.Fatalf("the merge brought %s, not the accepted %s", parent, sha)
 	}
-	if msg := r.git(r.origin, "log", "-1", "--format=%B", "main"); !strings.Contains(msg, "Merge t-1-feature into main") || !strings.Contains(msg, "STT-1") {
+	if msg := r.git(r.origin, "log", "-1", "--format=%B", "test/base"); !strings.Contains(msg, "Merge t-1-feature into test/base") || !strings.Contains(msg, "test-issue") {
 		t.Fatalf("merge message %q", msg)
 	}
 	if len(out.Checks) != 4 || !out.Checks[2].OK || out.Checks[2].Command != "test -f feature.txt" {
@@ -222,7 +222,7 @@ func TestAcceptChecksAgainWhenTheBaseMoves(t *testing.T) {
 	r := newAcceptRig(t)
 	// The first check lands another commit on main, as a parallel merge would.
 	marker := filepath.Join(t.TempDir(), "raced")
-	race := `[ -f ` + marker + ` ] || { touch ` + marker + ` && cd ` + r.dev + ` && git fetch -q origin && git checkout -q -B racer origin/main && echo r > racer.txt && git add . && git -c user.name=t -c user.email=t@t commit -qm racer && git push -q origin HEAD:main; }`
+	race := `[ -f ` + marker + ` ] || { touch ` + marker + ` && cd ` + r.dev + ` && git fetch -q origin && git checkout -q -B racer origin/test/base && echo r > racer.txt && git add . && git -c user.name=t -c user.email=t@t commit -qm racer && git push -q origin HEAD:test/base; }`
 	sha := r.branch("t-8", acceptConfig{Commands: []string{race}}, nil)
 	out, log := r.accept(sha, "t-8")
 	if out.Outcome != "pass" {
@@ -231,7 +231,7 @@ func TestAcceptChecksAgainWhenTheBaseMoves(t *testing.T) {
 	if !strings.Contains(log, "checking again on the new base") {
 		t.Fatalf("the moved base was not checked again:\n%s", log)
 	}
-	if racer := r.git(r.origin, "log", "-1", "--format=%s", "main^1"); racer != "racer" {
+	if racer := r.git(r.origin, "log", "-1", "--format=%s", "test/base^1"); racer != "racer" {
 		t.Fatalf("the merge is not on top of the moved base: first parent is %q", racer)
 	}
 }
@@ -240,7 +240,7 @@ func TestAcceptChecksAgainWhenTheBaseMoves(t *testing.T) {
 // passes without a merge, so a reviewed route there goes on to close.
 func TestAcceptWithoutDescriptionPassesWithoutMerge(t *testing.T) {
 	r := newAcceptRig(t)
-	r.git(r.dev, "checkout", "--quiet", "-B", "t-9", "origin/main")
+	r.git(r.dev, "checkout", "--quiet", "-B", "t-9", "origin/test/base")
 	r.write(r.dev, "x.txt", "x\n")
 	r.git(r.dev, "add", ".")
 	r.git(r.dev, "commit", "--quiet", "-m", "no acceptance")
@@ -292,13 +292,13 @@ func TestAcceptCommandTimeoutStopsTheTree(t *testing.T) {
 
 func TestAcceptResultIsARouteResult(t *testing.T) {
 	sha := strings.Repeat("a", 40)
-	res := acceptResult(acceptOutcome{Outcome: "changes_requested", Base: "main", Reason: "command failed: make test",
+	res := acceptResult(acceptOutcome{Outcome: "changes_requested", Base: "test/base", Reason: "command failed: make test",
 		Checks: []acceptCheck{{Name: "make test", Command: "make test"}}, Tail: "FAIL x"}, "git@host:r.git", sha)
 	if res["outcome"] != "changes_requested" || res["schema_version"] != 1 {
 		t.Fatalf("result %#v", res)
 	}
 	art := res["artifact"].(map[string]string)
-	if art["commit"] != sha || art["repo"] != "git@host:r.git" || art["branch"] != "main" {
+	if art["commit"] != sha || art["repo"] != "git@host:r.git" || art["branch"] != "test/base" {
 		t.Fatalf("artifact %#v", art)
 	}
 	if report := res["report"].(string); !strings.Contains(report, "Слияния нет") || !strings.Contains(report, "FAIL x") {
@@ -328,7 +328,7 @@ func TestAcceptRepositoryNamesTheWorkspaceRepository(t *testing.T) {
 	// A local repository without a remote, as a workspace repository, and a
 	// worktree an executor worked in.
 	local := filepath.Join(root, "service")
-	r.git(root, "init", "--quiet", "--initial-branch=main", local)
+	r.git(root, "init", "--quiet", "--initial-branch=test/base", local)
 	r.identity(local)
 	r.write(local, "README.md", "hello\n")
 	r.git(local, "add", ".")
