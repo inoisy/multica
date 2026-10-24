@@ -454,7 +454,9 @@
     "sort_by": "Сортировать по",
     "direction_asc": "По возрастанию",
     "direction_desc": "По убыванию",
-    "section_columns": "Столбцы"
+    "section_columns": "Столбцы",
+    "filter_active_count_few": "{{count}} фильтра",
+    "filter_active_count_many": "{{count}} фильтров"
   },
   "actions": {
     "row_menu": "Действия с автоматизацией",
@@ -471,8 +473,12 @@
       "warning": "Это действие нельзя отменить.",
       "cancel": "Отмена",
       "confirm": "Удалить навсегда",
-      "deleting": "Удаление…"
-    }
+      "deleting": "Удаление…",
+      "description_few": "Это навсегда удалит {{count}} автоматизации и их историю запусков.",
+      "description_many": "Это навсегда удалит {{count}} автоматизаций и их историю запусков."
+    },
+    "selected_few": "Выбрано: {{count}}",
+    "selected_many": "Выбрано: {{count}}"
   },
   "wakeups": {
     "title": "Будильники задач",
@@ -537,6 +543,8 @@
     "banner_view": "Посмотреть",
     "create": "Новый будильник",
     "create_pick_issue": "Выберите задачу, к которой добавить будильник",
-    "create_pick_issue_description": "Будильник принадлежит этой задаче и завершается вместе с ней."
+    "create_pick_issue_description": "Будильник принадлежит этой задаче и завершается вместе с ней.",
+    "banner_few": "{{count}} будильника автоматически приостановлены. Последний: {{issue}} «{{condition}}» — {{reason}}",
+    "banner_many": "{{count}} будильников автоматически приостановлены. Последний: {{issue}} «{{condition}}» — {{reason}}"
   }
 }

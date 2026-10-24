@@ -1,5 +1,6 @@
 "use client";
 
+import type { TFunction } from "i18next";
 import {
   issueBehavesAs,
   issueBehavesAsAny,
@@ -72,6 +73,8 @@ import { ActorAvatar } from "../../common/actor-avatar";
 import { ActionShortcutKeycaps } from "../../common/shortcut-keycaps";
 import { PropRow } from "../../common/prop-row";
 import { TimelineHandoff } from "../../workflows/timeline-handoff";
+import { IssueModelProfilePicker } from "../../model-profiles/issue-model-profile-picker";
+import { IssueStageDispatchPicker } from "../../conveyor/issue-stage-dispatch-picker";
 import { PropertyIcon } from "../../common/property-icon";
 import type { Attachment, Issue, IssueProperty, IssueStatus, IssueStatusCategory, IssuePriority, TimelineEntry, UpdateIssueRequest } from "@multica/core/types";
 import { contentReferencesAttachment } from "@multica/core/types";
@@ -825,6 +828,26 @@ function ActivityBlock({
 
 // SubIssueRow — sub-issue list item with inline status & assignee editing
 
+// routeStepLabel is a routed sub-issue's step, with why it stands when the
+// route is not simply moving. An unknown status from a newer backend shows raw.
+function routeStepLabel(step: string, status: string, t: TFunction<"issues">): string {
+  switch (status) {
+    case "active":
+    case "completed":
+      return step;
+    case "paused":
+      return `${step} · ${t(($) => $.route_step.paused)}`;
+    case "awaiting_coordinator":
+      return `${step} · ${t(($) => $.route_step.awaiting_coordinator)}`;
+    case "waiting_provider":
+      return `${step} · ${t(($) => $.route_step.waiting_provider)}`;
+    case "disabled":
+      return `${step} · ${t(($) => $.route_step.disabled)}`;
+    default:
+      return `${step} · ${status}`;
+  }
+}
+
 function SubIssueRow({
   child,
   childProgress,
@@ -978,6 +1001,17 @@ function SubIssueRow({
                     />
                   </span>
                 ))}
+              </span>
+            )}
+            {child.route && child.route.step && (
+              <span
+                className={cn(
+                  "inline-flex shrink-0 items-center rounded-full px-1.5 py-0.5 font-mono text-micro",
+                  child.route.status === "active" ? "bg-primary/10 text-primary" : "bg-muted/60 text-muted-foreground",
+                )}
+                title={child.route.waiting_reason || t(($) => $.route_step.title, { round: child.route.round })}
+              >
+                {routeStepLabel(child.route.step, child.route.status, t)}
               </span>
             )}
             {rowProps.childProgress && childProgress && childProgress.total > 0 && (
@@ -2764,6 +2798,8 @@ export function IssueDetail({ issueId, onDelete, onDone, defaultSidebarOpen = tr
             />
           </PropRow>
           <IssueWorkflowPropRow projectId={issue.project_id} status={issue.status} label={t(($) => $.workflows.project.label)} />
+          <IssueModelProfilePicker wsId={wsId} issueId={issue.id} />
+          <IssueStageDispatchPicker wsId={wsId} issueId={issue.id} hasChildren={childIssues.length > 0} />
 
           {/* Optional props — rendered only when set on the issue OR added
               via "+ Add property" in this session. Row order follows the

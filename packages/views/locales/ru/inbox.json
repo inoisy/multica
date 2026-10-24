@@ -21,7 +21,11 @@
     "notification_count_one": "{{count}} уведомление",
     "notification_count_other": "{{count}} уведомлений",
     "clear": "Очистить фильтры",
-    "empty": "Нет уведомлений, соответствующих фильтрам"
+    "empty": "Нет уведомлений, соответствующих фильтрам",
+    "active_count_few": "{{count}} активных фильтра",
+    "active_count_many": "{{count}} активных фильтров",
+    "notification_count_few": "{{count}} уведомления",
+    "notification_count_many": "{{count}} уведомлений"
   },
   "context_menu": {
     "mark_read": "Отметить как прочитанное",

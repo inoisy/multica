@@ -145,6 +145,9 @@ vi.mock("@multica/core/paths", async (importOriginal) => ({
     agents: () => "/acme/agents",
     squads: () => "/acme/squads",
     usage: () => "/acme/usage",
+    conveyor: () => "/acme/conveyor",
+    subscriptions: () => "/acme/subscriptions",
+    modelProfiles: () => "/acme/profiles",
     runtimes: () => "/acme/runtimes",
     skills: () => "/acme/skills",
     settings: () => "/acme/settings",
@@ -200,6 +203,7 @@ vi.mock("@tanstack/react-query", async (importOriginal) => ({
     return { isPending: false, mutate: vi.fn() };
   },
   useQuery: ({ queryKey }: { queryKey: readonly unknown[] }) => {
+    if (queryKey[0] === "custom-pages") return { data: { pages: [], can_edit: false } };
     if (queryKey[0] === "pins") return { data: pins.current };
     if (queryKey[0] === "issue") return detail.current;
     if (queryKey[0] === "inbox" && queryKey[1] === "unread-summary") return { data: summary.current };

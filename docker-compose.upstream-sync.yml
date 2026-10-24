@@ -25,7 +25,9 @@ services:
       MULTICA_APP_URL: ${STAND_URL}
       MULTICA_PUBLIC_URL: ${STAND_URL}
       MULTICA_DEV_VERIFICATION_CODE: "411411"
+      MULTICA_INSTANCE_ADMINS: "release-check-411@example.test"
       DO_NOT_TRACK: "1"
+      FF_PROJECT_WORKFLOWS_V1: "true"
     depends_on:
       postgres:
         condition: service_healthy

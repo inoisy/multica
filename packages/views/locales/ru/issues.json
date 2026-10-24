@@ -34,7 +34,9 @@
     "steer_resend": "Отправить новым запуском",
     "steer_resend_failed": "Не удалось отправить новым запуском.",
     "steer_step": "{{name}} добавил(а)",
-    "steer_step_read": "Прочитано"
+    "steer_step_read": "Прочитано",
+    "steps_few": "{{count}} шага",
+    "steps_many": "{{count}} шагов"
   },
   "working_filter_error": {
     "title": "Не удалось загрузить задачи с работающими агентами"
@@ -104,7 +106,9 @@
     "error_comment_limit": "В истории треда исходного комментария не менее {{count}} комментариев; лимит — 256.",
     "error_text_limit": "Размер исходного текста — {{size}} байт; лимит — 1 МиБ.",
     "error_attachment_count_limit": "В источнике {{count}} вложений; лимит — 100.",
-    "error_attachment_size_limit": "Суммарный размер вложений источника — {{size}} байт; лимит — 500 МиБ."
+    "error_attachment_size_limit": "Суммарный размер вложений источника — {{size}} байт; лимит — 500 МиБ.",
+    "preview_summary_few": "Контекст из {{identifier}} · описание задачи + {{count}} комментария",
+    "preview_summary_many": "Контекст из {{identifier}} · описание задачи + {{count}} комментариев"
   },
   "revision": {
     "conflict": "Задача или комментарий были изменены. Загружена последняя версия; сравните её перед повторным сохранением.",
@@ -198,7 +202,17 @@
     "active_count_other": "{{count}} фильтров",
     "in_view": "Уже в этом представлении",
     "chip_edit": "Изменить",
-    "chip_save_as": "Сохранить как"
+    "chip_save_as": "Сохранить как",
+    "issue_count_few": "{{count}} задачи",
+    "issue_count_many": "{{count}} задач",
+    "chip_status_count_one": "{{count}} статусов",
+    "chip_status_count_few": "{{count}} статуса",
+    "chip_status_count_many": "{{count}} статусов",
+    "chip_priority_count_one": "{{count}} приоритетов",
+    "chip_priority_count_few": "{{count}} приоритета",
+    "chip_priority_count_many": "{{count}} приоритетов",
+    "active_count_few": "{{count}} фильтра",
+    "active_count_many": "{{count}} фильтров"
   },
   "display": {
     "tooltip": "Настройки отображения",
@@ -487,7 +501,9 @@
     "project_directory_path_copied_with_branch": "Путь к директории проекта скопирован — работа ведётся в {{branch}}",
     "workdir_path_copy_failed": "Не удалось скопировать путь к рабочей директории",
     "workdir_path_unavailable": "Пока нет локальной рабочей директории — задача ещё не выполнялась локальным агентом",
-    "pull_requests_empty_title": "Нет связанных pull request'ов."
+    "pull_requests_empty_title": "Нет связанных pull request'ов.",
+    "pull_request_card_files_count_few": "{{count}} файла",
+    "pull_request_card_files_count_many": "{{count}} файлов"
   },
   "timeline": {
     "loading": "Загрузка..."
@@ -551,7 +567,21 @@
     "wakeup_checkin_coalesced_one": "{{count}} тихая проверка · последняя: {{note}}",
     "wakeup_checkin_coalesced_other": "{{count}} тихой проверки · последняя: {{note}}",
     "wakeup_chip_created_by": "Будильник {{name}}",
-    "wakeup_chip_system": "Системное правило"
+    "wakeup_chip_system": "Системное правило",
+    "task_completed_few": "выполнил(а) задачу ({{count}} раза)",
+    "task_completed_many": "выполнил(а) задачу ({{count}} раз)",
+    "task_failed_few": "задача завершилась ошибкой ({{count}} раза)",
+    "task_failed_many": "задача завершилась ошибкой ({{count}} раз)",
+    "activity_count_few": "{{count}} события",
+    "activity_count_many": "{{count}} событий",
+    "show_more_activities_few": "Показать ещё {{count}} события",
+    "show_more_activities_many": "Показать ещё {{count}} событий",
+    "wakeup_child_done_stage_few": "Все {{count}} подзадачи стадии {{stage}} завершены",
+    "wakeup_child_done_stage_many": "Все {{count}} подзадач стадии {{stage}} завершены",
+    "wakeup_child_done_all_few": "Все {{count}} подзадачи завершены",
+    "wakeup_child_done_all_many": "Все {{count}} подзадач завершены",
+    "wakeup_checkin_coalesced_few": "{{count}} тихие проверки · последняя: {{note}}",
+    "wakeup_checkin_coalesced_many": "{{count}} тихих проверок · последняя: {{note}}"
   },
   "comment": {
     "add_reaction": "Добавить реакцию",
@@ -638,7 +668,13 @@
       "bar_authors_more_one": "{{names}} и ещё {{count}}",
       "bar_authors_more_other": "{{names}} и ещё {{count}}",
       "resolve_failed": "Не удалось решить тред",
-      "unresolve_failed": "Не удалось вернуть тред как нерешённый"
+      "unresolve_failed": "Не удалось вернуть тред как нерешённый",
+      "bar_few": "{{count}} решённых комментария от {{authors}}",
+      "bar_many": "{{count}} решённых комментариев от {{authors}}",
+      "fold_few": "{{count}} комментария от {{authors}}",
+      "fold_many": "{{count}} комментариев от {{authors}}",
+      "bar_authors_more_few": "{{names}} и ещё {{count}}",
+      "bar_authors_more_many": "{{names}} и ещё {{count}}"
     },
     "recipient_steer": "Добавить в текущий запуск",
     "recipient_steer_desc": "{{name}} прочитает это после текущего шага и продолжит исходную задачу. Только текст.",
@@ -655,7 +691,15 @@
     "recipient_count_other": "Получат {{count}} агента",
     "steer_attachment_notice": "В идущий запуск можно добавить только текст, поэтому сообщение с файлами обработается после него.",
     "restart_send": "Остановить и отправить",
-    "restart_failed": "Не удалось остановить текущий запуск. Сообщение не отправлено."
+    "restart_failed": "Не удалось остановить текущий запуск. Сообщение не отправлено.",
+    "posted_partial_trigger_few": "Комментарий опубликован, но {{count}} упоминания не сработали",
+    "posted_partial_trigger_many": "Комментарий опубликован, но {{count}} упоминаний не сработали",
+    "reply_count_few": "{{count}} ответа",
+    "reply_count_many": "{{count}} ответов",
+    "trigger_will_start_count_few": "{{count}} агента запустятся при отправке",
+    "trigger_will_start_count_many": "{{count}} агентов запустится при отправке",
+    "recipient_count_few": "Получат {{count}} агента",
+    "recipient_count_many": "Получат {{count}} агентов"
   },
   "reply": {
     "placeholder": "Оставить ответ...",
@@ -676,7 +720,9 @@
       "selection_failed": "Не удалось захватить выделение. Выделите текст в пределах одного комментария или описания и попробуйте снова.",
       "source_label": "Комментарий от {{name}}",
       "edit": "Изменить аннотацию {{number}}",
-      "note_placeholder": "Добавить комментарий…"
+      "note_placeholder": "Добавить комментарий…",
+      "count_few": "{{count}} аннотации",
+      "count_many": "{{count}} аннотаций"
     }
   },
   "agent_activity": {
@@ -697,7 +743,19 @@
     "chip_agents_working_other": "{{count}} агентов работает",
     "issues_count_one": "{{count}} задача",
     "issues_count_other": "{{count}} задач",
-    "chip_agents_working_unknown": "Работающие агенты: —"
+    "chip_agents_working_unknown": "Работающие агенты: —",
+    "hover_header_few": "{{count}} агента работают",
+    "hover_header_many": "{{count}} агентов работает",
+    "hover_header_tasks_few": "{{count}} задачи выполняются",
+    "hover_header_tasks_many": "{{count}} задач выполняется",
+    "hover_header_queued_few": "{{count}} агента в очереди",
+    "hover_header_queued_many": "{{count}} агентов в очереди",
+    "tasks_count_few": "{{count}} задачи",
+    "tasks_count_many": "{{count}} задач",
+    "chip_agents_working_few": "{{count}} агента работают",
+    "chip_agents_working_many": "{{count}} агентов работает",
+    "issues_count_few": "{{count}} задачи",
+    "issues_count_many": "{{count}} задач"
   },
   "filtered_empty": {
     "title": "Нет задач, соответствующих этим фильтрам",
@@ -714,7 +772,9 @@
     "transcript_button": "Просмотреть журнал",
     "stop_button": "Остановить",
     "stop_tooltip": "Остановить агента",
-    "cancel_failed": "Не удалось отменить задачу"
+    "cancel_failed": "Не удалось отменить задачу",
+    "tool_count_few": "{{count}} инструмента",
+    "tool_count_many": "{{count}} инструментов"
   },
   "execution_log": {
     "section": "Журнал выполнения",
@@ -766,7 +826,13 @@
     "more_runs_other": "ещё {{count}}",
     "strip_aria": "Накопленная стоимость во времени — открыть хронологию запусков",
     "strip_no_usage": "Расход не записан",
-    "sparkline_now": "Сейчас"
+    "sparkline_now": "Сейчас",
+    "included_comments_few": "Включает {{count}} комментария",
+    "included_comments_many": "Включает {{count}} комментариев",
+    "summary_runs_few": "{{count}} запуска",
+    "summary_runs_many": "{{count}} запусков",
+    "more_runs_few": "ещё {{count}}",
+    "more_runs_many": "ещё {{count}}"
   },
   "runs_timeline": {
     "title": "Запуски",
@@ -834,7 +900,17 @@
     "detail_cache": "Попадания в кэш",
     "cache_hit_value": "{{percent}} · сэкономлено {{amount}}",
     "detail_time": "Время",
-    "detail_branch": "Ветка"
+    "detail_branch": "Ветка",
+    "count_failed_few": "{{count}} с ошибкой",
+    "count_failed_many": "{{count}} с ошибкой",
+    "count_cancelled_few": "{{count}} отменены",
+    "count_cancelled_many": "{{count}} отменено",
+    "count_active_few": "{{count}} активны",
+    "count_active_many": "{{count}} активно",
+    "chart_aria_few": "Накопленная стоимость во времени: {{cost}} за {{count}} запуска",
+    "chart_aria_many": "Накопленная стоимость во времени: {{cost}} за {{count}} запусков",
+    "day_runs_few": "{{count}} запуска",
+    "day_runs_many": "{{count}} запусков"
   },
   "terminate_dialog": {
     "title": "Остановить эту задачу?",
@@ -862,7 +938,15 @@
     "delete_dialog_desc_one": "Это действие нельзя отменить. Выбранная задача и все связанные с ней данные будут удалены без возможности восстановления.",
     "delete_dialog_desc_other": "Это действие нельзя отменить. Выбранные задачи и все связанные с ними данные будут удалены без возможности восстановления.",
     "delete_dialog_warning": "Любой участник рабочего пространства может удалять задачи.",
-    "cancel": "Отмена"
+    "cancel": "Отмена",
+    "update_success_few": "Обновлено задач: {{count}}",
+    "update_success_many": "Обновлено задач: {{count}}",
+    "delete_success_few": "Удалено задач: {{count}}",
+    "delete_success_many": "Удалено задач: {{count}}",
+    "delete_dialog_title_few": "Удалить задачи ({{count}})?",
+    "delete_dialog_title_many": "Удалить задачи ({{count}})?",
+    "delete_dialog_desc_few": "Это действие нельзя отменить. Выбранные задачи и все связанные с ними данные будут удалены без возможности восстановления.",
+    "delete_dialog_desc_many": "Это действие нельзя отменить. Выбранные задачи и все связанные с ними данные будут удалены без возможности восстановления."
   },
   "card": {
     "update_failed": "Не удалось обновить задачу",
@@ -1309,7 +1393,11 @@
       "missing_issue": "Выберите задачу.",
       "checked": "Отмечено",
       "unchecked": "Не отмечено",
-      "assignee_comment_hint": "{{name}} — исполнитель и и так запускается, когда участник оставляет комментарий. Это правило присоединится к тому запуску, а не начнёт новый; добавляйте его, только чтобы дать запуску дополнительную инструкцию."
+      "assignee_comment_hint": "{{name}} — исполнитель и и так запускается, когда участник оставляет комментарий. Это правило присоединится к тому запуску, а не начнёт новый; добавляйте его, только чтобы дать запуску дополнительную инструкцию.",
+      "wait_days_few": "{{count}} дня",
+      "wait_days_many": "{{count}} дней",
+      "max_fires_times_few": "{{count}} раз",
+      "max_fires_times_many": "{{count}} раз"
     },
     "system": {
       "badge": "Система",
@@ -1342,7 +1430,9 @@
       "instruction_default": "Для этой задачи не задана; используется инструкция по умолчанию:",
       "instruction_placeholder": "Оставьте пустым, чтобы использовать инструкцию по умолчанию",
       "instruction_invalid": "Инструкция должна укладываться в 4000 байт.",
-      "paused": "Приостановлено: {{reason}}"
+      "paused": "Приостановлено: {{reason}}",
+      "remaining_few": "осталось {{count}}",
+      "remaining_many": "осталось {{count}}"
     },
     "cond": {
       "status": "Когда задача переходит в {{status}}",
@@ -1407,7 +1497,9 @@
       "delete_title": "Удалить будильник?",
       "delete_body": "{{agent}} больше не будет им разбужен, а его ещё не начатые запуски будут отозваны. Уже начатый запуск продолжится.",
       "deleting": "Удаление…",
-      "delete_error": "Не удалось удалить будильник"
+      "delete_error": "Не удалось удалить будильник",
+      "fires_few": "Сработал {{count}} раза",
+      "fires_many": "Сработал {{count}} раз"
     },
     "paused_reason": {
       "max_fires": "достигнут лимит в {{count}} запусков",
@@ -1449,7 +1541,9 @@
     "not_merged_action": "Убрать",
     "all_merged_to": "Все PR слиты. Следующий слитый PR переведёт задачу в {{status}}.",
     "issue_disabled": "Слияние PR не меняет эту задачу",
-    "issue_disabled_action": "Включить"
+    "issue_disabled_action": "Включить",
+    "waiting_to_few": "Перейдёт в {{status}}, когда {{prs}} будут слиты",
+    "waiting_to_many": "Перейдёт в {{status}}, когда {{prs}} будут слиты"
   },
   "deliverables": {
     "section_title": "Результаты",
@@ -1483,7 +1577,13 @@
     "overview_summary_with_size_other": "{{count}} результата · всего {{size}}",
     "overview_close": "Закрыть",
     "overview_empty": "Нет результатов этого типа.",
-    "group_comment_by": "Комментарий {{name}}"
+    "group_comment_by": "Комментарий {{name}}",
+    "view_all_few": "Показать все {{count}} результата",
+    "view_all_many": "Показать все {{count}} результатов",
+    "overview_summary_few": "{{count}} результата",
+    "overview_summary_many": "{{count}} результатов",
+    "overview_summary_with_size_few": "{{count}} результата · всего {{size}}",
+    "overview_summary_with_size_many": "{{count}} результатов · всего {{size}}"
   },
   "workflows": {
     "default_name": "По умолчанию",
@@ -1756,5 +1856,20 @@
   },
   "hover_card": {
     "created_updated": "создано {{created}} · обновлено {{updated}}"
+  },
+  "model_profile": {
+    "label": "Профиль модели",
+    "assignee": "Профиль исполнителя"
+  },
+  "stage_dispatch": {
+    "label": "Стадии",
+    "off": "Не назначаются"
+  },
+  "route_step": {
+    "title": "Шаг маршрута, круг {{round}}",
+    "paused": "на паузе",
+    "awaiting_coordinator": "у координатора",
+    "waiting_provider": "ждёт провайдера",
+    "disabled": "выключен"
   }
 }

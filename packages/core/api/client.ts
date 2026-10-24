@@ -2,6 +2,33 @@ import type { ZodType } from "zod";
 import { AgentRuntimeSchema, EMPTY_RUNTIME } from "../runtimes/schema";
 import type { IssueWakeup, IssueWakeupInput, IssueWakeupSummaryRow, PausedWakeup, SystemWakeup, WakeupRun, WorkspaceSystemWakeup } from "../types/issue-wakeup";
 import type { WorkspaceWakeupPage, WorkspaceWakeupFilters } from "../types/issue-wakeup";
+import type { AgentModels, CreateModelProfileInput, IssueModelProfile, ModelProfile, ModelProfileChange, ModelProfileInput, RuntimeUnavailable, UpdateAgentModelsInput } from "../types/model-profile";
+import { AgentModelsSchema, IssueModelProfileSchema, ModelProfilePreviewSchema, ModelProfileSchema, RuntimeUnavailableSchema } from "./schemas";
+import { IssueStageDispatchSchema, StageDispatchListSchema } from "./schemas";
+import {
+  CreateRuntimePoolResultSchema,
+  DeleteSubscriptionResultSchema,
+  RuntimeProfileSubscriptionsSchema,
+  SubscriptionDiscrepancyListSchema,
+  SubscriptionListSchema,
+  SubscriptionLoginResponseSchema,
+  SubscriptionSchema,
+} from "./schemas";
+import type {
+  CreateRuntimePoolInput,
+  CreateRuntimePoolResult,
+  CreateSubscriptionInput,
+  DeleteSubscriptionResult,
+  RuntimeProfileSubscriptions,
+  StartSubscriptionLoginInput,
+  Subscription,
+  SubscriptionDiscrepancy,
+  SubscriptionList,
+  SubscriptionLoginSession,
+  UpdateRuntimeProfileSubscriptionsInput,
+  UpdateSubscriptionInput,
+} from "../types/subscription";
+import type { IssueStageDispatch, StageDispatchEpic } from "../types/stage-dispatch";
 import { WorkspaceWakeupPageSchema, IssueWakeupSchema, IssueWakeupSummaryRowSchema, PausedWakeupSchema, SystemWakeupSchema, WakeupRunSchema, WorkspaceSystemWakeupSchema } from "./schemas";
 import type { ArchivedInboxFilters } from "../inbox/filter-store";
 import type { ArchivedInboxPage, ArchivedInboxFacets } from "../types/inbox";
@@ -1334,6 +1361,113 @@ export class ApiClient {
     return parsed;
   }
 
+  // Model profiles and agent model lists. The server chooses a run's model
+  // from these at every claim; edits apply from the next run.
+  async listModelProfiles(): Promise<ModelProfile[]> {
+    const raw = await this.fetch<unknown>("/api/model-profiles");
+    const parsed = parseWithFallback<ModelProfile[] | null>(raw, ModelProfileSchema.array(), null, { endpoint: "GET /api/model-profiles" });
+    if (!parsed) throw new Error("Could not load model profiles");
+    return parsed;
+  }
+
+  private parseModelProfile(raw: unknown, endpoint: string): ModelProfile {
+    const parsed = parseWithFallback<ModelProfile | null>(raw, ModelProfileSchema, null, { endpoint });
+    if (!parsed) throw new Error("Could not read the model profile");
+    return parsed;
+  }
+
+  async createModelProfile(input: CreateModelProfileInput): Promise<ModelProfile> {
+    const raw = await this.fetch<unknown>("/api/model-profiles", { method: "POST", body: JSON.stringify(input) });
+    return this.parseModelProfile(raw, "POST /api/model-profiles");
+  }
+
+  async updateModelProfile(id: string, input: ModelProfileInput): Promise<ModelProfile> {
+    const raw = await this.fetch<unknown>(`/api/model-profiles/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(input) });
+    return this.parseModelProfile(raw, "PUT /api/model-profiles/:id");
+  }
+
+  async deleteModelProfile(id: string): Promise<void> {
+    await this.fetch(`/api/model-profiles/${encodeURIComponent(id)}`, { method: "DELETE" });
+  }
+
+  /** Who would get another model on their next run if the edit were saved. Saves nothing. */
+  async previewModelProfile(id: string, input: ModelProfileInput): Promise<ModelProfileChange[]> {
+    const raw = await this.fetch<unknown>(`/api/model-profiles/${encodeURIComponent(id)}/preview`, { method: "POST", body: JSON.stringify(input) });
+    const parsed = parseWithFallback<{ changes: ModelProfileChange[] } | null>(
+      raw, ModelProfilePreviewSchema, null, { endpoint: "POST /api/model-profiles/:id/preview" });
+    if (!parsed) throw new Error("Could not preview the profile edit");
+    return parsed.changes;
+  }
+
+  async getAgentModels(agentId: string): Promise<AgentModels> {
+    const raw = await this.fetch<unknown>(`/api/agents/${encodeURIComponent(agentId)}/models`);
+    const parsed = parseWithFallback<AgentModels | null>(raw, AgentModelsSchema, null, { endpoint: "GET /api/agents/:id/models" });
+    if (!parsed) throw new Error("Could not load the agent's models");
+    return parsed;
+  }
+
+  async updateAgentModels(agentId: string, input: UpdateAgentModelsInput): Promise<AgentModels> {
+    const raw = await this.fetch<unknown>(`/api/agents/${encodeURIComponent(agentId)}/models`, { method: "PUT", body: JSON.stringify(input) });
+    const parsed = parseWithFallback<AgentModels | null>(raw, AgentModelsSchema, null, { endpoint: "PUT /api/agents/:id/models" });
+    if (!parsed) throw new Error("Could not read the agent's models");
+    return parsed;
+  }
+
+  /** The epic's stage dispatch; a backend without it reads as off. */
+  async getIssueStageDispatch(issueId: string): Promise<IssueStageDispatch> {
+    const off: IssueStageDispatch = { issue_id: issueId, squad_id: null, dispatch_by: null };
+    try {
+      const raw = await this.fetch<unknown>(`/api/issues/${encodeURIComponent(issueId)}/stage-dispatch`);
+      return parseWithFallback<IssueStageDispatch>(raw, IssueStageDispatchSchema, off, { endpoint: "GET /api/issues/:id/stage-dispatch" });
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404) return off;
+      throw error;
+    }
+  }
+
+  /** Hands the epic's stages to a squad, or stops with null. */
+  async setIssueStageDispatch(issueId: string, squadId: string | null): Promise<IssueStageDispatch> {
+    const raw = await this.fetch<unknown>(`/api/issues/${encodeURIComponent(issueId)}/stage-dispatch`, {
+      method: "PUT",
+      body: JSON.stringify({ squad_id: squadId }),
+    });
+    return parseWithFallback<IssueStageDispatch>(raw, IssueStageDispatchSchema, { issue_id: issueId, squad_id: squadId, dispatch_by: null }, {
+      endpoint: "PUT /api/issues/:id/stage-dispatch",
+    });
+  }
+
+  /** The workspace's epics whose stages the server dispatches; empty on a backend without it. */
+  async listStageDispatch(): Promise<StageDispatchEpic[]> {
+    try {
+      const raw = await this.fetch<unknown>("/api/stage-dispatch");
+      return parseWithFallback(raw, StageDispatchListSchema, { epics: [] }, { endpoint: "GET /api/stage-dispatch" }).epics as StageDispatchEpic[];
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404) return [];
+      throw error;
+    }
+  }
+
+  async getIssueModelProfile(issueId: string): Promise<IssueModelProfile> {
+    const raw = await this.fetch<unknown>(`/api/issues/${encodeURIComponent(issueId)}/model-profile`);
+    const parsed = parseWithFallback<IssueModelProfile | null>(raw, IssueModelProfileSchema, null, { endpoint: "GET /api/issues/:id/model-profile" });
+    if (!parsed) throw new Error("Could not load the issue's model profile");
+    return parsed;
+  }
+
+  async setIssueModelProfile(issueId: string, modelProfileId: string | null): Promise<IssueModelProfile> {
+    const raw = await this.fetch<unknown>(`/api/issues/${encodeURIComponent(issueId)}/model-profile`, {
+      method: "PUT", body: JSON.stringify({ model_profile_id: modelProfileId }),
+    });
+    const parsed = parseWithFallback<IssueModelProfile | null>(raw, IssueModelProfileSchema, null, { endpoint: "PUT /api/issues/:id/model-profile" });
+    if (!parsed) throw new Error("Could not read the issue's model profile");
+    return parsed;
+  }
+
+  async listRuntimeUnavailable(): Promise<RuntimeUnavailable[]> {
+    const raw = await this.fetch<unknown>("/api/runtime-unavailable");
+    return parseWithFallback<RuntimeUnavailable[]>(raw, RuntimeUnavailableSchema.array(), [], { endpoint: "GET /api/runtime-unavailable" });
+  }
+
   async listIssueWakeups(issueId: string): Promise<IssueWakeup[]> {
     const raw = await this.fetch<unknown>(`/api/issues/${encodeURIComponent(issueId)}/wakeups`);
     const parsed = parseWithFallback<IssueWakeup[] | null>(raw, IssueWakeupSchema.array(), null, { endpoint: "GET /api/issues/:id/wakeups" });
@@ -2512,6 +2646,134 @@ export class ApiClient {
       `/api/workspaces/${workspaceId}/runtime-profiles/${profileId}`,
       { method: "DELETE" },
     );
+  }
+
+  // ---------------------------------------------------------------------
+  // Instance subscriptions and the runtime pools that spend them. Reads are
+  // open to members; writes need an instance admin (the server answers 403).
+  // A malformed answer throws rather than rendering as "no subscriptions".
+  // ---------------------------------------------------------------------
+
+  async listSubscriptions(): Promise<SubscriptionList> {
+    const raw = await this.fetch<unknown>("/api/subscriptions");
+    const parsed = parseWithFallback<SubscriptionList | null>(raw, SubscriptionListSchema, null, {
+      endpoint: "GET /api/subscriptions",
+    });
+    if (!parsed) throw new Error("Could not load subscriptions");
+    return parsed;
+  }
+
+  private parseSubscription(raw: unknown, endpoint: string): Subscription {
+    const parsed = parseWithFallback<Subscription | null>(raw, SubscriptionSchema, null, { endpoint });
+    if (!parsed) throw new Error("Could not read the subscription");
+    return parsed;
+  }
+
+  async createSubscription(input: CreateSubscriptionInput): Promise<Subscription> {
+    const raw = await this.fetch<unknown>("/api/subscriptions", { method: "POST", body: JSON.stringify(input) });
+    return this.parseSubscription(raw, "POST /api/subscriptions");
+  }
+
+  async updateSubscription(key: string, patch: UpdateSubscriptionInput): Promise<Subscription> {
+    const raw = await this.fetch<unknown>(`/api/subscriptions/${encodeURIComponent(key)}`, {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    });
+    return this.parseSubscription(raw, "PATCH /api/subscriptions/:key");
+  }
+
+  async deleteSubscription(key: string): Promise<DeleteSubscriptionResult> {
+    const raw = await this.fetch<unknown>(`/api/subscriptions/${encodeURIComponent(key)}`, { method: "DELETE" });
+    return parseWithFallback<DeleteSubscriptionResult>(
+      raw,
+      DeleteSubscriptionResultSchema,
+      { deleted: true, detached_runtime_profile_ids: [] },
+      { endpoint: "DELETE /api/subscriptions/:key" },
+    );
+  }
+
+  /** Things that need a person: credentials missing on a host, unused subscriptions, empty pools, agents on a switched-off pool. */
+  async listSubscriptionDiscrepancies(): Promise<SubscriptionDiscrepancy[]> {
+    const raw = await this.fetch<unknown>("/api/subscriptions/discrepancies");
+    const parsed = parseWithFallback<{ items: SubscriptionDiscrepancy[] } | null>(
+      raw,
+      SubscriptionDiscrepancyListSchema,
+      null,
+      { endpoint: "GET /api/subscriptions/discrepancies" },
+    );
+    if (!parsed) throw new Error("Could not load discrepancies");
+    return parsed.items;
+  }
+
+  private parseLoginSession(raw: unknown, endpoint: string): SubscriptionLoginSession | null {
+    const parsed = parseWithFallback<{ login: SubscriptionLoginSession | null } | undefined>(
+      raw,
+      SubscriptionLoginResponseSchema,
+      undefined,
+      { endpoint },
+    );
+    if (parsed === undefined) throw new Error("Could not read the sign-in state");
+    return parsed.login;
+  }
+
+  /** Starts a sign-in on the daemon host. The token is sent once and kept nowhere on the client. */
+  async startSubscriptionLogin(key: string, input: StartSubscriptionLoginInput): Promise<SubscriptionLoginSession> {
+    const raw = await this.fetch<unknown>(`/api/subscriptions/${encodeURIComponent(key)}/login`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+    const session = this.parseLoginSession(raw, "POST /api/subscriptions/:key/login");
+    if (!session) throw new Error("Could not read the sign-in state");
+    return session;
+  }
+
+  async getSubscriptionLogin(key: string): Promise<SubscriptionLoginSession | null> {
+    const raw = await this.fetch<unknown>(`/api/subscriptions/${encodeURIComponent(key)}/login`);
+    return this.parseLoginSession(raw, "GET /api/subscriptions/:key/login");
+  }
+
+  async cancelSubscriptionLogin(key: string): Promise<void> {
+    await this.fetch(`/api/subscriptions/${encodeURIComponent(key)}/login`, { method: "DELETE" });
+  }
+
+  async createRuntimePool(input: CreateRuntimePoolInput): Promise<CreateRuntimePoolResult> {
+    const raw = await this.fetch<unknown>("/api/runtime-pools", { method: "POST", body: JSON.stringify(input) });
+    const parsed = parseWithFallback<CreateRuntimePoolResult | null>(raw, CreateRuntimePoolResultSchema, null, {
+      endpoint: "POST /api/runtime-pools",
+    });
+    if (!parsed) throw new Error("Could not read the new runtime");
+    return parsed;
+  }
+
+  private parseProfileSubscriptions(raw: unknown, endpoint: string): RuntimeProfileSubscriptions {
+    const parsed = parseWithFallback<RuntimeProfileSubscriptions | null>(
+      raw,
+      RuntimeProfileSubscriptionsSchema,
+      null,
+      { endpoint },
+    );
+    if (!parsed) throw new Error("Could not load the runtime's subscriptions");
+    return parsed;
+  }
+
+  async getRuntimeProfileSubscriptions(workspaceId: string, profileId: string): Promise<RuntimeProfileSubscriptions> {
+    const raw = await this.fetch<unknown>(
+      `/api/workspaces/${workspaceId}/runtime-profiles/${encodeURIComponent(profileId)}/subscriptions`,
+    );
+    return this.parseProfileSubscriptions(raw, "GET /api/workspaces/:ws/runtime-profiles/:id/subscriptions");
+  }
+
+  /** Changes every copy of the pool (same share_key) in every workspace. */
+  async updateRuntimeProfileSubscriptions(
+    workspaceId: string,
+    profileId: string,
+    input: UpdateRuntimeProfileSubscriptionsInput,
+  ): Promise<RuntimeProfileSubscriptions> {
+    const raw = await this.fetch<unknown>(
+      `/api/workspaces/${workspaceId}/runtime-profiles/${encodeURIComponent(profileId)}/subscriptions`,
+      { method: "PUT", body: JSON.stringify(input) },
+    );
+    return this.parseProfileSubscriptions(raw, "PUT /api/workspaces/:ws/runtime-profiles/:id/subscriptions");
   }
 
   async getRuntimeUsage(
@@ -4715,7 +4977,7 @@ export class ApiClient {
     }) as Squad;
   }
 
-  async updateSquad(id: string, data: { name?: string; description?: string; instructions?: string; leader_id?: string; avatar_url?: string }): Promise<Squad> {
+  async updateSquad(id: string, data: { name?: string; description?: string; instructions?: string; leader_id?: string; avatar_url?: string; route_template?: string }): Promise<Squad> {
     const raw = await this.fetch<unknown>(`/api/squads/${id}`, { method: "PUT", body: JSON.stringify(data) });
     return parseWithFallback(raw, SquadSchema, EMPTY_SQUAD, {
       endpoint: "PUT /api/squads/:id",

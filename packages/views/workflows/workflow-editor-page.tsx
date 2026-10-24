@@ -418,8 +418,8 @@ export function WorkflowEditorPage({
     <div className="space-y-6">
       <div className="space-y-3">
         <Breadcrumb onBack={onBack} current={title} />
-        <div className="flex items-start gap-3">
-          <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-start gap-3">
+          <div className="min-w-0 basis-64 grow">
             <input
               aria-label={t(($) => $.workflows.editor.name)}
               value={draft.name}
@@ -453,7 +453,7 @@ export function WorkflowEditorPage({
             </p>
           </div>
           {(canEdit || canDuplicate) && (
-            <div className="flex shrink-0 items-center gap-2">
+            <div className="flex max-w-full flex-wrap items-center gap-2">
               {canEdit && dirty && workflowId && (
                 <span className="text-caption text-muted-foreground">{t(($) => $.workflows.editor.unsaved)}</span>
               )}

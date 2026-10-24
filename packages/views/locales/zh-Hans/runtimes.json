@@ -451,7 +451,9 @@
       "toast_created": "自定义运行时已创建",
       "toast_updated": "自定义运行时已更新",
       "error_duplicate_name": "已存在使用此显示名称的运行时。",
-      "error_generic": "保存运行时失败。"
+      "error_generic": "保存运行时失败。",
+      "subscriptions_hint": "Claude 和 Codex 订阅在“订阅”页面中设置。",
+      "subscriptions_link": "打开订阅"
     },
     "delete_dialog": {
       "title": "从工作区删除自定义运行时？",

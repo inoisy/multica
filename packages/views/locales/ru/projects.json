@@ -17,7 +17,9 @@
     "no_matches": "Нет подходящих проектов",
     "selected_one": "Выбрано: {{count}}",
     "selected_other": "Выбрано: {{count}}",
-    "clear_selection": "Снять выделение"
+    "clear_selection": "Снять выделение",
+    "selected_few": "Выбрано: {{count}}",
+    "selected_many": "Выбрано: {{count}}"
   },
   "table": {
     "name": "Название",
@@ -181,6 +183,8 @@
     "direction_asc": "По возрастанию",
     "direction_desc": "По убыванию",
     "section_columns": "Столбцы",
-    "view": "Вид"
+    "view": "Вид",
+    "filter_active_count_few": "{{count}} фильтра",
+    "filter_active_count_many": "{{count}} фильтров"
   }
 }

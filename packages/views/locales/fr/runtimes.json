@@ -465,7 +465,9 @@
       "toast_created": "Runtime personnalisé créé",
       "toast_updated": "Runtime personnalisé mis à jour",
       "error_duplicate_name": "Un runtime portant ce nom affiché existe déjà.",
-      "error_generic": "Échec de l'enregistrement du runtime."
+      "error_generic": "Échec de l'enregistrement du runtime.",
+      "subscriptions_hint": "Les abonnements Claude et Codex se configurent sur la page Abonnements.",
+      "subscriptions_link": "Ouvrir Abonnements"
     },
     "delete_dialog": {
       "title": "Supprimer le runtime personnalisé de l'espace de travail ?",

@@ -32,6 +32,9 @@ vi.mock("./tabs/activity-tab", () => ({
 vi.mock("./agent-overview-summary", () => ({
   AgentOverviewSummary: () => <div>agent-overview-summary</div>,
 }));
+vi.mock("./agent-models", () => ({
+  AgentModels: () => <div>agent-models</div>,
+}));
 vi.mock("./agent-access-settings", () => ({
   AgentAccessSettings: () => <div>agent-access-settings</div>,
 }));

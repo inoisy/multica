@@ -6,6 +6,7 @@ import {
   Bell,
   Blocks,
   CircleDot,
+  ChevronDown,
   CreditCard,
   FolderGit2,
   Keyboard,
@@ -440,13 +441,13 @@ export function SettingsPage({ extraDeviceTabs = [] }: SettingsPageProps = {}) {
             {t(($) => $.page.title)}
           </h1>
         </div>
-        <div className="px-4 pb-4 md:hidden">
+        <div className="relative px-4 pb-4 md:hidden">
           <label className="sr-only" htmlFor="settings-navigation">
             {t(($) => $.page.navigate)}
           </label>
           <select
             id="settings-navigation"
-            className="h-10 w-full rounded-lg border border-input bg-background px-3 text-body text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+            className="h-10 w-full appearance-none rounded-lg border border-input bg-background pl-3 pr-9 text-body text-foreground focus-visible:outline-2 focus-visible:outline-ring"
             value={active.value}
             onChange={(event) => navigation.push(href(event.target.value))}
           >
@@ -465,6 +466,7 @@ export function SettingsPage({ extraDeviceTabs = [] }: SettingsPageProps = {}) {
               )),
             )}
           </select>
+          <ChevronDown aria-hidden="true" className="pointer-events-none absolute right-7 top-3 size-4 text-muted-foreground" />
         </div>
         <div className="relative mx-3 mb-3 hidden shrink-0 md:block">
           <Search
