@@ -26,10 +26,10 @@ describe("SectionTabs", () => {
   });
 
   it("shows the current page's count only", () => {
-    renderWithI18n(<SectionTabs section="runtimes" current="runtimes" count={3} />);
-    const heading = screen.getByRole("heading", { name: "Runtimes" });
+    renderWithI18n(<SectionTabs section="agents" current="agents" count={3} />);
+    const heading = screen.getByRole("heading", { name: "Agents" });
     expect(heading).toHaveTextContent("3");
-    expect(screen.getByRole("link", { name: "Subscriptions" })).toHaveAttribute("href", "/acme/subscriptions");
+    expect(screen.getByRole("link", { name: /Model profiles/ })).toHaveAttribute("href", "/acme/profiles");
   });
 });
 
@@ -39,7 +39,8 @@ describe("sectionHrefsFor", () => {
   it("adds a section's fork pages to its sidebar entry", () => {
     expect(sectionHrefsFor(p, "/acme/issues")).toEqual(["/acme/issues", "/acme/conveyor"]);
     expect(sectionHrefsFor(p, "/acme/agents")).toEqual(["/acme/agents", "/acme/profiles"]);
-    expect(sectionHrefsFor(p, "/acme/runtimes")).toEqual(["/acme/runtimes", "/acme/subscriptions"]);
+    expect(sectionHrefsFor(p, "/acme/runtimes")).toEqual(["/acme/runtimes"]);
+    expect(sectionHrefsFor(p, "/acme/usage")).toEqual(["/acme/usage"]);
   });
 
   it("leaves other entries alone", () => {
