@@ -18,6 +18,7 @@ import (
 
 // Subscription is one entry of a runtime's pool as the server sends it.
 type Subscription struct {
+	ID             string         `json:"id"`
 	Key            string         `json:"key"`
 	Provider       string         `json:"provider"`
 	Family         string         `json:"family"`
@@ -51,6 +52,9 @@ type Usage struct {
 
 // Pool is a runtime's subscriptions in spend order.
 type Pool struct {
+	OfferID       string         `json:"offer_id,omitempty"`
+	PoolID        string         `json:"pool_id,omitempty"`
+	Revision      int32          `json:"revision,omitempty"`
 	ProfileID     string         `json:"profile_id"`
 	SpendOrder    string         `json:"spend_order"`
 	Subscriptions []Subscription `json:"subscriptions"`
@@ -266,8 +270,9 @@ func FreeAt(marks []Mark, now time.Time, unknown time.Duration) time.Time {
 // the earliest reset of the runtime's subscriptions (zero when unknown), sent
 // to the server apart from the text so it does not have to read it back.
 type BlockedError struct {
-	Text  string
-	Until time.Time
+	RefusalCode string
+	Text        string
+	Until       time.Time
 }
 
 func (e *BlockedError) Error() string { return e.Text }

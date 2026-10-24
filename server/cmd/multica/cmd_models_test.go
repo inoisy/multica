@@ -68,8 +68,8 @@ func TestModelOptionCLIWritesTheListItWasGiven(t *testing.T) {
 
 	writes = nil
 	run("reset", modelsTestAgent)
-	if opts, ok := writes[0].body["options"].([]any); !ok || len(opts) != 0 {
-		t.Fatalf("reset must send an empty list: %+v", writes[0].body)
+	if writes[0].method != "DELETE" || !strings.HasSuffix(writes[0].path, "/models/personal") {
+		t.Fatalf("reset must use the atomic server mutation: %+v", writes[0])
 	}
 
 	writes = nil

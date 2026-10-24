@@ -41,12 +41,17 @@ type subscriptionRun struct {
 
 // prepareSubscriptionRun chooses the subscription for a claimed task whose
 // runtime spends a pool, checks the VLESS exit for Claude/Codex accounts and
-// points the run at the credential. An error fails the run before the CLI
-// starts; a "usage limit" text makes the server treat it as a quota failure
-// and move the run to the next model.
+// points the run at the credential. A typed refusal carries its code and reset
+// independently of human-readable text. Confirmation must precede CLI launch.
 func (d *Daemon) prepareSubscriptionRun(ctx context.Context, task Task, codexHome string, log *slog.Logger) (*subscriptionRun, error) {
 	pool := task.SubscriptionPool
-	if pool == nil || len(pool.Subscriptions) == 0 {
+	if pool == nil {
+		return nil, nil
+	}
+	if len(pool.Subscriptions) == 0 {
+		if pool.OfferID != "" || pool.PoolID != "" || pool.Revision != 0 {
+			return nil, errors.New("account offer has no subscriptions")
+		}
 		return nil, nil
 	}
 	choice, ok := d.subscriptionSelector().Choose(*pool, true)
@@ -59,7 +64,7 @@ func (d *Daemon) prepareSubscriptionRun(ctx context.Context, task Task, codexHom
 		"candidates", describeMarks(choice.Marks),
 		"blocked", choice.Blocked != "")
 	if choice.Blocked != "" {
-		return nil, &subscriptions.BlockedError{Text: choice.Blocked, Until: choice.BlockedUntil}
+		return nil, &subscriptions.BlockedError{Text: choice.Blocked, Until: choice.BlockedUntil, RefusalCode: choice.RefusalCode}
 	}
 	launch, err := subscriptions.Prepare(choice.Subscription, codexHome)
 	if err != nil {
@@ -70,6 +75,11 @@ func (d *Daemon) prepareSubscriptionRun(ctx context.Context, task Task, codexHom
 			return nil, err
 		}
 	}
+	confirmed, err := d.client.ConfirmTaskAccount(ctx, task, choice.Subscription)
+	if err != nil {
+		return nil, fmt.Errorf("confirm selected account: %w", err)
+	}
+	log.Info("subscription account confirmation", "subscription_id", choice.Subscription.ID, "confirmed", confirmed)
 	return &subscriptionRun{sub: choice.Subscription, launch: launch}, nil
 }
 

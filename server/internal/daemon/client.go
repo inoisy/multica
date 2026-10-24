@@ -524,6 +524,50 @@ func (c *Client) StartTask(ctx context.Context, task Task, capabilities ...strin
 	return err == nil && negotiated, err
 }
 
+// ConfirmTaskAccount confirms only the account from the claim snapshot. A false
+// result means the older protocol cannot record a fact; it is never fabricated.
+func (c *Client) ConfirmTaskAccount(ctx context.Context, task Task, sub subscriptions.Subscription) (bool, error) {
+	pool := task.SubscriptionPool
+	if pool == nil || (pool.OfferID == "" && pool.PoolID == "" && pool.Revision == 0) {
+		return false, nil
+	}
+	if task.ID == "" || pool.OfferID == "" || pool.PoolID == "" || pool.Revision <= 0 || sub.ID == "" {
+		return false, errors.New("account confirmation: incomplete claim snapshot")
+	}
+	offered := false
+	for _, candidate := range pool.Subscriptions {
+		if candidate.ID == sub.ID && candidate.Key == sub.Key && candidate.CredentialPath == sub.CredentialPath {
+			offered = true
+			break
+		}
+	}
+	if !offered {
+		return false, errors.New("account confirmation: selected credential is not in the claim snapshot")
+	}
+	ctx, cancel := context.WithTimeout(ctx, startTaskTimeout)
+	defer cancel()
+	var decode responseDecoder = func(r io.Reader) error {
+		var response struct {
+			Fact *protocol.AccountFact `json:"account_fact"`
+		}
+		if err := json.NewDecoder(io.LimitReader(r, maxStartTaskResponseBytes)).Decode(&response); err != nil {
+			return fmt.Errorf("%w: account confirmation: %v", errInvalidResponseBody, err)
+		}
+		if response.Fact == nil || response.Fact.SubscriptionID != sub.ID || response.Fact.PoolID != pool.PoolID || response.Fact.PoolRevision != pool.Revision {
+			return fmt.Errorf("%w: account confirmation does not match the claim snapshot", errInvalidResponseBody)
+		}
+		return nil
+	}
+	err := c.postJSONWithRetry(ctx, fmt.Sprintf("/api/daemon/tasks/%s/account", task.ID), protocol.AccountConfirmation{OfferID: pool.OfferID, SubscriptionID: sub.ID, PoolID: pool.PoolID, PoolRevision: pool.Revision}, decode, startTaskRetrySchedule)
+	var reqErr *requestError
+	// Chi's missing-route response identifies old servers. A structured 404
+	// from a supported endpoint means access/assignment was rejected.
+	if errors.As(err, &reqErr) && reqErr.StatusCode == http.StatusNotFound && strings.TrimSpace(reqErr.Body) == "404 page not found" {
+		return false, nil
+	}
+	return err == nil, err
+}
+
 // MarkTaskWaitingLocalDirectory parks a freshly-dispatched task in the
 // waiting_local_directory state on the server. The daemon calls this after
 // it has claimed a task whose project carries a local_directory resource
@@ -672,8 +716,11 @@ func (c *Client) failTaskWithRetrySchedule(ctx context.Context, taskID, errMsg, 
 
 // failTaskReportWithRetrySchedule also sends quota_reset_at: when a refused
 // run's subscriptions free up, so the server need not parse the error text.
-func (c *Client) failTaskReportWithRetrySchedule(ctx context.Context, taskID, errMsg, sessionID, workDir, branchName, failureReason string, sessionRolloutMissing bool, retiredSessionID, durableWorkDir string, quotaResetAt time.Time, schedule []time.Duration) error {
+func (c *Client) failTaskReportWithRetrySchedule(ctx context.Context, taskID, errMsg, sessionID, workDir, branchName, failureReason string, sessionRolloutMissing bool, retiredSessionID, durableWorkDir string, quotaResetAt time.Time, schedule []time.Duration, refusalCodes ...string) error {
 	body := map[string]any{"error": errMsg}
+	if len(refusalCodes) > 0 && refusalCodes[0] != "" {
+		body["refusal_code"] = refusalCodes[0]
+	}
 	if !quotaResetAt.IsZero() {
 		body["quota_reset_at"] = quotaResetAt.UTC().Format(time.RFC3339)
 	}

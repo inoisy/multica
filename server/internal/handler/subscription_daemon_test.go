@@ -239,15 +239,18 @@ func TestDaemonUsageParksTwoSubscriptionPoolUntilEarliestReset(t *testing.T) {
 
 func TestTaskFailRequestDecodesQuotaReset(t *testing.T) {
 	var req TaskFailRequest
-	if err := json.Unmarshal([]byte(`{"error":"usage limit","quota_reset_at":"2026-10-20T20:30:00Z"}`), &req); err != nil {
+	if err := json.Unmarshal([]byte(`{"error":"arbitrary text","refusal_code":"agent_cap_refusal","quota_reset_at":"2026-10-20T20:30:00Z"}`), &req); err != nil {
 		t.Fatal(err)
+	}
+	if req.RefusalCode != "agent_cap_refusal" {
+		t.Fatalf("refusal_code: %s", req.RefusalCode)
 	}
 	if req.QuotaResetAt == nil || !req.QuotaResetAt.Equal(time.Date(2026, 10, 20, 20, 30, 0, 0, time.UTC)) {
 		t.Fatalf("quota_reset_at: %v", req.QuotaResetAt)
 	}
 	req = TaskFailRequest{}
 	json.Unmarshal([]byte(`{"error":"x"}`), &req)
-	if req.QuotaResetAt != nil {
+	if req.QuotaResetAt != nil || req.RefusalCode != "" {
 		t.Fatal("older daemons send none")
 	}
 }

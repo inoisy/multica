@@ -193,13 +193,13 @@ func QuotaUnavailableUntil(reported time.Time, errMsg, runtimeName, provider str
 // on disabled accounts, otherwise the provider's. A provider refusal of a run
 // whose account the daemon confirmed belongs to that account; without the
 // fact it closes the whole runtime.
-func markRuntimeUnavailable(ctx context.Context, q *db.Queries, t db.AgentTaskQueue, errMsg string, reported, now time.Time) error {
+func markRuntimeUnavailable(ctx context.Context, q *db.Queries, t db.AgentTaskQueue, errMsg string, reported, now time.Time, refusalCodes ...string) error {
 	rt, err := q.GetAgentRuntime(ctx, t.RuntimeID)
 	if err != nil {
 		return err
 	}
 	until := QuotaUnavailableUntil(reported, errMsg, runtimeDisplayName(rt), rt.Provider, now)
-	code := RefusalCodeForFailure(errMsg)
+	code := RefusalCodeForFailure(errMsg, refusalCodes...)
 	var account pgtype.UUID
 	if fact, ok := ParseAccountFact(t.AccountFact); ok && code == UnavailableProviderLimit {
 		account = util.MustParseUUID(fact.SubscriptionID)

@@ -269,6 +269,7 @@ type terminalTaskReport struct {
 	workDir        string
 	durableWorkDir string
 	failureReason  string
+	refusalCode    string
 	// sessionRolloutMissing is true when the daemon withheld this task's Codex
 	// session because its rollout was not in the store (MUL-5305). The server
 	// clears the resume pointer and flags the continuity gap for the next claim.
@@ -5890,6 +5891,7 @@ func (d *Daemon) handleTask(ctx context.Context, task Task, slot int) {
 			failureReason:    taskRunFailureReason(err),
 			retiredSessionID: result.RetiredSessionID,
 			quotaResetAt:     quotaResetAt(err),
+			refusalCode:      runAccountRefusalCode(err),
 		}); failErr != nil {
 			taskLog.Error("fail task callback failed", "error", failErr)
 		}
@@ -5998,7 +6000,33 @@ func quotaResetAt(err error) time.Time {
 	return time.Time{}
 }
 
+func accountRefusalCode(err error) string {
+	var blocked *subscriptions.BlockedError
+	if errors.As(err, &blocked) {
+		return blocked.RefusalCode
+	}
+	return ""
+}
+
+func providerRefusalCode(failureReason string) string {
+	if failureReason == taskfailure.ReasonAgentProviderQuotaLimit.String() || failureReason == taskfailure.ReasonAgentProviderCapacityOrRateLimit.String() {
+		return protocol.AccountRefusalProviderLimit
+	}
+	return ""
+}
+
+func runAccountRefusalCode(err error) string {
+	if code := accountRefusalCode(err); code != "" {
+		return code
+	}
+	return providerRefusalCode(taskRunFailureReason(err))
+}
+
 func taskRunFailureReason(err error) string {
+	if protocol.IsAccountRefusalCode(accountRefusalCode(err)) {
+		return taskfailure.ReasonAgentProviderQuotaLimit.String()
+	}
+
 	if errors.Is(err, errInvalidTaskIdentity) {
 		return taskfailure.ReasonInvalidTaskIdentity.String()
 	}
@@ -6344,6 +6372,7 @@ func (d *Daemon) reportTaskResult(ctx context.Context, taskID string, result Tas
 			// they want to see how far it got.
 			branchName:            result.BranchName,
 			failureReason:         failureReason,
+			refusalCode:           providerRefusalCode(failureReason),
 			sessionRolloutMissing: result.SessionRolloutMissing,
 			retiredSessionID:      result.RetiredSessionID,
 		}); err != nil {
@@ -6447,7 +6476,7 @@ func (d *Daemon) sendTerminalTaskReport(ctx context.Context, report terminalTask
 	case terminalTaskReportComplete:
 		return d.client.completeTaskWithRetrySchedule(ctx, report.taskID, report.output, report.branchName, report.sessionID, report.workDir, report.sessionRolloutMissing, report.retiredSessionID, report.durableWorkDir, schedule)
 	case terminalTaskReportFail:
-		return d.client.failTaskReportWithRetrySchedule(ctx, report.taskID, report.errorMessage, report.sessionID, report.workDir, report.branchName, report.failureReason, report.sessionRolloutMissing, report.retiredSessionID, report.durableWorkDir, report.quotaResetAt, schedule)
+		return d.client.failTaskReportWithRetrySchedule(ctx, report.taskID, report.errorMessage, report.sessionID, report.workDir, report.branchName, report.failureReason, report.sessionRolloutMissing, report.retiredSessionID, report.durableWorkDir, report.quotaResetAt, schedule, report.refusalCode)
 	default:
 		return fmt.Errorf("unsupported terminal task report kind %d", report.kind)
 	}
