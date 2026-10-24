@@ -2811,7 +2811,7 @@ func runIssueRuns(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	headers := []string{"ID", "AGENT", "STATUS", "STARTED", "COMPLETED", "ERROR"}
+	headers := []string{"ID", "AGENT", "STATUS", "STARTED", "COMPLETED", "ERROR", "ACCOUNT", "WAIT REASON"}
 	rows := make([][]string, 0, len(runs))
 	for _, r := range runs {
 		started := strVal(r, "started_at")
@@ -2834,6 +2834,7 @@ func runIssueRuns(cmd *cobra.Command, args []string) error {
 			started,
 			completed,
 			errMsg,
+			taskAccountLabel(r), taskWaitLabel(r),
 		})
 	}
 	cli.PrintTable(os.Stdout, headers, rows)

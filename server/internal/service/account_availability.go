@@ -11,6 +11,7 @@ import (
 	"github.com/multica-ai/multica/server/internal/daemon/subscriptions"
 	"github.com/multica-ai/multica/server/internal/util"
 	db "github.com/multica-ai/multica/server/pkg/db/generated"
+	"github.com/multica-ai/multica/server/pkg/protocol"
 	"github.com/multica-ai/multica/server/pkg/taskfailure"
 )
 
@@ -32,11 +33,11 @@ const (
 
 // What runtime_unavailable.reason_code says about a stored refusal.
 const (
-	UnavailableProviderLimit   = "provider_limit"    // a run failed on a provider quota
-	UnavailableAgentCapRefusal = "agent_cap_refusal" // the daemon refused on the agent limit
-	UnavailableDisabledRefusal = "disabled_refusal"  // the daemon refused: every account is off
-	UnavailablePoolVerdict     = "pool_verdict"      // moved from the old stored verdict; never read
-	UnavailableUnknown         = "unknown"           // no mark; read as a provider limit
+	UnavailableProviderLimit   = protocol.AccountRefusalProviderLimit // a run failed on a provider quota
+	UnavailableAgentCapRefusal = protocol.AccountRefusalAgentCap      // the daemon refused on the agent limit
+	UnavailableDisabledRefusal = protocol.AccountRefusalDisabled      // the daemon refused: every account is off
+	UnavailablePoolVerdict     = "pool_verdict"                       // moved from the old stored verdict; never read
+	UnavailableUnknown         = "unknown"                            // no mark; read as a provider limit
 )
 
 // AccountUsageMaxAge is how old a snapshot of usage or of a host's sign-in may
@@ -360,9 +361,14 @@ func StoredRefusalCode(r db.RuntimeUnavailable) string {
 }
 
 // RefusalCodeForFailure is the code to store for a run that failed on a quota:
-// the daemon's own refusals are told by their text, anything else is the
-// provider's.
-func RefusalCodeForFailure(errMsg string) string {
+// explicit codes take precedence; old daemon text is parsed only here.
+func RefusalCodeForFailure(errMsg string, refusalCodes ...string) string {
+	if len(refusalCodes) > 0 && refusalCodes[0] != "" {
+		if protocol.IsAccountRefusalCode(refusalCodes[0]) {
+			return refusalCodes[0]
+		}
+		return UnavailableUnknown
+	}
 	switch {
 	case strings.Contains(errMsg, taskfailure.SubsPickRefusalWitness):
 		return UnavailableAgentCapRefusal

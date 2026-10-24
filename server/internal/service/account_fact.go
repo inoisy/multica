@@ -11,6 +11,7 @@ import (
 	"github.com/multica-ai/multica/server/internal/util"
 	db "github.com/multica-ai/multica/server/pkg/db/generated"
 	"github.com/multica-ai/multica/server/pkg/dbid"
+	"github.com/multica-ai/multica/server/pkg/protocol"
 )
 
 // The accounts of a pool are chosen by the daemon, after the claim. The server
@@ -37,23 +38,9 @@ type AccountOffer struct {
 
 // AccountFact is the account the daemon confirmed for a run. Everything but
 // the choice itself is taken from the offer and from the authenticated daemon.
-type AccountFact struct {
-	SubscriptionID  string    `json:"subscription_id"`
-	SubscriptionKey string    `json:"subscription_key"`
-	AccountGroup    string    `json:"account_group"`
-	PoolID          string    `json:"pool_id"`
-	PoolRevision    int32     `json:"pool_revision"`
-	DaemonID        string    `json:"daemon_id"`
-	ConfirmedAt     time.Time `json:"confirmed_at"`
-}
+type AccountFact = protocol.AccountFact
 
-// AccountConfirmation is what the daemon sends.
-type AccountConfirmation struct {
-	OfferID        string `json:"offer_id"`
-	SubscriptionID string `json:"subscription_id"`
-	PoolID         string `json:"pool_id"`
-	PoolRevision   int32  `json:"pool_revision"`
-}
+type AccountConfirmation = protocol.AccountConfirmation
 
 // Why a confirmation is refused. The handler turns them into status codes.
 var (

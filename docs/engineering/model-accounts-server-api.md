@@ -1,7 +1,7 @@
 # Model accounts: server API and verification
 
 The data contract and rollback policy are in [model-selection-and-accounts.md](model-selection-and-accounts.md).
-This document describes the server boundary for daemon and client implementations.
+This document describes contract `model-accounts/v1` for daemon and client implementations.
 No real provider CLI is needed to exercise these endpoints.
 
 ## Pools
@@ -103,6 +103,31 @@ one another. Identical repeats after termination return the original fact and
 timestamp; a first write after termination fails. A reissued task gets a new
 offer and no prior fact. Task responses and model-choice journals expose the
 confirmed fact, never the offer. Old daemons leave the fact absent (unknown).
+
+## Structured failure reports
+
+`POST /api/daemon/tasks/{taskId}/fail` accepts optional `refusal_code`:
+`agent_cap_refusal`, `disabled_refusal`, or `provider_limit`. A supplied code
+wins over the human-readable `error` and classifies the failure as a quota
+refusal. Unknown request codes return 400 without changing the task.
+`quota_reset_at` remains optional. Both fields survive the daemon terminal
+report outbox and its retries. Older daemons omit the code; only that
+compatibility path classifies their local refusal text. No extra quota
+registry is kept in the CLI or daemon.
+
+The new daemon's account confirmation retries transient HTTP/transport errors
+using the existing bounded request retry helper, always with the same offer,
+account id, pool id and revision. A malformed/mismatched success response,
+409, or an exhausted retry fails preparation before CLI launch. Chi's plain
+`404 page not found` response identifies an old server without this route;
+its account remains unknown. A structured 404 from the supported endpoint
+means access/assignment failure and stops launch. Payloads without all three
+new pool fields use the old protocol only when all three are absent; partial
+new metadata and an empty new offer are rejected.
+
+`AccountFact` and `AccountConfirmation` are shared Go wire types in
+`server/pkg/protocol/account.go`; the service re-exports aliases. CLI commands
+are documented in [the CLI guide](../../apps/docs/content/docs/cli.mdx#model-profiles-and-account-pools).
 
 ## Availability and verification
 
