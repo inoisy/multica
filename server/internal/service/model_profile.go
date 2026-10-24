@@ -404,7 +404,7 @@ func LoadModelWorld(ctx context.Context, q *db.Queries, workspaceID pgtype.UUID,
 			Private: rt.Visibility == "private", OwnerID: util.UUIDToString(rt.OwnerID),
 		}
 	}
-	records, err := q.ListActiveRuntimeUnavailable(ctx, workspaceID)
+	records, err := q.ListActiveRuntimeUnavailable(ctx, db.ListActiveRuntimeUnavailableParams{WorkspaceID: workspaceID, Now: pgtype.Timestamptz{Time: now, Valid: true}})
 	if err != nil {
 		return w, err
 	}

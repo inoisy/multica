@@ -367,12 +367,17 @@ func (q *Queries) InsertRuntimeUnavailable(ctx context.Context, arg InsertRuntim
 
 const listActiveRuntimeUnavailable = `-- name: ListActiveRuntimeUnavailable :many
 SELECT id, workspace_id, runtime_id, until, reason, task_id, created_at FROM runtime_unavailable
-WHERE workspace_id = $1 AND until > now()
+WHERE workspace_id = $1 AND until > $2::timestamptz
 ORDER BY runtime_id, until DESC
 `
 
-func (q *Queries) ListActiveRuntimeUnavailable(ctx context.Context, workspaceID pgtype.UUID) ([]RuntimeUnavailable, error) {
-	rows, err := q.db.Query(ctx, listActiveRuntimeUnavailable, workspaceID)
+type ListActiveRuntimeUnavailableParams struct {
+	WorkspaceID pgtype.UUID        `json:"workspace_id"`
+	Now         pgtype.Timestamptz `json:"now"`
+}
+
+func (q *Queries) ListActiveRuntimeUnavailable(ctx context.Context, arg ListActiveRuntimeUnavailableParams) ([]RuntimeUnavailable, error) {
+	rows, err := q.db.Query(ctx, listActiveRuntimeUnavailable, arg.WorkspaceID, arg.Now)
 	if err != nil {
 		return nil, err
 	}

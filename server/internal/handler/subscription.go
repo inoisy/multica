@@ -166,6 +166,10 @@ func effectiveSubscriptionCaps(windows []string, caps map[string]int, reserve in
 }
 
 func subscriptionToResponse(s db.Subscription, usage []db.SubscriptionUsage, users []SubscriptionUserResponse) SubscriptionResponse {
+	return subscriptionToResponseAt(s, usage, users, time.Now())
+}
+
+func subscriptionToResponseAt(s db.Subscription, usage []db.SubscriptionUsage, users []SubscriptionUserResponse, now time.Time) SubscriptionResponse {
 	windows := decodeStringList(s.Windows)
 	caps := decodeCaps(s.Caps)
 	settings := map[string]any{}
@@ -203,7 +207,7 @@ func subscriptionToResponse(s db.Subscription, usage []db.SubscriptionUsage, use
 	if s.DisabledUntil.Valid {
 		at := timestampToString(s.DisabledUntil)
 		resp.DisabledUntil = &at
-		resp.Disabled = s.DisabledUntil.Time.After(time.Now())
+		resp.Disabled = s.DisabledUntil.Time.After(now)
 	}
 	for _, u := range usage {
 		resp.Usage = append(resp.Usage, subscriptionUsageToResponse(u))
