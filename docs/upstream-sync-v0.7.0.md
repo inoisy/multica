@@ -84,6 +84,13 @@ CLI tests isolate both their home and working directory, so a real task marker
 cannot lend authority to a test. Local Git fixtures use `test/base` or
 `test/shallow-cache`; production branch push guards remain enabled.
 
+Cursor background-process lifecycle tests require Linux 6.9 or newer: they
+exercise `pidfd_send_signal` with `PIDFD_SIGNAL_PROCESS_GROUP`. On the current
+Linux 6.8 host the kernel returns `EINVAL`; production code deliberately fails
+closed rather than falling back to an unsafe process-group signal. Those tests
+must be verified on a supported kernel. Do not remove the ownership check or
+skip its failures to label the full backend suite green.
+
 The root override pins undici 7 to 7.30.1, addressing newly introduced audit
 advisories in Electron's download dependency. Existing audit findings in the
 baseline remain; compare advisory identifiers, not only the total count.
