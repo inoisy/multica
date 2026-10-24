@@ -169,7 +169,7 @@ func runIssueSteer(cmd *cobra.Command, args []string, retry bool) error {
 		// deadline, so --timeout can exceed the ordinary HTTP request timeout.
 		waitCtx, waitCancel := context.WithTimeout(cmd.Context(), timeout)
 		defer waitCancel()
-		receipt, waitErr = waitForSteer(waitCtx, client, issue.ID, receipt, time.Second)
+		receipt, waitErr = waitForSteer(waitCtx, client, issue.ID, receipt, 2*time.Second)
 	}
 	if output == "json" {
 		if err := cli.PrintJSON(cmd.OutOrStdout(), receipt); err != nil {
@@ -223,8 +223,10 @@ func steerAPIError(err error) error {
 }
 
 func waitForSteer(ctx context.Context, client *cli.APIClient, issueID string, receipt steerReceipt, interval time.Duration) (steerReceipt, error) {
-	params := url.Values{"thread": {receipt.CommentID}, "tail": {"0"}}
-	path := "/api/issues/" + url.PathEscape(issueID) + "/comments?" + params.Encode()
+	// The comment list endpoint carries no delivery receipts; the timeline is
+	// the read the web client uses for them, and a new comment is never cut
+	// from its newest-first window.
+	path := "/api/issues/" + url.PathEscape(issueID) + "/timeline"
 	for {
 		switch receipt.Status {
 		case "delivered":
@@ -232,16 +234,16 @@ func waitForSteer(ctx context.Context, client *cli.APIClient, issueID string, re
 		case "failed":
 			return receipt, fmt.Errorf("additional message delivery failed: %s (comment %s, run %s)", receipt.FailureReason, receipt.CommentID, receipt.TaskID)
 		}
-		var comments []steerResponse
-		if err := client.GetJSON(ctx, path, &comments); err != nil {
+		var entries []steerResponse
+		if err := client.GetJSON(ctx, path, &entries); err != nil {
 			if ctx.Err() != nil {
 				return receipt, steerWaitError(ctx.Err(), receipt)
 			}
 			return receipt, fmt.Errorf("read delivery receipt: %w", err)
 		}
-		for _, comment := range comments {
-			if comment.ID == receipt.CommentID {
-				if updated, ok := comment.receiptFor(receipt); ok {
+		for _, entry := range entries {
+			if entry.ID == receipt.CommentID {
+				if updated, ok := entry.receiptFor(receipt); ok {
 					receipt = updated
 				}
 				break

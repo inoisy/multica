@@ -158,8 +158,8 @@ func TestIssueSteerWaitCommand(t *testing.T) {
 					fmt.Fprint(w, `{"id":"issue-1"}`)
 				case r.Method == "POST":
 					_ = json.NewEncoder(w).Encode(map[string]any{"id": steerTestComment, "supplement_task_id": steerTestTask, "supplement_status": "pending"})
-				case r.URL.Path == "/api/issues/issue-1/comments":
-					_ = json.NewEncoder(w).Encode([]map[string]any{{"id": steerTestComment, "supplement_task_id": steerTestTask, "supplement_status": tc.status, "supplement_failure_reason": "provider_rejected", "supplement_delivered_at": "2026-10-24T16:00:00Z"}})
+				case r.URL.Path == "/api/issues/issue-1/timeline":
+					_ = json.NewEncoder(w).Encode([]map[string]any{{"type": "activity", "id": "activity-1"}, {"type": "comment", "id": steerTestComment, "supplement_task_id": steerTestTask, "supplement_status": tc.status, "supplement_failure_reason": "provider_rejected", "supplement_delivered_at": "2026-10-24T16:00:00Z"}})
 				default:
 					t.Errorf("unexpected %s", r.URL)
 					http.NotFound(w, r)
@@ -317,11 +317,12 @@ func TestIssueSteerWait(t *testing.T) {
 			reads := 0
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				reads++
-				if r.URL.Path != "/api/issues/issue-1/comments" || r.URL.Query().Get("thread") != steerTestComment || r.URL.Query().Get("tail") != "0" {
-					t.Errorf("unbounded or wrong read: %s", r.URL)
+				// The comment list carries no receipts; only the timeline does.
+				if r.URL.Path != "/api/issues/issue-1/timeline" || r.URL.RawQuery != "" {
+					t.Errorf("wrong receipt read: %s", r.URL)
 				}
 				// The first receipt belongs to another run: waiting must use the exact run.
-				_ = json.NewEncoder(w).Encode([]map[string]any{{"id": steerTestComment, "supplement_task_id": steerTestOtherTask, "supplement_status": "delivered", "supplements": []map[string]any{{"task_id": steerTestOtherTask, "status": "delivered"}, {"task_id": steerTestTask, "status": tc.status, "failure_reason": "provider_rejected"}}}})
+				_ = json.NewEncoder(w).Encode([]map[string]any{{"type": "comment", "id": "other-comment", "supplement_task_id": steerTestTask, "supplement_status": "delivered"}, {"type": "comment", "id": steerTestComment, "supplement_task_id": steerTestOtherTask, "supplement_status": "delivered", "supplements": []map[string]any{{"task_id": steerTestOtherTask, "status": "delivered"}, {"task_id": steerTestTask, "status": tc.status, "failure_reason": "provider_rejected"}}}})
 			}))
 			defer srv.Close()
 			ctx, cancel := context.WithTimeout(context.Background(), 40*time.Millisecond)
