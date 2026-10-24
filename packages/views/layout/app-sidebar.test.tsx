@@ -449,9 +449,10 @@ describe("personal nav — Chat", () => {
     expect(agents.container.querySelector('button[data-href="/acme/agents"]')).toHaveAttribute("data-active", "true");
     agents.unmount();
 
-    navigation.current = { pathname: "/acme/subscriptions" };
-    const runtimes = render(<AppSidebar />);
-    expect(runtimes.container.querySelector('button[data-href="/acme/runtimes"]')).toHaveAttribute("data-active", "true");
+    navigation.current = { pathname: "/acme/usage" };
+    const analytics = render(<AppSidebar />);
+    expect(analytics.container.querySelector('button[data-href="/acme/usage"]')).toHaveAttribute("data-active", "true");
+    expect(analytics.container.querySelector('button[data-href="/acme/runtimes"]')).not.toHaveAttribute("data-active", "true");
   });
 
   it("renders a Chat nav link to the workspace chat route", () => {
