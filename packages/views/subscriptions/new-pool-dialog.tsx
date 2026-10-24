@@ -77,7 +77,7 @@ export function NewPoolDialog({
             void submit();
           }}
         >
-          <fieldset className="space-y-2" disabled={create.isPending}>
+          <fieldset className="min-w-0 space-y-2" disabled={create.isPending}>
             <legend className="mb-2 text-body font-medium">{t(($) => $.subscriptions.new_pool.family)}</legend>
             <RadioGroup value={family} disabled={create.isPending} onValueChange={(value) => { setFamily(value); setOrder([]); }} className="grid gap-2 sm:grid-cols-2">
               {FAMILIES.map((value) => (

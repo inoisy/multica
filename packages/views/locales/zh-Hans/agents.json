@@ -1451,7 +1451,8 @@
       "found": "共 {{total}} 个，找到 {{shown}} 个",
       "reset": "重置",
       "none": "没有符合筛选条件的项目。"
-    }
+    },
+    "counted_once": "只计一次，见上方"
   },
   "verdict": {
     "reason": {

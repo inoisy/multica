@@ -480,6 +480,7 @@ export function AgentModels({
             currentUserId={currentUserId}
             disabled={busy}
             single={shown === "single"}
+            baseRows={shown === "personal" && sharedId ? data.profile_rows : undefined}
           />
           {shown === "single" ? <p className="text-caption text-muted-foreground">{t(($) => $.models.one_hint)}</p> : null}
           <div className="flex gap-2">

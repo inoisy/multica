@@ -52,7 +52,7 @@ export function PersonalRowsList({
                   {position === 1 ? t(($) => $.models.row_primary) : t(($) => $.models.row_n, { n: position })}
                 </span>
               ) : null}
-              <span className="min-w-0 flex-1 break-words">{modelRowLabel(row)}</span>
+              <span className="min-w-[10rem] flex-1 break-words">{modelRowLabel(row)}</span>
               {row.state ? <Badge variant={row.state === "available" ? "secondary" : "outline"}>{text.state(row)}</Badge> : null}
               {row.chosen ? <Badge>{t(($) => $.models.current)}</Badge> : null}
             </div>

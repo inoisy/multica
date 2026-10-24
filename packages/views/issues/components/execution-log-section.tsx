@@ -606,7 +606,7 @@ export function ActiveTaskRow({
       {waitText !== null ? (
         <div className="min-w-0 flex-1" data-testid="task-wait-reason">
           <div className="flex min-w-0 items-center gap-2">{triggerLine}</div>
-          <p className="truncate text-micro text-warning" title={waitText}>
+          <p className="break-words text-micro text-warning">
             {waitText}
           </p>
         </div>

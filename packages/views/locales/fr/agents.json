@@ -1478,7 +1478,8 @@
       "found": "{{shown}} sur {{total}} trouvés",
       "reset": "Réinitialiser",
       "none": "Aucun résultat pour ces filtres."
-    }
+    },
+    "counted_once": "compté une fois, affiché plus haut"
   },
   "verdict": {
     "reason": {

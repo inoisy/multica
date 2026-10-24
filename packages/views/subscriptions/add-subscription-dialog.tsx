@@ -309,7 +309,7 @@ export function AddSubscriptionDialog({
         >
           {step === "account" ? (
             <>
-              <fieldset className="space-y-2" disabled={busy || created !== null}>
+              <fieldset className="min-w-0 space-y-2" disabled={busy || created !== null}>
                 <legend className="mb-2 text-body font-medium">{t(($) => $.subscriptions.add.step_kind)}</legend>
                 <RadioGroup value={kind} onValueChange={setKind} disabled={busy || created !== null} className="grid gap-2 sm:grid-cols-3">
                   {KINDS.map((k) => (
@@ -390,7 +390,7 @@ export function AddSubscriptionDialog({
                 )}
               </div>
 
-              <fieldset className="space-y-2" disabled={busy || created !== null}>
+              <fieldset className="min-w-0 space-y-2" disabled={busy || created !== null}>
                 <legend className="mb-2 text-body font-medium">{t(($) => $.subscriptions.add.step_caps)}</legend>
                 <AgentLimitFields windows={windows} windowName={windowName} value={limits} onChange={setLimits} disabled={busy || created !== null} />
                 {windows.length === 0 ? (
@@ -401,7 +401,7 @@ export function AddSubscriptionDialog({
           ) : null}
 
           {step === "pool" ? (
-            <fieldset className="space-y-3" disabled={busy || poolDone}>
+            <fieldset className="min-w-0 space-y-3" disabled={busy || poolDone}>
               <legend className="mb-2 text-body font-medium">{t(($) => $.subscriptions.add.step_spend)}</legend>
               <RadioGroup value={choice} onValueChange={setChoice} disabled={busy || poolDone} className="grid gap-2 sm:grid-cols-3">
                 {(["existing", "new", "none"] as const).map((value) => (

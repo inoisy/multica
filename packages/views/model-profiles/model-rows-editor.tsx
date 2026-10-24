@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
-import type { AgentRuntime, MemberWithUser, ModelOptionInput } from "@multica/core/types";
+import type { AgentRuntime, MemberWithUser, ModelOptionInput, ModelRowState } from "@multica/core/types";
 import { isRuntimeUsableForUser } from "@multica/core/runtimes";
-import { moveModelOption } from "@multica/core/model-profiles";
+import { modelRowLabel, moveModelOption } from "@multica/core/model-profiles";
+import { Badge } from "@multica/ui/components/ui/badge";
 import { Button } from "@multica/ui/components/ui/button";
 import { Textarea } from "@multica/ui/components/ui/textarea";
 import { SettingsCard, SettingsRow } from "../settings/components/settings-layout";
@@ -27,6 +28,7 @@ export function ModelRowsEditor({
   currentUserId,
   disabled,
   single = false,
+  baseRows,
 }: {
   rows: ModelOptionInput[];
   onChange: (rows: ModelOptionInput[]) => void;
@@ -36,10 +38,13 @@ export function ModelRowsEditor({
   disabled?: boolean;
   /** One pinned model: no order, no extra rows. */
   single?: boolean;
+  /** Rows of the shared profile this one is a copy of: a row that differs shows what the shared profile has there. */
+  baseRows?: ModelRowState[];
 }) {
   const { t } = useT("agents");
   const [advanced, setAdvanced] = useState<Set<number>>(new Set());
   const runtimeById = new Map(runtimes.map((r) => [r.id, r]));
+  const base = baseRows ? [...baseRows].sort((a, b) => a.position - b.position) : null;
   const patch = (index: number, change: Partial<ModelOptionInput>) =>
     onChange(rows.map((row, i) => (i === index ? { ...row, ...change } : row)));
   const add = () => {
@@ -132,6 +137,7 @@ export function ModelRowsEditor({
               canEdit={!disabled}
               onChange={(thinking_level) => patch(index, { thinking_level })}
             />
+            {base ? <BaseNote row={row} baseRow={base[index] ?? null} /> : null}
             {advanced.has(index) || (row.custom_args && row.custom_args.length > 0) ? (
               <SettingsRow label={t(($) => $.models.args)} description={t(($) => $.models.args_hint)} size="text" align="start">
                 <Textarea
@@ -166,6 +172,23 @@ export function ModelRowsEditor({
           {t(($) => $.models.add_row)}
         </Button>
       )}
+    </div>
+  );
+}
+
+/** Under a row of a personal profile: what the shared profile has at the same place. */
+function BaseNote({ row, baseRow }: { row: ModelOptionInput; baseRow: ModelRowState | null }) {
+  const { t } = useT("agents");
+  const same =
+    baseRow !== null &&
+    baseRow.runtime_id === row.runtime_id &&
+    baseRow.model === row.model &&
+    baseRow.thinking_level === row.thinking_level;
+  if (same) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-2 border-t px-4 py-2.5 text-caption text-muted-foreground" data-testid="row-base-note">
+      <Badge variant="warning">{t(($) => $.models.row_differs)}</Badge>
+      <span>{baseRow ? t(($) => $.models.row_in_shared, { row: modelRowLabel(baseRow) }) : t(($) => $.models.row_not_in_shared)}</span>
     </div>
   );
 }
