@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { afterEach, expect, it, vi } from "vitest";
+import { poolRevisionConflict } from "../subscriptions";
 import { ApiClient } from "./client";
 
 afterEach(() => vi.unstubAllGlobals());
@@ -21,7 +22,6 @@ it("fills defaults of a stage A subscription without hosts or sign-in state", as
     windows: [],
     caps: {},
     effective_caps: {},
-    reserve: 0,
     account_group: "",
     disabled: false,
     disabled_until: null,
@@ -102,7 +102,8 @@ it("reads a pool's subscriptions with the profile's pool fields", async () => {
   expect(pool.spend_order).toBe("first");
   expect(pool.missing).toEqual([]);
   expect(pool.agents).toEqual([]);
-  expect(pool.runtime_profile).toMatchObject({ subscriptions: ["claude-3"], share_key: "pool-1", all_workspaces: false, spend_order: "first" });
+  expect(pool.pool_id).toBeNull();
+  expect(pool.runtime_profile).toMatchObject({ subscriptions: ["claude-3"], share_key: "pool-1", all_workspaces: false, spend_order: "first", pool_id: null });
   respond({ runtime_profile: null, subscriptions: [] });
   await expect(client.getRuntimeProfileSubscriptions("w1", "p1")).rejects.toThrow("Could not load the runtime's subscriptions");
 });
@@ -117,16 +118,80 @@ it("defaults pool fields of an older runtime profile", async () => {
   expect(profile).toMatchObject({ subscriptions: [], spend_order: "first", share_key: null, all_workspaces: false });
 });
 
-it("reads the new pool and the workspaces it skipped", async () => {
-  respond({ share_key: "pool-1", runtime_profiles: [] }, 201);
-  await expect(
-    client.createRuntimePool({ display_name: "Claude · подписки", runtime_type: "claude", subscriptions: [], spend_order: "first", all_workspaces: true }),
-  ).resolves.toEqual({ share_key: "pool-1", runtime_profiles: [], skipped_workspace_ids: [] });
+const account = {
+  id: "s1", key: "claude-3", title: "Claude 3", provider: "claude", account_group: "g1", position: 1,
+  blocked: true, usable: false, reason_code: "agent_cap", until: "2026-10-24T17:40:00Z", until_estimated: true,
+};
+const poolBody = {
+  id: "pool1", name: "Claude", runtime_type: "claude", description: "", spend_order: "balanced", all_workspaces: false,
+  revision: 12, subscriptions: [account], workspace_ids: ["w1"],
+  environments: [{ runtime_profile_id: "p1", workspace_id: "w1", display_name: "Claude · подписки", enabled: true }],
+  availability: { blocked: true, usable: false, reason_code: "agent_cap", until: "2026-10-24T17:40:00Z", until_estimated: true },
+  created_at: "2026-10-24T10:00:00Z", updated_at: "2026-10-24T11:00:00Z",
+};
+
+it("reads pools with their ordered accounts, revision and one availability time", async () => {
+  respond({ pools: [poolBody], can_manage: true });
+  const list = await client.listPools();
+  expect(list.can_manage).toBe(true);
+  expect(list.pools[0]).toMatchObject({ revision: 12, spend_order: "balanced", runtime_type: "claude" });
+  expect(list.pools[0]?.subscriptions[0]).toMatchObject({ key: "claude-3", reason_code: "agent_cap", until_estimated: true });
+  expect(list.pools[0]?.availability).toMatchObject({ blocked: true, until: "2026-10-24T17:40:00Z", until_estimated: true });
+});
+
+it("falls back safely on an unknown pool order, family and reason code", async () => {
+  respond({
+    pools: [{
+      id: "pool1", name: "New", runtime_type: "gemini", spend_order: "most_used",
+      subscriptions: [{ id: "s1", key: "k", reason_code: "future_reason", blocked: true }],
+    }],
+  });
+  const [pool] = (await client.listPools()).pools;
+  expect(pool).toMatchObject({ runtime_type: "claude", spend_order: "first", revision: 0, workspace_ids: [], environments: [] });
+  expect(pool?.availability).toEqual({ blocked: false, usable: false, reason_code: null, until: null, until_estimated: false });
+  expect(pool?.subscriptions[0]).toMatchObject({ reason_code: "future_reason", blocked: true, usable: false, until: null });
+});
+
+it("does not present a malformed pool list as no pools", async () => {
+  respond({ pools: [{ name: 5 }] });
+  await expect(client.listPools()).rejects.toThrow("Could not load pools");
+  respond([]);
+  await expect(client.listPools()).rejects.toThrow("Could not load pools");
+});
+
+it("sends the read revision with a pool edit and returns the updated pool", async () => {
+  const fetch = respond({ ...poolBody, revision: 13 });
+  const pool = await client.updatePool("pool1", { revision: 12, subscriptions: ["claude-3"], spend_order: "first" });
+  expect(pool.revision).toBe(13);
+  const [url, init] = fetch.mock.calls[0] as [string, RequestInit];
+  expect(url).toBe("https://api.example.test/api/pools/pool1");
+  expect(init.method).toBe("PATCH");
+  expect(JSON.parse(String(init.body))).toEqual({ revision: 12, subscriptions: ["claude-3"], spend_order: "first" });
+});
+
+it("reads the current revision from a stale pool edit", async () => {
+  respond({ error: "pool changed", code: "pool_revision_conflict", current_revision: 14 }, 409);
+  const error = await client.updatePool("pool1", { revision: 12 }).catch((e: unknown) => e);
+  expect(poolRevisionConflict(error)).toBe(14);
+  respond({ error: "pool is in use" }, 409);
+  expect(poolRevisionConflict(await client.deletePool("pool1").catch((e: unknown) => e))).toBeNull();
+  expect(poolRevisionConflict(new Error("x"))).toBeNull();
+});
+
+it("defaults the pool of a runtime profile", async () => {
+  respond({
+    runtime_profiles: [
+      { id: "p1", workspace_id: "w1", display_name: "Pi", protocol_family: "pi", command_name: "pi", description: null, fixed_args: [], visibility: "workspace", created_by: null, enabled: true },
+      { id: "p2", workspace_id: "w1", display_name: "Pool", protocol_family: "claude", command_name: "x", description: null, fixed_args: [], visibility: "workspace", created_by: null, enabled: true, pool_id: "pool1" },
+    ],
+  });
+  const profiles = await client.listRuntimeProfiles("w1");
+  expect(profiles.map((p) => p.pool_id)).toEqual([null, "pool1"]);
 });
 
 it("surfaces a refused write", async () => {
   respond({ error: "instance admin only" }, 403);
-  await expect(client.updateSubscription("claude-3", { reserve: 10 })).rejects.toThrow();
+  await expect(client.updateSubscription("claude-3", { caps: { "5h": 10 } })).rejects.toThrow();
 });
 
 it("reads a pool's agents and drops malformed ones", async () => {
