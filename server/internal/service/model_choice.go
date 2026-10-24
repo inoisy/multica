@@ -9,8 +9,9 @@ import (
 )
 
 // Where the model list of a run comes from, in the order the claim consults
-// them: the issue's profile, the agent's own list, the agent's profile, and
-// finally the agent's plain runtime/model/thinking fields.
+// them: the issue's profile, the agent's profile (shared or personal), and
+// finally the agent's plain runtime/model/thinking fields. ModelSourceAgentList
+// is only read from the history of runs made before personal profiles.
 const (
 	ModelSourceIssueProfile = "issue_profile"
 	ModelSourceAgentList    = "agent_list"
@@ -46,13 +47,19 @@ type ModelOption struct {
 	CustomArgs    []string `json:"custom_args"` // nil: derived from the agent's disallowed tools
 }
 
-// ModelProfileData is a profile as the choice needs it.
+// ModelProfileData is a profile as the choice needs it. A personal profile has
+// an owner agent and may name the shared profile it was made from.
 type ModelProfileData struct {
 	ID                     string
 	Name                   string
 	WhenExhaustedProfileID string
+	OwnerAgentID           string
+	BasedOnProfileID       string
 	Options                []ModelOption
 }
+
+// Personal reports whether the profile belongs to one agent.
+func (p ModelProfileData) Personal() bool { return p.OwnerAgentID != "" }
 
 // RuntimeAvailability is what the choice knows about one runtime.
 type RuntimeAvailability struct {
@@ -63,6 +70,11 @@ type RuntimeAvailability struct {
 	OwnerID          string
 	UnavailableUntil time.Time // zero: not limited
 	UnavailableWhy   string
+	// UnavailableCode says why (the Reason* codes). UnavailableEstimated is set
+	// when nobody reported a reset and UnavailableUntil is only a guess.
+	UnavailableCode      string
+	UnavailableEstimated bool
+	PoolID               string
 }
 
 // ModelChoiceAgent is the part of an agent the choice reads.
@@ -75,7 +87,6 @@ type ModelChoiceAgent struct {
 	CustomArgs      []string
 	ModelProfileID  string
 	DisallowedTools []string
-	Options         []ModelOption
 	// AnyOwner shows rows as available whoever owns a private runtime: a
 	// profile viewed on its own, not through an agent.
 	AnyOwner bool
@@ -102,7 +113,11 @@ type ModelRowState struct {
 	Provider    string     `json:"provider"`
 	State       string     `json:"state"`
 	Until       *time.Time `json:"until,omitempty"`
-	Chosen      bool       `json:"chosen"`
+	// ReasonCode says why the row cannot run: the Reason* codes for a limited
+	// row, the state itself for the others. UntilEstimated: Until is a guess.
+	ReasonCode     string `json:"reason_code,omitempty"`
+	UntilEstimated bool   `json:"until_estimated,omitempty"`
+	Chosen         bool   `json:"chosen"`
 }
 
 // ModelChoice is the outcome: the chosen row (nil when the run must wait) and
@@ -123,8 +138,14 @@ type ModelChoice struct {
 	// in the order they were given up (fallback_profile and all_unavailable).
 	ExhaustedProfiles []string `json:"exhausted_profiles,omitempty"`
 	// WaitUntil is the earliest reset among limited rows when nothing can run.
-	WaitUntil *time.Time      `json:"wait_until,omitempty"`
-	Rows      []ModelRowState `json:"rows"`
+	WaitUntil *time.Time `json:"wait_until,omitempty"`
+	// WaitReasonCode is the reason code of the row that sets WaitUntil, else of
+	// the first row; WaitUntilEstimated: WaitUntil is a guess.
+	WaitReasonCode     string `json:"wait_reason_code,omitempty"`
+	WaitUntilEstimated bool   `json:"wait_until_estimated,omitempty"`
+	// ProfilePersonal: the list came from the agent's personal profile.
+	ProfilePersonal bool            `json:"profile_personal,omitempty"`
+	Rows            []ModelRowState `json:"rows"`
 }
 
 // Waiting reports whether no row can run now.
@@ -209,8 +230,8 @@ type modelList struct {
 }
 
 // ResolveModelList picks the list of a run: issue profile, else the agent's
-// own list, else the agent's profile, else the agent's plain fields. A
-// reference to a profile that no longer exists is skipped.
+// profile (shared or personal), else the agent's plain fields. A reference to a
+// profile that no longer exists is skipped.
 func ResolveModelList(in ModelChoiceInput) (source string, profile *ModelProfileData, options []ModelOption) {
 	l := resolveModelList(in)
 	return l.source, l.profile, l.options
@@ -219,9 +240,6 @@ func ResolveModelList(in ModelChoiceInput) (source string, profile *ModelProfile
 func resolveModelList(in ModelChoiceInput) modelList {
 	if p, ok := in.Profiles[in.IssueProfileID]; ok && in.IssueProfileID != "" {
 		return modelList{source: ModelSourceIssueProfile, profile: &p, options: p.Options}
-	}
-	if len(in.Agent.Options) > 0 {
-		return modelList{source: ModelSourceAgentList, options: in.Agent.Options}
 	}
 	if p, ok := in.Profiles[in.Agent.ModelProfileID]; ok && in.Agent.ModelProfileID != "" {
 		return modelList{source: ModelSourceAgentProfile, profile: &p, options: p.Options}
@@ -239,23 +257,28 @@ func resolveModelList(in ModelChoiceInput) modelList {
 	}}}
 }
 
-// rowState is the state of one row for this agent at now.
-func rowState(in ModelChoiceInput, o ModelOption, now time.Time) (string, *time.Time) {
+// rowState is the state of one row for this agent at now. A limited row says
+// why and whether its end is only a guess.
+func rowState(in ModelChoiceInput, o ModelOption, now time.Time) (state string, until *time.Time, code string, estimated bool) {
 	rt, ok := in.Runtimes[o.RuntimeID]
 	switch {
 	case !ok:
-		return ModelRowMissing, nil
+		return ModelRowMissing, nil, ModelRowMissing, false
 	case rt.Private && rt.OwnerID != "" && rt.OwnerID != in.Agent.OwnerID && !in.Agent.AnyOwner:
-		return ModelRowNotPermitted, nil
+		return ModelRowNotPermitted, nil, ModelRowNotPermitted, false
 	case !rt.UnavailableUntil.IsZero() && rt.UnavailableUntil.After(now):
-		until := rt.UnavailableUntil
-		return ModelRowLimited, &until
+		u := rt.UnavailableUntil
+		code = rt.UnavailableCode
+		if code == "" {
+			code = ReasonProviderRefusal
+		}
+		return ModelRowLimited, &u, code, rt.UnavailableEstimated
 	case !rt.Online:
-		return ModelRowOffline, nil
+		return ModelRowOffline, nil, ModelRowOffline, false
 	case in.ExcludeFamily != "" && ModelFamily(rt.Provider, o.Model) == in.ExcludeFamily:
-		return ModelRowSameFamily, nil
+		return ModelRowSameFamily, nil, ModelRowSameFamily, false
 	}
-	return ModelRowAvailable, nil
+	return ModelRowAvailable, nil, "", false
 }
 
 // ModelFamily names who trained the model, so a reviewer can be put on a
@@ -293,6 +316,33 @@ func ModelFamily(provider, model string) string {
 	return strings.ToLower(provider)
 }
 
+// DiffRows lists the 1-based places at which two lists differ, comparing row
+// by row in order on runtime, model, thinking level and arguments. NULL
+// arguments (derived from the agent's disallowed tools) and an empty list (no
+// arguments) are different values. A row that only one list has differs.
+func DiffRows(a, b []ModelOption) []int32 {
+	a, b = sortedOptions(a), sortedOptions(b)
+	var out []int32
+	for i := 0; i < len(a) || i < len(b); i++ {
+		if i >= len(a) || i >= len(b) || !sameRow(a[i], b[i]) {
+			out = append(out, int32(i+1))
+		}
+	}
+	return out
+}
+
+func sameRow(a, b ModelOption) bool {
+	if a.RuntimeID != b.RuntimeID || a.Model != b.Model || a.ThinkingLevel != b.ThinkingLevel || (a.CustomArgs == nil) != (b.CustomArgs == nil) || len(a.CustomArgs) != len(b.CustomArgs) {
+		return false
+	}
+	for i := range a.CustomArgs {
+		if a.CustomArgs[i] != b.CustomArgs[i] {
+			return false
+		}
+	}
+	return true
+}
+
 func sortedOptions(options []ModelOption) []ModelOption {
 	out := append([]ModelOption(nil), options...)
 	sort.SliceStable(out, func(i, j int) bool { return out[i].Position < out[j].Position })
@@ -306,6 +356,9 @@ func sortedOptions(options []ModelOption) []ModelOption {
 func ChooseModel(in ModelChoiceInput, now time.Time) ModelChoice {
 	list := resolveModelList(in)
 	choice := ModelChoice{Source: list.source, IssueID: in.IssueID, ExcludedFamily: in.ExcludeFamily, Rows: []ModelRowState{}}
+	var waitFirstCode string
+	var waitEstimated bool
+	waitCode := ""
 	if list.source != ModelSourceIssueProfile {
 		choice.IssueID = ""
 	}
@@ -321,11 +374,15 @@ func ChooseModel(in ModelChoiceInput, now time.Time) ModelChoice {
 	for {
 		if list.profile != nil {
 			choice.ProfileID, choice.ProfileName = list.profile.ID, list.profile.Name
+			choice.ProfilePersonal = list.profile.Personal() && list.source == ModelSourceAgentProfile
 			visited[list.profile.ID] = true
 		}
 		for _, o := range sortedOptions(list.options) {
-			state, until := rowState(in, o, now)
-			row := ModelRowState{ModelOption: o, State: state, Until: until}
+			state, until, code, estimated := rowState(in, o, now)
+			row := ModelRowState{ModelOption: o, State: state, Until: until, ReasonCode: code, UntilEstimated: estimated}
+			if waitFirstCode == "" && state != ModelRowAvailable {
+				waitFirstCode = code
+			}
 			if list.profile != nil {
 				row.ProfileID = list.profile.ID
 			}
@@ -342,6 +399,7 @@ func ChooseModel(in ModelChoiceInput, now time.Time) ModelChoice {
 			if until != nil && choice.Chosen == nil && (choice.WaitUntil == nil || until.Before(*choice.WaitUntil)) {
 				u := *until
 				choice.WaitUntil = &u
+				waitCode, waitEstimated = code, estimated
 			}
 			choice.Rows = append(choice.Rows, row)
 		}
@@ -371,6 +429,10 @@ func ChooseModel(in ModelChoiceInput, now time.Time) ModelChoice {
 		choice.ExhaustedProfiles = append(choice.ExhaustedProfiles, list.profile.Name)
 	}
 	choice.Reason = ModelReasonAllUnavailable
+	choice.WaitReasonCode, choice.WaitUntilEstimated = waitCode, waitEstimated && choice.WaitUntil != nil
+	if choice.WaitReasonCode == "" {
+		choice.WaitReasonCode = waitFirstCode
+	}
 	return choice
 }
 

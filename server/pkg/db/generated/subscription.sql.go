@@ -182,67 +182,6 @@ func (q *Queries) CreateSubscriptionUsage(ctx context.Context, arg CreateSubscri
 	return i, err
 }
 
-const deleteRuntimeLocalRefusals = `-- name: DeleteRuntimeLocalRefusals :many
-DELETE FROM runtime_unavailable
-WHERE runtime_id = $1 AND task_id IS NOT NULL
-  AND (strpos(reason, $2::text) > 0 OR strpos(reason, $3::text) > 0)
-RETURNING id, workspace_id, runtime_id, until, reason, task_id, created_at, reason_code, subscription_id
-`
-
-type DeleteRuntimeLocalRefusalsParams struct {
-	RuntimeID       pgtype.UUID `json:"runtime_id"`
-	CapsWitness     string      `json:"caps_witness"`
-	DisabledWitness string      `json:"disabled_witness"`
-}
-
-// Rows a failed run wrote because the daemon refused it on the pool's own
-// agent caps (or every subscription disabled) — not a provider's limit.
-// Lifted once a fresh snapshot shows a subscription of the pool usable.
-func (q *Queries) DeleteRuntimeLocalRefusals(ctx context.Context, arg DeleteRuntimeLocalRefusalsParams) ([]RuntimeUnavailable, error) {
-	rows, err := q.db.Query(ctx, deleteRuntimeLocalRefusals, arg.RuntimeID, arg.CapsWitness, arg.DisabledWitness)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []RuntimeUnavailable{}
-	for rows.Next() {
-		var i RuntimeUnavailable
-		if err := rows.Scan(
-			&i.ID,
-			&i.WorkspaceID,
-			&i.RuntimeID,
-			&i.Until,
-			&i.Reason,
-			&i.TaskID,
-			&i.CreatedAt,
-			&i.ReasonCode,
-			&i.SubscriptionID,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const deleteRuntimeUnavailableByReasonPrefix = `-- name: DeleteRuntimeUnavailableByReasonPrefix :exec
-DELETE FROM runtime_unavailable
-WHERE runtime_id = $1 AND starts_with(reason, $2::text)
-`
-
-type DeleteRuntimeUnavailableByReasonPrefixParams struct {
-	RuntimeID pgtype.UUID `json:"runtime_id"`
-	Prefix    string      `json:"prefix"`
-}
-
-func (q *Queries) DeleteRuntimeUnavailableByReasonPrefix(ctx context.Context, arg DeleteRuntimeUnavailableByReasonPrefixParams) error {
-	_, err := q.db.Exec(ctx, deleteRuntimeUnavailableByReasonPrefix, arg.RuntimeID, arg.Prefix)
-	return err
-}
-
 const deleteSubscription = `-- name: DeleteSubscription :exec
 DELETE FROM subscription
 WHERE id = $1

@@ -156,14 +156,15 @@ func validateNodeRefs(entries []ConveyorRouteEntry) error {
 // resolveNodeProfile finds the profile an option names, by name or id.
 func resolveNodeProfile(ctx context.Context, q *db.Queries, workspaceID pgtype.UUID, ref string) (db.ModelProfile, error) {
 	if id, err := util.ParseUUID(ref); err == nil {
-		p, err := q.GetModelProfileInWorkspace(ctx, db.GetModelProfileInWorkspaceParams{ID: id, WorkspaceID: workspaceID})
+		p, err := q.GetSharedModelProfileInWorkspace(ctx, db.GetSharedModelProfileInWorkspaceParams{ID: id, WorkspaceID: workspaceID})
 		if err == nil || !errors.Is(err, pgx.ErrNoRows) {
 			return p, err
 		}
 	}
 	p, err := q.GetModelProfileByNameInWorkspace(ctx, db.GetModelProfileByNameInWorkspaceParams{WorkspaceID: workspaceID, Name: ref})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return p, conveyorErr(ErrConveyorInvalid, "model profile %q not found", ref)
+	if errors.Is(err, pgx.ErrNoRows) || (err == nil && p.OwnerAgentID.Valid) {
+		// A personal profile belongs to its agent; a route step cannot name it.
+		return db.ModelProfile{}, conveyorErr(ErrConveyorInvalid, "model profile %q not found", ref)
 	}
 	return p, err
 }

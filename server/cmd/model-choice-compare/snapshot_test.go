@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"testing"
@@ -48,6 +49,15 @@ func TestSnapshotCoversContextsAndDoesNotWrite(t *testing.T) {
 	issue := fx.Issue(t, "mcc issue", testutil.Cols{"assignee_type": "agent", "assignee_id": live})
 	task := fx.Task(t, live, testutil.Cols{"runtime_id": rt, "issue_id": issue})
 	fx.Cleanup(t, "DELETE FROM agent_task_queue WHERE agent_id IN (SELECT id FROM agent WHERE workspace_id=$1)", ws)
+	steps, err := json.Marshal([]map[string]any{{"status_key": "in_progress", "handler": map[string]string{"type": "agent", "id": live}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	wf := fx.Insert(t, "issue_workflow", testutil.Cols{"workspace_id": ws, "name": "comparison workflow", "initial_status_key": "todo", "steps": steps})
+	project := fx.Project(t, "comparison project", testutil.Cols{"workflow_id": wf})
+	profile := fx.Insert(t, "model_profile", testutil.Cols{"workspace_id": ws, "name": "workflow issue models"})
+	fx.InsertNoID(t, "model_profile_option", testutil.Cols{"workspace_id": ws, "profile_id": profile, "position": 1, "runtime_id": rt, "model": "workflow-model"}, "profile_id=$1", profile)
+	workflowIssue := fx.Issue(t, "workflow issue without an agent assignee", testutil.Cols{"project_id": project, "status": "in_progress", "model_profile_id": profile})
 
 	now := time.Now().UTC()
 	take := func() snapshot {
@@ -89,5 +99,9 @@ func TestSnapshotCoversContextsAndDoesNotWrite(t *testing.T) {
 	second := take()
 	if diffs, _ := compareSnapshots(first, second); len(diffs) != 0 {
 		t.Errorf("two snapshots of the same data differ: %v", diffs)
+	}
+	key := "workflow_step/" + wf + "/in_progress/" + workflowIssue
+	if c := got[key].Choice; c == nil || c.Source != "issue_profile" || c.Chosen == nil || c.Chosen.Model != "workflow-model" {
+		t.Fatalf("active workflow context lost the issue's profile: %+v", got[key])
 	}
 }

@@ -256,6 +256,51 @@ func collect(ctx context.Context, tx pgx.Tx, ws pgtype.UUID, now time.Time) (sna
 		}
 	}
 
+	// Active workflow handoffs also depend on the issue's own profile. Catalog
+	// previews above intentionally have no issue, so they cannot cover these
+	// contexts, especially a squad handoff with no direct agent assignee yet.
+	workflowIssues, err := c.ids(ctx, `SELECT i.id FROM issue i WHERE i.workspace_id = $1 AND `+openIssue, ws)
+	if err != nil {
+		return snapshot{}, err
+	}
+	for _, id := range workflowIssues {
+		iss, err := c.q.GetIssue(ctx, id)
+		if err != nil {
+			return snapshot{}, err
+		}
+		def, project, err := issueworkflow.ForProject(ctx, c.q, ws, iss.ProjectID)
+		if err != nil {
+			return snapshot{}, err
+		}
+		if def == nil || !def.ControlsExecution() {
+			continue
+		}
+		step, ok := def.Step(iss.Status)
+		if !ok {
+			continue
+		}
+		handler := step.Handler
+		if kind, resolved, ok := issueworkflow.ResolveHandler(step, project, iss.CreatorType, iss.CreatorID); ok {
+			handler = issueworkflow.Handler{Type: kind, ID: util.UUIDToString(resolved)}
+		}
+		agentID, err := c.stepAgent(ctx, handler)
+		if err != nil {
+			return snapshot{}, err
+		}
+		if agentID == "" {
+			continue
+		}
+		key := util.UUIDToString(def.ID) + "/" + step.StatusKey + "/" + util.UUIDToString(id)
+		a, ok := agents[agentID]
+		if !ok {
+			c.out = append(c.out, contextResult{Key: kindWorkflowStep + "/" + key, Kind: kindWorkflowStep, Error: "step agent not found"})
+			continue
+		}
+		c.add(kindWorkflowStep, key, a.ArchivedAt.Valid, func() (service.ModelChoice, error) {
+			return service.PreviewChoice(ctx, c.q, a, &iss, now)
+		})
+	}
+
 	// Queued runs as the sweep routes them: they carry the step's profile and
 	// the acceptance rule.
 	taskIDs, err := c.ids(ctx, `SELECT t.id FROM agent_task_queue t JOIN agent a ON a.id = t.agent_id

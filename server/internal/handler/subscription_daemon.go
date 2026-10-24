@@ -14,10 +14,12 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/multica-ai/multica/server/internal/daemon/subscriptions"
+	obsmetrics "github.com/multica-ai/multica/server/internal/metrics"
+	"github.com/multica-ai/multica/server/internal/service"
 	db "github.com/multica-ai/multica/server/pkg/db/generated"
-	"github.com/multica-ai/multica/server/pkg/taskfailure"
 	"github.com/multica-ai/multica/server/pkg/protocol"
 )
 
@@ -35,33 +37,79 @@ import (
 //     lives only in memory until a daemon picks it up and writes the file.
 // ---------------------------------------------------------------------------
 
-// SubscriptionPoolPayload is sent with a claimed task.
+// SubscriptionPoolPayload is sent with a claimed task. PoolID, Revision and
+// OfferID are new: a daemon that confirms the account it took sends them back.
+// An older daemon ignores them and picks the account on its own.
 type SubscriptionPoolPayload struct {
 	ProfileID     string                 `json:"profile_id"`
+	PoolID        string                 `json:"pool_id,omitempty"`
+	Revision      int32                  `json:"revision,omitempty"`
+	OfferID       string                 `json:"offer_id,omitempty"`
 	SpendOrder    string                 `json:"spend_order"`
 	Subscriptions []SubscriptionResponse `json:"subscriptions"`
 }
 
-// subscriptionPoolForRuntime returns the pool of a profile runtime, or nil for
-// built-in runtimes and profiles without subscriptions. Errors degrade to nil:
-// the daemon then launches the profile's command on the host's own login.
-func (h *Handler) subscriptionPoolForRuntime(ctx context.Context, rt db.AgentRuntime) *SubscriptionPoolPayload {
-	if !rt.ProfileID.Valid {
+// subscriptionPoolForTask returns the pool handed to the daemon with a claimed
+// run, or nil for an environment that spends none. The accounts and their order
+// are the ones stored with the claim as the offer, so the payload and the
+// server's record of it are the same; the numbers in them (usage, an account
+// switched off) are read now. An account with a provider refusal is sent as
+// switched off until the refusal ends: the daemon must not take it.
+func (h *Handler) subscriptionPoolForTask(ctx context.Context, rt db.AgentRuntime, task *db.AgentTaskQueue) *SubscriptionPoolPayload {
+	if !rt.ProfileID.Valid || task == nil {
 		return nil
 	}
-	profile, err := h.Queries.GetRuntimeProfile(ctx, rt.ProfileID)
-	if err != nil || len(decodeStringList(profile.Subscriptions)) == 0 {
+	offer, ok := service.ParseAccountOffer(task.AccountOffer)
+	if !ok {
 		return nil
 	}
-	pool := h.poolResponse(ctx, profile)
-	if len(pool.Subscriptions) == 0 {
+	ids := make([]pgtype.UUID, len(offer.Subscriptions))
+	for i, a := range offer.Subscriptions {
+		ids[i] = parseUUID(a.SubscriptionID)
+	}
+	now := time.Now()
+	accounts, err := service.LoadAccounts(ctx, h.Queries, ids, now)
+	if err != nil {
+		slog.Warn("subscription pool payload: load accounts failed", "error", err)
 		return nil
 	}
-	return &SubscriptionPoolPayload{ProfileID: uuidToString(profile.ID), SpendOrder: pool.SpendOrder, Subscriptions: pool.Subscriptions}
+	rows, err := h.Queries.ListSubscriptionsByIDs(ctx, ids)
+	if err != nil {
+		return nil
+	}
+	byID := map[string]db.Subscription{}
+	for _, s := range rows {
+		byID[uuidToString(s.ID)] = s
+	}
+	usage, _ := h.latestUsageBySubscription(ctx)
+	out := &SubscriptionPoolPayload{
+		ProfileID: uuidToString(rt.ProfileID), PoolID: offer.PoolID, Revision: offer.PoolRevision, OfferID: offer.OfferID,
+		SpendOrder: offer.SpendOrder, Subscriptions: []SubscriptionResponse{},
+	}
+	for _, a := range offer.Subscriptions {
+		s, ok := byID[a.SubscriptionID]
+		if !ok {
+			continue
+		}
+		resp := subscriptionToResponseAt(s, usage[a.SubscriptionID], nil, now)
+		resp.Key, resp.AccountGroup = a.SubscriptionKey, a.AccountGroup
+		if until := service.AccountRefusedUntil(accounts[a.SubscriptionID], now); !until.IsZero() {
+			if s.DisabledUntil.Valid && s.DisabledUntil.Time.After(until) {
+				until = s.DisabledUntil.Time
+			}
+			at := until.UTC().Format(time.RFC3339)
+			resp.Disabled, resp.DisabledUntil = true, &at
+		}
+		out.Subscriptions = append(out.Subscriptions, resp)
+	}
+	if len(out.Subscriptions) == 0 {
+		return nil
+	}
+	return out
 }
 
 // DaemonListSubscriptions — GET /api/daemon/workspaces/{workspaceId}/subscriptions:
-// every subscription spent by an enabled profile of the workspace, so the
+// every account spent by an enabled environment of the workspace, so the
 // daemon can probe them. Paths only, never credentials.
 func (h *Handler) DaemonListSubscriptions(w http.ResponseWriter, r *http.Request) {
 	workspaceID := strings.TrimSpace(chi.URLParam(r, "workspaceId"))
@@ -81,25 +129,34 @@ func (h *Handler) DaemonListSubscriptions(w http.ResponseWriter, r *http.Request
 }
 
 func (h *Handler) workspacePoolSubscriptions(ctx context.Context, ws pgtype.UUID) ([]SubscriptionResponse, error) {
-	profiles, err := h.Queries.ListEnabledRuntimeProfilesWithSubscriptionsForWorkspace(ctx, ws)
+	profiles, err := h.Queries.ListEnabledPoolRuntimeProfilesForWorkspace(ctx, ws)
+	if err != nil {
+		return nil, err
+	}
+	out := []SubscriptionResponse{}
+	if len(profiles) == 0 {
+		return out, nil
+	}
+	poolIDs := make([]pgtype.UUID, len(profiles))
+	for i, p := range profiles {
+		poolIDs[i] = p.PoolID
+	}
+	members, err := h.Queries.ListSubscriptionPoolMembersByPools(ctx, poolIDs)
 	if err != nil {
 		return nil, err
 	}
 	seen := map[string]bool{}
-	var keys []string
-	for _, p := range profiles {
-		for _, k := range decodeStringList(p.Subscriptions) {
-			if !seen[k] {
-				seen[k] = true
-				keys = append(keys, k)
-			}
+	var ids []pgtype.UUID
+	for _, m := range members {
+		if key := uuidToString(m.SubscriptionID); !seen[key] {
+			seen[key] = true
+			ids = append(ids, m.SubscriptionID)
 		}
 	}
-	out := []SubscriptionResponse{}
-	if len(keys) == 0 {
+	if len(ids) == 0 {
 		return out, nil
 	}
-	rows, err := h.Queries.ListSubscriptionsByKeys(ctx, keys)
+	rows, err := h.Queries.ListSubscriptionsByIDs(ctx, ids)
 	if err != nil {
 		return nil, err
 	}
@@ -200,7 +257,7 @@ func (h *Handler) DaemonReportSubscriptionUsage(w http.ResponseWriter, r *http.R
 		accepted = append(accepted, rep.Key)
 	}
 	if len(changed) > 0 {
-		h.refreshSubscriptionAvailability(r.Context())
+		h.afterAccountChange(r.Context())
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"accepted": accepted})
 }
@@ -212,156 +269,17 @@ func clip(s string, n int) string {
 	return s[:n]
 }
 
-// subscriptionUnavailableReason prefixes the runtime_unavailable rows this
-// file owns, so lifting them never touches a row a failed run wrote.
-const subscriptionUnavailableReason = "subscriptions: "
-
-// subscriptionUsageMaxAge: older snapshots are not trusted to park a runtime.
-const subscriptionUsageMaxAge = time.Hour
-
-// refreshSubscriptionAvailability parks every profile runtime whose
-// subscriptions are all at their agent caps (or disabled) until the earliest
-// reset, and lifts the park once one of them is usable again. Runs after usage
-// arrives and after an admin changes caps or disables a subscription.
-//
-// A run the daemon refused on those same caps parked the runtime too, through
-// the quota failure path, until the reset it named. Once a fresh snapshot
-// shows a subscription of the pool usable that row is stale and is lifted
-// here as well; the model routing sweep then hands the waiting runs out. A
-// provider's own limit ("You've hit your usage limit …") is not the pool's
-// verdict and stays until its reset. Returns the lifted refusal rows.
-func (h *Handler) refreshSubscriptionAvailability(ctx context.Context) []db.RuntimeUnavailable {
-	return h.RefreshSubscriptionAvailabilityAt(ctx, time.Now())
-}
-
-// RefreshSubscriptionAvailabilityAt is refreshSubscriptionAvailability judged
-// at now, for tools that must reproduce the verdicts of a past moment.
-func (h *Handler) RefreshSubscriptionAvailabilityAt(ctx context.Context, now time.Time) []db.RuntimeUnavailable {
-	profiles, err := h.Queries.ListRuntimeProfilesWithSubscriptions(ctx)
+// afterAccountChange runs after usage arrives and after an admin changes an
+// account or a pool. Availability is computed from the accounts whenever it is
+// read, so nothing is stored for it; what remains is lifting the daemon's own
+// refusals that a usable account has made stale, so the waiting runs are handed
+// out at the next sweep. Returns the lifted refusals.
+func (h *Handler) afterAccountChange(ctx context.Context) []db.RuntimeUnavailable {
+	lifted, err := service.LiftStaleRefusals(ctx, h.Queries, time.Now())
 	if err != nil {
-		slog.Warn("subscription availability: list profiles failed", "error", err)
-		return nil
-	}
-	if len(profiles) == 0 {
-		return nil
-	}
-	subs, err := h.Queries.ListSubscriptions(ctx)
-	if err != nil {
-		return nil
-	}
-	usage, err := h.latestUsageBySubscription(ctx)
-	if err != nil {
-		return nil
-	}
-	byKey := map[string]db.Subscription{}
-	for _, s := range subs {
-		byKey[s.Key] = s
-	}
-	ids := make([]pgtype.UUID, len(profiles))
-	for i, p := range profiles {
-		ids[i] = p.ID
-	}
-	runtimes, err := h.Queries.ListAgentRuntimesByProfiles(ctx, ids)
-	if err != nil {
-		return nil
-	}
-	verdict := map[string]poolState{}
-	for _, p := range profiles {
-		verdict[uuidToString(p.ID)] = poolVerdict(p, byKey, usage, now)
-	}
-	var lifted []db.RuntimeUnavailable
-	for _, rt := range runtimes {
-		v := verdict[uuidToString(rt.ProfileID)]
-		if err := h.Queries.DeleteRuntimeUnavailableByReasonPrefix(ctx, db.DeleteRuntimeUnavailableByReasonPrefixParams{
-			RuntimeID: rt.ID, Prefix: subscriptionUnavailableReason,
-		}); err != nil {
-			slog.Warn("subscription availability: lift failed", "error", err, "runtime_id", uuidToString(rt.ID))
-			continue
-		}
-		if v.text == "" {
-			if v.usable {
-				rows, err := h.Queries.DeleteRuntimeLocalRefusals(ctx, db.DeleteRuntimeLocalRefusalsParams{
-					RuntimeID: rt.ID, CapsWitness: taskfailure.SubsPickRefusalWitness, DisabledWitness: subscriptions.DisabledWitness,
-				})
-				if err != nil {
-					slog.Warn("subscription availability: lift refusal failed", "error", err, "runtime_id", uuidToString(rt.ID))
-				}
-				for _, row := range rows {
-					slog.Info("subscription availability: stale refusal lifted", "runtime_id", uuidToString(rt.ID), "until", row.Until.Time, "reason", row.Reason)
-				}
-				lifted = append(lifted, rows...)
-			}
-			continue
-		}
-		if _, err := h.Queries.InsertRuntimeUnavailable(ctx, db.InsertRuntimeUnavailableParams{
-			WorkspaceID: rt.WorkspaceID, RuntimeID: rt.ID,
-			Until:  pgtype.Timestamptz{Time: v.until, Valid: true},
-			Reason: clip(subscriptionUnavailableReason+v.text, 300),
-		}); err != nil {
-			slog.Warn("subscription availability: park failed", "error", err, "runtime_id", uuidToString(rt.ID))
-		}
+		slog.Warn("subscription availability: lift stale refusals failed", "error", err)
 	}
 	return lifted
-}
-
-// poolState is the pool's verdict: text and until when it is held back;
-// usable when a fresh snapshot shows a subscription a run may spend now.
-type poolState struct {
-	text   string
-	until  time.Time
-	usable bool
-}
-
-// poolVerdict applies the daemon's own rule (subscriptions.Blocked) to the
-// server's fresh snapshots. Its text is "" while any subscription may be used.
-func poolVerdict(p db.RuntimeProfile, byKey map[string]db.Subscription, usage map[string][]db.SubscriptionUsage, now time.Time) poolState {
-	var pool []subscriptions.Subscription
-	for _, k := range decodeStringList(p.Subscriptions) {
-		s, ok := byKey[k]
-		if !ok {
-			continue
-		}
-		resp := subscriptionToResponseAt(s, usage[uuidToString(s.ID)], nil, now)
-		pool = append(pool, toDaemonSubscription(resp))
-	}
-	if len(pool) == 0 {
-		return poolState{}
-	}
-	active := subscriptions.Active(pool)
-	if len(active) == 0 {
-		earliest := time.Time{}
-		for _, s := range pool {
-			if s.DisabledUntil != nil {
-				if t, err := time.Parse(time.RFC3339, *s.DisabledUntil); err == nil && (earliest.IsZero() || t.Before(earliest)) {
-					earliest = t
-				}
-			}
-		}
-		if earliest.IsZero() {
-			earliest = now.Add(time.Hour)
-		}
-		return poolState{text: subscriptions.DisabledText(pool), until: earliest}
-	}
-	marks := make([]subscriptions.Mark, 0, len(active))
-	for _, s := range active {
-		st := subscriptions.StateFromUsage(s.Usage)
-		if now.Sub(st.ObservedAt) > subscriptionUsageMaxAge {
-			st = subscriptions.State{}
-		}
-		st.Credential = subscriptions.CredentialPresent
-		// A window whose reset has passed is fresh, whatever the snapshot says.
-		marks = append(marks, subscriptions.Mark{Sub: s, State: st.Settle(now)})
-	}
-	text := subscriptions.Blocked(marks)
-	if text == "" {
-		usable := false
-		for _, m := range marks {
-			usable = usable || subscriptions.Usable(m)
-		}
-		return poolState{usable: usable}
-	}
-	// Earliest moment any subscription frees up; unknown resets wait an hour.
-	return poolState{text: text, until: subscriptions.FreeAt(marks, now, time.Hour)}
 }
 
 func toDaemonSubscription(s SubscriptionResponse) subscriptions.Subscription {
@@ -536,7 +454,15 @@ func (h *Handler) pendingSubscriptionLoginFor(ctx context.Context, runtimeID str
 // profile spending the subscription, else an online runtime of the admin's
 // workspaces with the subscription's CLI family.
 func (h *Handler) pickLoginRuntime(ctx context.Context, sub db.Subscription, userID string) (string, error) {
-	profiles, err := h.Queries.ListRuntimeProfilesUsingSubscription(ctx, sub.Key)
+	pools, err := h.Queries.ListSubscriptionPoolMembersBySubscription(ctx, sub.ID)
+	if err != nil {
+		return "", err
+	}
+	poolIDs := make([]pgtype.UUID, len(pools))
+	for i, m := range pools {
+		poolIDs[i] = m.PoolID
+	}
+	profiles, err := h.Queries.ListRuntimeProfilesByPools(ctx, poolIDs)
 	if err != nil {
 		return "", err
 	}
@@ -758,26 +684,22 @@ func (h *Handler) ListSubscriptionDiscrepancies(w http.ResponseWriter, r *http.R
 		writeError(w, http.StatusInternalServerError, "failed to list subscriptions")
 		return
 	}
-	profiles, err := h.Queries.ListRuntimeProfilesWithSubscriptions(ctx)
+	d, err := h.loadPoolDirectory(ctx)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to list runtimes")
 		return
-	}
-	all, err := h.Queries.ListSharedRuntimeProfiles(ctx)
-	if err != nil {
-		all = nil
 	}
 	hosts := h.hostStatesBySubscription(ctx)
 	items := []Discrepancy{}
 
 	spent := map[string]bool{}
-	byKey := map[string]db.Subscription{}
+	byID := map[string]db.Subscription{}
 	for _, s := range subs {
-		byKey[s.Key] = s
+		byID[uuidToString(s.ID)] = s
 	}
-	for _, p := range profiles {
-		for _, k := range decodeStringList(p.Subscriptions) {
-			spent[k] = true
+	for _, poolID := range d.order {
+		for _, m := range d.members[poolID] {
+			spent[uuidToString(m.SubscriptionID)] = true
 		}
 	}
 	for _, s := range subs {
@@ -789,45 +711,48 @@ func (h *Handler) ListSubscriptionDiscrepancies(w http.ResponseWriter, r *http.R
 				})
 			}
 		}
-		if !spent[s.Key] {
+		if !spent[uuidToString(s.ID)] {
 			items = append(items, Discrepancy{Kind: "unused_subscription", SubscriptionKey: s.Key,
 				Message: fmt.Sprintf("%s никто не тратит", s.Key)})
 		}
 	}
-	// A pool without subscriptions: a shared runtime (share_key) left empty.
-	seenPool := map[string]bool{}
-	for _, p := range append(all, profiles...) {
-		if !p.ShareKey.Valid || !visible[uuidToString(p.WorkspaceID)] || seenPool[uuidToString(p.ID)] {
+	// A pool without accounts leaves its environments with nothing to spend.
+	for _, poolID := range d.order {
+		if len(d.members[poolID]) > 0 {
 			continue
 		}
-		seenPool[uuidToString(p.ID)] = true
-		if len(decodeStringList(p.Subscriptions)) == 0 {
+		for _, p := range d.envs[poolID] {
+			if !visible[uuidToString(p.WorkspaceID)] {
+				continue
+			}
 			items = append(items, Discrepancy{Kind: "runtime_without_subscriptions", RuntimeProfileID: uuidToString(p.ID),
 				RuntimeName: p.DisplayName, WorkspaceID: uuidToString(p.WorkspaceID),
 				Message: fmt.Sprintf("среда «%s» без подписок", p.DisplayName)})
 		}
 	}
 	// Agents on a runtime that cannot run: profile disabled, or every
-	// subscription disabled.
+	// account of its pool disabled.
 	var dead []pgtype.UUID
 	deadName := map[string]string{}
-	for _, p := range profiles {
-		if !visible[uuidToString(p.WorkspaceID)] {
-			continue
-		}
-		disabled := !p.Enabled
-		if !disabled {
-			keys := decodeStringList(p.Subscriptions)
-			disabled = len(keys) > 0
-			for _, k := range keys {
-				if s, ok := byKey[k]; !ok || !s.DisabledUntil.Valid || !s.DisabledUntil.Time.After(time.Now()) {
-					disabled = false
+	for _, poolID := range d.order {
+		for _, p := range d.envs[poolID] {
+			if !visible[uuidToString(p.WorkspaceID)] {
+				continue
+			}
+			disabled := !p.Enabled
+			if !disabled {
+				members := d.members[poolID]
+				disabled = len(members) > 0
+				for _, m := range members {
+					if s, ok := byID[uuidToString(m.SubscriptionID)]; !ok || !s.DisabledUntil.Valid || !s.DisabledUntil.Time.After(time.Now()) {
+						disabled = false
+					}
 				}
 			}
-		}
-		if disabled {
-			dead = append(dead, p.ID)
-			deadName[uuidToString(p.ID)] = p.DisplayName
+			if disabled {
+				dead = append(dead, p.ID)
+				deadName[uuidToString(p.ID)] = p.DisplayName
+			}
 		}
 	}
 	if len(dead) > 0 {
@@ -841,4 +766,72 @@ func (h *Handler) ListSubscriptionDiscrepancies(w http.ResponseWriter, r *http.R
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
+// ConfirmTaskAccount — POST /api/daemon/tasks/{taskId}/account. The daemon
+// says which account of the pool it handed to the CLI. The answer is the fact
+// stored for the run, which the same call repeated returns again.
+//
+// What fits is decided from the offer stored with the claim: the assignment
+// (offer_id), the pool and its revision, and the account must all be in it.
+// Another daemon or workspace does not see the run at all (404); a stale
+// assignment, an account that was not offered, a different account than the
+// first confirmed one, or a first confirmation for a finished run is 409.
+func (h *Handler) ConfirmTaskAccount(w http.ResponseWriter, r *http.Request) {
+	task, ok := h.requireDaemonTaskAccess(w, r, chi.URLParam(r, "taskId"))
+	if !ok {
+		return
+	}
+	var req service.AccountConfirmation
+	if !decodeStrict(w, r, 4096, &req) {
+		return
+	}
+	offerID, ok := parseUUIDOrBadRequest(w, req.OfferID, "offer_id")
+	if !ok {
+		return
+	}
+	accountID, ok := parseUUIDOrBadRequest(w, req.SubscriptionID, "subscription_id")
+	if !ok {
+		return
+	}
+	poolID, ok := parseUUIDOrBadRequest(w, req.PoolID, "pool_id")
+	if !ok {
+		return
+	}
+	if req.PoolRevision < 1 {
+		writeError(w, http.StatusBadRequest, "pool_revision must be positive")
+		return
+	}
+	req.OfferID, req.SubscriptionID, req.PoolID = uuidToString(offerID), uuidToString(accountID), uuidToString(poolID)
+	rt, err := h.getAgentRuntime(r.Context(), obsmetrics.RuntimeLookupSourceDaemonAPI, task.RuntimeID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "task not found")
+		return
+	}
+	fact, err := h.TaskService.ConfirmTaskAccount(r.Context(), task.ID, task.RuntimeID, rt.DaemonID.String, req, time.Now())
+	if err != nil {
+		code, status := "", http.StatusConflict
+		switch {
+		case errors.Is(err, service.ErrAccountNoOffer):
+			code = "no_offer"
+		case errors.Is(err, service.ErrAccountStaleOffer):
+			code = "stale_offer"
+		case errors.Is(err, service.ErrAccountNotOffered):
+			code = "not_offered"
+		case errors.Is(err, service.ErrAccountTaskState):
+			code = "task_finished"
+		case errors.Is(err, service.ErrAccountConflict):
+			code = "account_conflict"
+		case errors.Is(err, service.ErrAccountWrongRuntime), errors.Is(err, pgx.ErrNoRows):
+			writeError(w, http.StatusNotFound, "task not found")
+			return
+		default:
+			slog.Error("confirm task account failed", "task_id", uuidToString(task.ID), "error", err)
+			writeError(w, http.StatusInternalServerError, "failed to confirm the account")
+			return
+		}
+		writeJSON(w, status, map[string]any{"error": err.Error(), "code": code})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"account_fact": fact})
 }

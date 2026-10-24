@@ -2,19 +2,16 @@ package main
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/multica-ai/multica/server/internal/handler"
-	db "github.com/multica-ai/multica/server/pkg/db/generated"
 )
 
-// recomputePoolVerdicts rewrites the pool verdict rows of runtime_unavailable
-// the way the server does after every usage report, judged at now. It changes
-// the copy: it is the second snapshot of the old algorithm, taken only when
-// the stored rows are older than the data they were computed from.
-func recomputePoolVerdicts(ctx context.Context, pool *pgxpool.Pool, now time.Time) error {
-	h := &handler.Handler{Queries: db.New(pool)}
-	h.RefreshSubscriptionAvailabilityAt(ctx, now)
-	return nil
+// recomputePoolVerdicts exists in the build of the original algorithm, where
+// the pool's verdict is a stored row that can be rewritten at T. This build
+// computes the verdict from the accounts whenever it is asked, so there is
+// nothing to rewrite and the flag is refused.
+func recomputePoolVerdicts(_ context.Context, _ *pgxpool.Pool, _ time.Time) error {
+	return errors.New("--recompute-pool-verdicts belongs to the snapshot of the original algorithm: this build computes pool verdicts from the accounts at T")
 }

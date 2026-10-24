@@ -27,6 +27,23 @@ func (q *Queries) ClearClosedIssueModelProfiles(ctx context.Context, arg ClearCl
 	return err
 }
 
+const clearPersonalModelProfileBase = `-- name: ClearPersonalModelProfileBase :exec
+UPDATE model_profile SET based_on_profile_id = NULL, updated_at = now()
+WHERE workspace_id = $1 AND based_on_profile_id = $2
+`
+
+type ClearPersonalModelProfileBaseParams struct {
+	WorkspaceID      pgtype.UUID `json:"workspace_id"`
+	BasedOnProfileID pgtype.UUID `json:"based_on_profile_id"`
+}
+
+// A shared profile is deleted: the personal profiles made from it keep their
+// rows and their agents, and forget where they came from.
+func (q *Queries) ClearPersonalModelProfileBase(ctx context.Context, arg ClearPersonalModelProfileBaseParams) error {
+	_, err := q.db.Exec(ctx, clearPersonalModelProfileBase, arg.WorkspaceID, arg.BasedOnProfileID)
+	return err
+}
+
 const closeModelIdleEpisode = `-- name: CloseModelIdleEpisode :one
 UPDATE model_idle_episode SET ended_at = now()
 WHERE agent_id = $1 AND ended_at IS NULL
@@ -118,13 +135,46 @@ func (q *Queries) CreateModelProfile(ctx context.Context, arg CreateModelProfile
 	return i, err
 }
 
-const deleteAgentModelOptions = `-- name: DeleteAgentModelOptions :exec
-DELETE FROM agent_model_option WHERE agent_id = $1
+const createPersonalModelProfile = `-- name: CreatePersonalModelProfile :one
+INSERT INTO model_profile (id, workspace_id, name, description, when_exhausted_profile_id, created_by, owner_agent_id, based_on_profile_id)
+VALUES ($1, $2, $3, '', $4, $5, $6, $7)
+RETURNING id, workspace_id, name, description, when_exhausted_profile_id, created_by, created_at, updated_at, owner_agent_id, based_on_profile_id
 `
 
-func (q *Queries) DeleteAgentModelOptions(ctx context.Context, agentID pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, deleteAgentModelOptions, agentID)
-	return err
+type CreatePersonalModelProfileParams struct {
+	ID                     pgtype.UUID `json:"id"`
+	WorkspaceID            pgtype.UUID `json:"workspace_id"`
+	Name                   string      `json:"name"`
+	WhenExhaustedProfileID pgtype.UUID `json:"when_exhausted_profile_id"`
+	CreatedBy              pgtype.UUID `json:"created_by"`
+	OwnerAgentID           pgtype.UUID `json:"owner_agent_id"`
+	BasedOnProfileID       pgtype.UUID `json:"based_on_profile_id"`
+}
+
+func (q *Queries) CreatePersonalModelProfile(ctx context.Context, arg CreatePersonalModelProfileParams) (ModelProfile, error) {
+	row := q.db.QueryRow(ctx, createPersonalModelProfile,
+		arg.ID,
+		arg.WorkspaceID,
+		arg.Name,
+		arg.WhenExhaustedProfileID,
+		arg.CreatedBy,
+		arg.OwnerAgentID,
+		arg.BasedOnProfileID,
+	)
+	var i ModelProfile
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.Name,
+		&i.Description,
+		&i.WhenExhaustedProfileID,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.OwnerAgentID,
+		&i.BasedOnProfileID,
+	)
+	return i, err
 }
 
 const deleteExpiredRuntimeUnavailable = `-- name: DeleteExpiredRuntimeUnavailable :many
@@ -206,6 +256,42 @@ func (q *Queries) DeleteRuntimeModelReferences(ctx context.Context, runtimeID pg
 	return err
 }
 
+const deleteRuntimeUnavailableByIDs = `-- name: DeleteRuntimeUnavailableByIDs :many
+DELETE FROM runtime_unavailable WHERE id = ANY($1::uuid[])
+RETURNING id, workspace_id, runtime_id, until, reason, task_id, created_at, reason_code, subscription_id
+`
+
+// Lifts refusals already chosen by their code.
+func (q *Queries) DeleteRuntimeUnavailableByIDs(ctx context.Context, ids []pgtype.UUID) ([]RuntimeUnavailable, error) {
+	rows, err := q.db.Query(ctx, deleteRuntimeUnavailableByIDs, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []RuntimeUnavailable{}
+	for rows.Next() {
+		var i RuntimeUnavailable
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.RuntimeID,
+			&i.Until,
+			&i.Reason,
+			&i.TaskID,
+			&i.CreatedAt,
+			&i.ReasonCode,
+			&i.SubscriptionID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getModelProfileByNameInWorkspace = `-- name: GetModelProfileByNameInWorkspace :one
 SELECT id, workspace_id, name, description, when_exhausted_profile_id, created_by, created_at, updated_at, owner_agent_id, based_on_profile_id FROM model_profile
 WHERE workspace_id = $1 AND lower(name) = lower($2::text)
@@ -282,32 +368,55 @@ func (q *Queries) GetOpenModelIdleEpisode(ctx context.Context, agentID pgtype.UU
 	return i, err
 }
 
-const insertAgentModelOption = `-- name: InsertAgentModelOption :exec
-INSERT INTO agent_model_option (workspace_id, agent_id, position, runtime_id, model, thinking_level, custom_args)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+const getPersonalModelProfileOfAgent = `-- name: GetPersonalModelProfileOfAgent :one
+SELECT id, workspace_id, name, description, when_exhausted_profile_id, created_by, created_at, updated_at, owner_agent_id, based_on_profile_id FROM model_profile
+WHERE owner_agent_id = $1
 `
 
-type InsertAgentModelOptionParams struct {
-	WorkspaceID   pgtype.UUID `json:"workspace_id"`
-	AgentID       pgtype.UUID `json:"agent_id"`
-	Position      int32       `json:"position"`
-	RuntimeID     pgtype.UUID `json:"runtime_id"`
-	Model         string      `json:"model"`
-	ThinkingLevel string      `json:"thinking_level"`
-	CustomArgs    []byte      `json:"custom_args"`
+func (q *Queries) GetPersonalModelProfileOfAgent(ctx context.Context, ownerAgentID pgtype.UUID) (ModelProfile, error) {
+	row := q.db.QueryRow(ctx, getPersonalModelProfileOfAgent, ownerAgentID)
+	var i ModelProfile
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.Name,
+		&i.Description,
+		&i.WhenExhaustedProfileID,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.OwnerAgentID,
+		&i.BasedOnProfileID,
+	)
+	return i, err
 }
 
-func (q *Queries) InsertAgentModelOption(ctx context.Context, arg InsertAgentModelOptionParams) error {
-	_, err := q.db.Exec(ctx, insertAgentModelOption,
-		arg.WorkspaceID,
-		arg.AgentID,
-		arg.Position,
-		arg.RuntimeID,
-		arg.Model,
-		arg.ThinkingLevel,
-		arg.CustomArgs,
+const getSharedModelProfileInWorkspace = `-- name: GetSharedModelProfileInWorkspace :one
+SELECT id, workspace_id, name, description, when_exhausted_profile_id, created_by, created_at, updated_at, owner_agent_id, based_on_profile_id FROM model_profile
+WHERE id = $1 AND workspace_id = $2 AND owner_agent_id IS NULL
+`
+
+type GetSharedModelProfileInWorkspaceParams struct {
+	ID          pgtype.UUID `json:"id"`
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+}
+
+func (q *Queries) GetSharedModelProfileInWorkspace(ctx context.Context, arg GetSharedModelProfileInWorkspaceParams) (ModelProfile, error) {
+	row := q.db.QueryRow(ctx, getSharedModelProfileInWorkspace, arg.ID, arg.WorkspaceID)
+	var i ModelProfile
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.Name,
+		&i.Description,
+		&i.WhenExhaustedProfileID,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.OwnerAgentID,
+		&i.BasedOnProfileID,
 	)
-	return err
+	return i, err
 }
 
 const insertModelProfileOption = `-- name: InsertModelProfileOption :exec
@@ -339,19 +448,24 @@ func (q *Queries) InsertModelProfileOption(ctx context.Context, arg InsertModelP
 }
 
 const insertRuntimeUnavailable = `-- name: InsertRuntimeUnavailable :one
-INSERT INTO runtime_unavailable (workspace_id, runtime_id, until, reason, task_id)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO runtime_unavailable (workspace_id, runtime_id, until, reason, task_id, reason_code, subscription_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
 RETURNING id, workspace_id, runtime_id, until, reason, task_id, created_at, reason_code, subscription_id
 `
 
 type InsertRuntimeUnavailableParams struct {
-	WorkspaceID pgtype.UUID        `json:"workspace_id"`
-	RuntimeID   pgtype.UUID        `json:"runtime_id"`
-	Until       pgtype.Timestamptz `json:"until"`
-	Reason      string             `json:"reason"`
-	TaskID      pgtype.UUID        `json:"task_id"`
+	WorkspaceID    pgtype.UUID        `json:"workspace_id"`
+	RuntimeID      pgtype.UUID        `json:"runtime_id"`
+	Until          pgtype.Timestamptz `json:"until"`
+	Reason         string             `json:"reason"`
+	TaskID         pgtype.UUID        `json:"task_id"`
+	ReasonCode     string             `json:"reason_code"`
+	SubscriptionID pgtype.UUID        `json:"subscription_id"`
 }
 
+// reason_code is the kind of refusal (provider_limit, agent_cap_refusal,
+// disabled_refusal); subscription_id pins a provider refusal to the account
+// the run was confirmed to spend.
 func (q *Queries) InsertRuntimeUnavailable(ctx context.Context, arg InsertRuntimeUnavailableParams) (RuntimeUnavailable, error) {
 	row := q.db.QueryRow(ctx, insertRuntimeUnavailable,
 		arg.WorkspaceID,
@@ -359,6 +473,8 @@ func (q *Queries) InsertRuntimeUnavailable(ctx context.Context, arg InsertRuntim
 		arg.Until,
 		arg.Reason,
 		arg.TaskID,
+		arg.ReasonCode,
+		arg.SubscriptionID,
 	)
 	var i RuntimeUnavailable
 	err := row.Scan(
@@ -373,6 +489,45 @@ func (q *Queries) InsertRuntimeUnavailable(ctx context.Context, arg InsertRuntim
 		&i.SubscriptionID,
 	)
 	return i, err
+}
+
+const listActiveLocalRefusals = `-- name: ListActiveLocalRefusals :many
+SELECT id, workspace_id, runtime_id, until, reason, task_id, created_at, reason_code, subscription_id FROM runtime_unavailable
+WHERE until > $1::timestamptz
+  AND reason_code IN ('agent_cap_refusal', 'disabled_refusal')
+ORDER BY runtime_id, until DESC
+`
+
+// The daemon's own refusals that still hold: on the agent limit or on disabled
+// accounts. Unknown refusals are never lifted by an operational refresh.
+func (q *Queries) ListActiveLocalRefusals(ctx context.Context, now pgtype.Timestamptz) ([]RuntimeUnavailable, error) {
+	rows, err := q.db.Query(ctx, listActiveLocalRefusals, now)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []RuntimeUnavailable{}
+	for rows.Next() {
+		var i RuntimeUnavailable
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.RuntimeID,
+			&i.Until,
+			&i.Reason,
+			&i.TaskID,
+			&i.CreatedAt,
+			&i.ReasonCode,
+			&i.SubscriptionID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listActiveRuntimeUnavailable = `-- name: ListActiveRuntimeUnavailable :many
@@ -453,7 +608,7 @@ func (q *Queries) ListActiveRuntimeUnavailableForRuntimes(ctx context.Context, r
 }
 
 const listAgentModelChoices = `-- name: ListAgentModelChoices :many
-SELECT t.id, t.issue_id, t.status, t.runtime_id, t.model_position, t.model_choice, t.created_at, t.dispatched_at,
+SELECT t.id, t.issue_id, t.status, t.runtime_id, t.model_position, t.model_choice, t.account_fact, t.created_at, t.dispatched_at,
        i.number AS issue_number, i.title AS issue_title
 FROM agent_task_queue t
 LEFT JOIN issue i ON i.id = t.issue_id
@@ -474,6 +629,7 @@ type ListAgentModelChoicesRow struct {
 	RuntimeID     pgtype.UUID        `json:"runtime_id"`
 	ModelPosition pgtype.Int4        `json:"model_position"`
 	ModelChoice   []byte             `json:"model_choice"`
+	AccountFact   []byte             `json:"account_fact"`
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 	DispatchedAt  pgtype.Timestamptz `json:"dispatched_at"`
 	IssueNumber   pgtype.Int4        `json:"issue_number"`
@@ -498,78 +654,11 @@ func (q *Queries) ListAgentModelChoices(ctx context.Context, arg ListAgentModelC
 			&i.RuntimeID,
 			&i.ModelPosition,
 			&i.ModelChoice,
+			&i.AccountFact,
 			&i.CreatedAt,
 			&i.DispatchedAt,
 			&i.IssueNumber,
 			&i.IssueTitle,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listAgentModelOptions = `-- name: ListAgentModelOptions :many
-SELECT workspace_id, agent_id, position, runtime_id, model, thinking_level, custom_args FROM agent_model_option
-WHERE agent_id = $1
-ORDER BY position
-`
-
-func (q *Queries) ListAgentModelOptions(ctx context.Context, agentID pgtype.UUID) ([]AgentModelOption, error) {
-	rows, err := q.db.Query(ctx, listAgentModelOptions, agentID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []AgentModelOption{}
-	for rows.Next() {
-		var i AgentModelOption
-		if err := rows.Scan(
-			&i.WorkspaceID,
-			&i.AgentID,
-			&i.Position,
-			&i.RuntimeID,
-			&i.Model,
-			&i.ThinkingLevel,
-			&i.CustomArgs,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listAgentModelOptionsByWorkspace = `-- name: ListAgentModelOptionsByWorkspace :many
-SELECT workspace_id, agent_id, position, runtime_id, model, thinking_level, custom_args FROM agent_model_option
-WHERE workspace_id = $1
-ORDER BY agent_id, position
-`
-
-func (q *Queries) ListAgentModelOptionsByWorkspace(ctx context.Context, workspaceID pgtype.UUID) ([]AgentModelOption, error) {
-	rows, err := q.db.Query(ctx, listAgentModelOptionsByWorkspace, workspaceID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []AgentModelOption{}
-	for rows.Next() {
-		var i AgentModelOption
-		if err := rows.Scan(
-			&i.WorkspaceID,
-			&i.AgentID,
-			&i.Position,
-			&i.RuntimeID,
-			&i.Model,
-			&i.ThinkingLevel,
-			&i.CustomArgs,
 		); err != nil {
 			return nil, err
 		}
@@ -861,6 +950,7 @@ ORDER BY lower(name), id
 // Model profiles, agent model lists and runtime unavailability (STT-258,
 // model tiers). No foreign keys: callers validate references and clean up
 // dependents in application code.
+// Every profile of the workspace, personal ones included: the choice reads them all.
 func (q *Queries) ListModelProfiles(ctx context.Context, workspaceID pgtype.UUID) ([]ModelProfile, error) {
 	rows, err := q.db.Query(ctx, listModelProfiles, workspaceID)
 	if err != nil {
@@ -945,13 +1035,49 @@ func (q *Queries) ListOpenIssuesWithModelProfile(ctx context.Context, arg ListOp
 	return items, nil
 }
 
+const listPersonalModelProfiles = `-- name: ListPersonalModelProfiles :many
+SELECT id, workspace_id, name, description, when_exhausted_profile_id, created_by, created_at, updated_at, owner_agent_id, based_on_profile_id FROM model_profile
+WHERE workspace_id = $1 AND owner_agent_id IS NOT NULL
+ORDER BY lower(name), id
+`
+
+func (q *Queries) ListPersonalModelProfiles(ctx context.Context, workspaceID pgtype.UUID) ([]ModelProfile, error) {
+	rows, err := q.db.Query(ctx, listPersonalModelProfiles, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ModelProfile{}
+	for rows.Next() {
+		var i ModelProfile
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.Name,
+			&i.Description,
+			&i.WhenExhaustedProfileID,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.OwnerAgentID,
+			&i.BasedOnProfileID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listQueuedTasksForModelRouting = `-- name: ListQueuedTasksForModelRouting :many
 SELECT t.id, t.agent_id, t.issue_id, t.status, t.priority, t.dispatched_at, t.started_at, t.completed_at, t.result, t.error, t.created_at, t.context, t.runtime_id, t.session_id, t.work_dir, t.trigger_comment_id, t.chat_session_id, t.autopilot_run_id, t.attempt, t.max_attempts, t.parent_task_id, t.failure_reason, t.trigger_summary, t.force_fresh_session, t.is_leader_task, t.wait_reason, t.initiator_user_id, t.handoff_note, t.prepare_lease_expires_at, t.squad_id, t.runtime_mcp_overlay, t.escalation_for_task_id, t.fire_at, t.originator_user_id, t.runtime_connected_apps, t.coalesced_comment_ids, t.delivered_comment_ids, t.chat_input_task_id, t.chat_finalize_deferred_at, t.originator_source, t.delegated_from_task_id, t.retry_of_task_id, t.rerun_of_task_id, t.rule_version_id, t.trigger_evidence_kind, t.trigger_evidence_ref_id, t.accountable_user_id, t.session_rollout_missing, t.retired_session_id, t.quick_actions_disabled, t.regenerate_quick_actions_for, t.branch_name, t.durable_work_dir, t.channel_context_revision, t.comment_thread_id, t.cancelled_by_type, t.cancelled_by_id, t.cancelled_by_name, t.issue_snapshot, t.conveyor_action_id, t.model_position, t.model_choice, t.workflow_step, t.account_fact, t.account_offer FROM agent_task_queue t
 WHERE t.status = 'queued'
   AND (
     t.model_choice IS NOT NULL
     OR EXISTS (SELECT 1 FROM agent a WHERE a.id = t.agent_id AND a.model_profile_id IS NOT NULL)
-    OR EXISTS (SELECT 1 FROM agent_model_option o WHERE o.agent_id = t.agent_id)
     OR EXISTS (SELECT 1 FROM issue i WHERE i.id = t.issue_id AND i.model_profile_id IS NOT NULL)
   )
 ORDER BY t.created_at
@@ -959,7 +1085,7 @@ LIMIT $1
 `
 
 // Unclaimed runs whose model comes from a list: already routed, or of an agent
-// on a profile or own list, or of an issue with a profile.
+// on a profile (shared or personal), or of an issue with a profile.
 func (q *Queries) ListQueuedTasksForModelRouting(ctx context.Context, pageSize int32) ([]AgentTaskQueue, error) {
 	rows, err := q.db.Query(ctx, listQueuedTasksForModelRouting, pageSize)
 	if err != nil {
@@ -1046,6 +1172,43 @@ func (q *Queries) ListQueuedTasksForModelRouting(ctx context.Context, pageSize i
 	return items, nil
 }
 
+const listSharedModelProfiles = `-- name: ListSharedModelProfiles :many
+SELECT id, workspace_id, name, description, when_exhausted_profile_id, created_by, created_at, updated_at, owner_agent_id, based_on_profile_id FROM model_profile
+WHERE workspace_id = $1 AND owner_agent_id IS NULL
+ORDER BY lower(name), id
+`
+
+func (q *Queries) ListSharedModelProfiles(ctx context.Context, workspaceID pgtype.UUID) ([]ModelProfile, error) {
+	rows, err := q.db.Query(ctx, listSharedModelProfiles, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ModelProfile{}
+	for rows.Next() {
+		var i ModelProfile
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.Name,
+			&i.Description,
+			&i.WhenExhaustedProfileID,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.OwnerAgentID,
+			&i.BasedOnProfileID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listWorkspaceOwnerUserIDs = `-- name: ListWorkspaceOwnerUserIDs :many
 SELECT user_id FROM member WHERE workspace_id = $1 AND role = 'owner' ORDER BY created_at, user_id
 `
@@ -1071,7 +1234,7 @@ func (q *Queries) ListWorkspaceOwnerUserIDs(ctx context.Context, workspaceID pgt
 }
 
 const lockModelProfilesInWorkspace = `-- name: LockModelProfilesInWorkspace :many
-SELECT id, when_exhausted_profile_id FROM model_profile
+SELECT id, when_exhausted_profile_id, owner_agent_id FROM model_profile
 WHERE workspace_id = $1
 ORDER BY id
 FOR UPDATE
@@ -1080,6 +1243,7 @@ FOR UPDATE
 type LockModelProfilesInWorkspaceRow struct {
 	ID                     pgtype.UUID `json:"id"`
 	WhenExhaustedProfileID pgtype.UUID `json:"when_exhausted_profile_id"`
+	OwnerAgentID           pgtype.UUID `json:"owner_agent_id"`
 }
 
 // Serializes profile writes of one workspace so the cycle check of
@@ -1093,7 +1257,7 @@ func (q *Queries) LockModelProfilesInWorkspace(ctx context.Context, workspaceID 
 	items := []LockModelProfilesInWorkspaceRow{}
 	for rows.Next() {
 		var i LockModelProfilesInWorkspaceRow
-		if err := rows.Scan(&i.ID, &i.WhenExhaustedProfileID); err != nil {
+		if err := rows.Scan(&i.ID, &i.WhenExhaustedProfileID, &i.OwnerAgentID); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1335,6 +1499,21 @@ func (q *Queries) SetIssueModelProfile(ctx context.Context, arg SetIssueModelPro
 		&i.StageDispatchBy,
 	)
 	return i, err
+}
+
+const setPersonalModelProfileBase = `-- name: SetPersonalModelProfileBase :exec
+UPDATE model_profile SET based_on_profile_id = $2, updated_at = now()
+WHERE id = $1
+`
+
+type SetPersonalModelProfileBaseParams struct {
+	ID               pgtype.UUID `json:"id"`
+	BasedOnProfileID pgtype.UUID `json:"based_on_profile_id"`
+}
+
+func (q *Queries) SetPersonalModelProfileBase(ctx context.Context, arg SetPersonalModelProfileBaseParams) error {
+	_, err := q.db.Exec(ctx, setPersonalModelProfileBase, arg.ID, arg.BasedOnProfileID)
+	return err
 }
 
 const setTaskModelRoute = `-- name: SetTaskModelRoute :one
