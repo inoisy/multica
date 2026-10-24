@@ -257,7 +257,8 @@ func assertIssueStatusStillActive(ctx context.Context, qtx *db.Queries, workspac
 // wakeup actor identity in transaction-local settings, including built-in targets.
 func (h *Handler) runWithIssueStatusGuard(ctx context.Context, workspaceID pgtype.UUID, statusKey string, fn func(q *db.Queries) error) error {
 	_, hasActor := ctx.Value(wakeupActorKey{}).(wakeupActor)
-	if !hasActor && (statusKey == "" || issuestatus.IsBuiltIn(statusKey)) {
+	_, hasArtifact := ctx.Value(workflowArtifactWriteKey{}).(workflowArtifactWrite)
+	if !hasActor && !hasArtifact && (statusKey == "" || issuestatus.IsBuiltIn(statusKey)) {
 		return fn(h.Queries)
 	}
 	tx, err := h.beginWakeupWrite(ctx)
@@ -269,6 +270,11 @@ func (h *Handler) runWithIssueStatusGuard(ctx context.Context, workspaceID pgtyp
 	qtx := h.Queries.WithTx(tx)
 	if err := assertIssueStatusStillActive(ctx, qtx, workspaceID, statusKey); err != nil {
 		return err
+	}
+	if hasArtifact {
+		if err := qtx.LockIssueStatusCatalogShared(ctx, workspaceID); err != nil {
+			return err
+		}
 	}
 	if err := fn(qtx); err != nil {
 		return err
@@ -303,8 +309,14 @@ func (h *Handler) updateIssueWithStatusGuard(ctx context.Context, workspaceID pg
 // after commit.
 func updateIssueStoppingWakeups(ctx context.Context, q *db.Queries, params db.UpdateIssueParams) (db.Issue, []db.AgentTaskQueue, error) {
 	issue, err := q.UpdateIssue(ctx, params)
-	if err != nil || !params.Status.Valid {
+	if err != nil {
 		return issue, nil, err
+	}
+	if err := writeWorkflowArtifact(ctx, q, issue); err != nil {
+		return db.Issue{}, nil, err
+	}
+	if !params.Status.Valid {
+		return issue, nil, nil
 	}
 	cancelled, err := service.StopClosedIssueWakeups(ctx, q, issue)
 	if err != nil {
@@ -3625,7 +3637,8 @@ type UpdateIssueRequest struct {
 	// step the issue lands on, handing it off like a status change would. A
 	// project move without it is administrative. Batch updates ignore it.
 	// (MUL-7420)
-	EnterWorkflowStep bool `json:"enter_workflow_step,omitempty"`
+	EnterWorkflowStep bool                    `json:"enter_workflow_step,omitempty"`
+	WorkflowArtifact  *issueworkflow.Artifact `json:"workflow_artifact,omitempty"`
 	// DuplicateOfIssueID marks this issue as a duplicate of another issue in
 	// the same workspace (MUL-7349). A duplicate is an ordinary cancelled issue
 	// that remembers its original, so this also sets status to cancelled.
@@ -3730,6 +3743,11 @@ func (h *Handler) updateIssueAtomically(ctx context.Context, workspaceID pgtype.
 	// must precede both attachment and issue row locks everywhere. (MUL-6243)
 	if err := assertIssueStatusStillActive(ctx, qtx, workspaceID, statusKey); err != nil {
 		return db.Issue{}, db.Issue{}, false, err
+	}
+	if _, ok := ctx.Value(workflowArtifactWriteKey{}).(workflowArtifactWrite); ok {
+		if err := qtx.LockIssueStatusCatalogShared(ctx, workspaceID); err != nil {
+			return db.Issue{}, db.Issue{}, false, err
+		}
 	}
 	if len(attachmentIDs) > 0 {
 		if _, err := qtx.LockAttachmentsForIssueLink(ctx, db.LockAttachmentsForIssueLinkParams{
@@ -4066,13 +4084,26 @@ func (h *Handler) UpdateIssue(w http.ResponseWriter, r *http.Request) {
 		// A project move remapped the status; guard the key actually written.
 		statusKeyForGuard = params.Status.String
 	}
-	if touchedType || touchedID || handoff != nil {
+	if touchedType || touchedID || (handoff != nil && !handoff.toAcceptance()) {
 		if status, msg := h.validateAssigneePair(r.Context(), r, workspaceID, params.AssigneeType, params.AssigneeID); status != 0 {
 			writeError(w, status, msg)
 			return
 		}
 	}
 
+	artifactCtx, ok := h.prepareWorkflowArtifact(w, r, prevIssue, params, req, callerRun)
+	if !ok {
+		return
+	}
+	// The pin is checked against the issue as read here: a concurrent status
+	// change must not slip between that check and this write.
+	if _, own := artifactCtx.Value(workflowArtifactWriteKey{}).(workflowArtifactWrite); own && params.Status.Valid && params.Status.String != prevIssue.Status {
+		if params.ExpectedRevision.Valid && params.ExpectedRevision.Int64 != prevIssue.Revision {
+			writeRevisionConflict(w, "issue", prevIssue.ID, params.ExpectedRevision.Int64, prevIssue.Revision)
+			return
+		}
+		params.ExpectedRevision = pgtype.Int8{Int64: prevIssue.Revision, Valid: true}
+	}
 	attachmentIDs, ok := parseUUIDSliceOrBadRequest(w, req.AttachmentIDs, "attachment_ids")
 	if !ok {
 		return
@@ -4080,7 +4111,7 @@ func (h *Handler) UpdateIssue(w http.ResponseWriter, r *http.Request) {
 
 	// The agent this write hands the issue to gets the change as its own run,
 	// not also through its event wakeups.
-	writeCtx := withWakeupHandedTo(r.Context(), h.handedToAgent(r.Context(), prevIssue, params, handoff != nil))
+	writeCtx := withWakeupHandedTo(artifactCtx, h.handedToAgent(r.Context(), prevIssue, params, handoff != nil))
 	var issue db.Issue
 	attachmentsChanged := false
 	if req.Description != nil || req.TitleBase != nil || req.DescriptionBase != nil || len(attachmentIDs) > 0 {
@@ -4095,6 +4126,9 @@ func (h *Handler) UpdateIssue(w http.ResponseWriter, r *http.Request) {
 		issue, err = h.updateIssueWithStatusGuard(writeCtx, prevIssue.WorkspaceID, statusKeyForGuard, params)
 	}
 	if err != nil {
+		if writeWorkflowArtifactError(w, err) {
+			return
+		}
 		if writeIssueStatusRaceError(w, err) {
 			return
 		}
@@ -4936,7 +4970,7 @@ func (h *Handler) BatchUpdateIssues(w http.ResponseWriter, r *http.Request) {
 		if params.Status.Valid {
 			issueStatusGuard = params.Status.String
 		}
-		if batchTouchedType || batchTouchedID || handoff != nil {
+		if batchTouchedType || batchTouchedID || (handoff != nil && !handoff.toAcceptance()) {
 			if status, _ := h.validateAssigneePair(r.Context(), r, workspaceID, params.AssigneeType, params.AssigneeID); status != 0 {
 				continue
 			}

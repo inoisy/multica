@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/multica-ai/multica/server/internal/issueworkflow"
 	"github.com/multica-ai/multica/server/internal/util"
 	db "github.com/multica-ai/multica/server/pkg/db/generated"
 )
@@ -80,6 +81,13 @@ func NormalizeSquadRouteTemplate(ctx context.Context, q *db.Queries, workspaceID
 // the route could not start (the leader then takes the issue, told why).
 // invoker is the human the route's runs answer to.
 func (s *IssueConveyorService) StartSquadRoute(ctx context.Context, issue db.Issue, squad db.Squad, invoker pgtype.UUID) (bool, error) {
+	def, _, err := issueworkflow.ForProject(ctx, s.q(), issue.WorkspaceID, issue.ProjectID)
+	if err != nil {
+		return false, err
+	}
+	if def != nil && def.ControlsExecution() {
+		return false, nil
+	}
 	template := issueRouteSpec(issue)
 	if template == "" {
 		template = strings.TrimSpace(squad.RouteTemplate)

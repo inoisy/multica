@@ -46,6 +46,8 @@ export function useStepHandlerLabel(
             : t(($) => $.workflows.handler.project_lead);
         case "creator":
           return t(($) => $.workflows.handler.creator);
+        case "accept":
+          return t(($) => $.workflows.handler.accept);
         default:
           return null;
       }

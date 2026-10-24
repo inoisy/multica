@@ -2350,11 +2350,17 @@ SELECT
     COALESCE($9::boolean, FALSE),
     $10,
     $11,
-    CASE
-        WHEN COALESCE($12::text, '') <> ''
-        THEN jsonb_build_object('head_sha', $12::text)
-        ELSE NULL
-    END,
+    NULLIF(jsonb_strip_nulls(jsonb_build_object(
+        'head_sha', NULLIF(COALESCE($12::text, ''), ''),
+        -- The commit pinned for the issue's current workflow (a project on
+        -- Default has no workflow_id; its workflow is the stored Default).
+        'workflow_artifact', (SELECT a.artifact FROM issue_workflow_artifact a
+            JOIN issue i ON i.id = a.issue_id AND i.project_id = a.project_id
+            JOIN project p ON p.id = i.project_id
+            WHERE a.issue_id = $3 AND a.workspace_id = i.workspace_id
+              AND a.workflow_id = COALESCE(p.workflow_id, (SELECT w.id FROM issue_workflow w
+                  WHERE w.workspace_id = i.workspace_id AND w.is_default)))
+    )), '{}'::jsonb),
     $13,
     $14,
     $15,
@@ -2530,6 +2536,14 @@ SELECT
     $11,
     jsonb_strip_nulls(jsonb_build_object(
         'head_sha', NULLIF(COALESCE($12::text, ''), ''),
+        -- The commit pinned for the issue's current workflow (a project on
+        -- Default has no workflow_id; its workflow is the stored Default).
+        'workflow_artifact', (SELECT a.artifact FROM issue_workflow_artifact a
+            JOIN issue i ON i.id = a.issue_id AND i.project_id = a.project_id
+            JOIN project p ON p.id = i.project_id
+            WHERE a.issue_id = $3 AND a.workspace_id = i.workspace_id
+              AND a.workflow_id = COALESCE(p.workflow_id, (SELECT w.id FROM issue_workflow w
+                  WHERE w.workspace_id = i.workspace_id AND w.is_default))),
         'channel_issue_media_pending', TRUE
     )),
     $13,

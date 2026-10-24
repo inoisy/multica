@@ -1449,7 +1449,8 @@
       "member": "成员",
       "project_lead": "项目负责人",
       "creator": "任务创建者",
-      "project_lead_named": "{{name}}（项目负责人）"
+      "project_lead_named": "{{name}}（项目负责人）",
+      "accept": "自动验收"
     },
     "settings": {
       "title": "工作流",
@@ -1630,6 +1631,7 @@
       "mode_member": "交给成员",
       "mode_member_hint": "只改负责人，不会自动运行",
       "project_lead_hint": "项目负责人是智能体时，会开始运行。",
+      "accept_hint": "仓库检查通过后合并上一步固定的提交，并把任务移到下一列；检查失败则退回。",
       "pick_agent": "选择智能体",
       "pick_member": "选择成员",
       "search_agents": "搜索智能体",

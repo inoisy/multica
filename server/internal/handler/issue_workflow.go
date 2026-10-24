@@ -449,6 +449,16 @@ func (h *Handler) validateHandoffHandlers(ctx context.Context, r *http.Request, 
 // validateHandoffHandlers.
 func (h *Handler) validateHandoffHandler(ctx context.Context, r *http.Request, workspaceID string, s issueworkflow.Step) (int, string) {
 	switch s.Handler.Type {
+	case issueworkflow.HandlerAccept:
+		member, err := h.Queries.GetMemberByUserAndWorkspace(ctx, db.GetMemberByUserAndWorkspaceParams{UserID: parseUUID(requestUserID(r)), WorkspaceID: parseUUID(workspaceID)})
+		if err != nil || !isWorkspaceAdmin(member) {
+			return http.StatusForbidden, "only workspace admins can configure automatic acceptance"
+		}
+		a, err := service.WorkflowAcceptanceAgent(ctx, h.Queries, parseUUID(workspaceID))
+		if err != nil || a == nil {
+			return http.StatusBadRequest, "an online acceptance runtime is required"
+		}
+		return 0, ""
 	case issueworkflow.HandlerAgent, issueworkflow.HandlerSquad, issueworkflow.HandlerMember:
 		id, err := parseUUIDString(s.Handler.ID)
 		if err != nil {
@@ -747,6 +757,13 @@ func (h *Handler) UpdateIssueWorkflow(w http.ResponseWriter, r *http.Request) {
 		writeErrorCode(w, status, "invalid_handoff", msg)
 		return
 	}
+	if (issueworkflow.Definition{IsDefault: current.IsDefault, Steps: steps}).ControlsExecution() {
+		for _, p := range projects {
+			if !requireLegacyRoutesFinished(w, ctx, qtx, wsUUID, p.ID) {
+				return
+			}
+		}
+	}
 
 	// Default accepts every status, so editing it never moves issues; issues
 	// on a status it drops stay there and show under hidden columns.
@@ -1008,6 +1025,9 @@ func (h *Handler) SetProjectWorkflow(w http.ResponseWriter, r *http.Request) {
 			target = &def
 		}
 	}
+	if target != nil && target.ControlsExecution() && !requireLegacyRoutesFinished(w, ctx, qtx, wsUUID, project.ID) {
+		return
+	}
 	catalog, err := h.workflowStatusCatalog(ctx, qtx, wsUUID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to load issue statuses")
@@ -1156,6 +1176,9 @@ func (h *Handler) SetIssueWorkflowHandoff(w http.ResponseWriter, r *http.Request
 		if s.StatusKey == step.StatusKey {
 			def.Steps[i] = step
 		}
+	}
+	if def.ControlsExecution() && !copyFor.Valid && !requireLegacyRoutesFinished(w, ctx, qtx, wsUUID, pgtype.UUID{}) {
+		return
 	}
 	raw, err := issueworkflow.EncodeSteps(def.Steps)
 	if err != nil {
