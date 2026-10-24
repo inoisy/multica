@@ -40,6 +40,7 @@ import {
 } from "./issue-run-timeline";
 import { canRetryRun, RetryRunButton } from "./retry-run-button";
 import { TaskStatusIcon } from "./task-status-icon";
+import { useTaskWaitText } from "../../model-profiles";
 import { useStatusLabel, useTriggerText } from "./task-run-labels";
 import { WakeupRunLabel } from "./wakeup-source-chip";
 
@@ -533,6 +534,7 @@ export function ActiveTaskRow({
   const tone = STATUS_TONE[task.status];
   const label = useStatusLabel(task.status);
   const trigger = useTriggerText(task);
+  const waitText = useTaskWaitText()(task);
 
   // Running rows show a live-ticking elapsed timer (the ticking digits carry
   // "alive", the duration carries "how long"). Only running rows tick.
@@ -583,9 +585,7 @@ export function ActiveTaskRow({
   ) : (
     <TriggerText text={trigger} />
   );
-  return (
-    <RowShell task={task}>
-      {onJump ? (
+  const triggerLine = onJump ? (
         <button
           type="button"
           onClick={onJump}
@@ -600,6 +600,18 @@ export function ActiveTaskRow({
           {triggerText}
           <TaskCommentCoverage task={task} />
         </>
+      );
+  return (
+    <RowShell task={task} multiline={waitText !== null}>
+      {waitText !== null ? (
+        <div className="min-w-0 flex-1" data-testid="task-wait-reason">
+          <div className="flex min-w-0 items-center gap-2">{triggerLine}</div>
+          <p className="truncate text-micro text-warning" title={waitText}>
+            {waitText}
+          </p>
+        </div>
+      ) : (
+        triggerLine
       )}
       <RowStatus title={label}>
         {task.status === "running" ? (

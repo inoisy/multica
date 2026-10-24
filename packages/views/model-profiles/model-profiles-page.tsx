@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Layers, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import type { ModelProfile, ModelProfileChange, ModelProfileInput } from "@multica/core/types";
+import type { ModelProfile, ModelProfileChange, ModelProfileInput, ModelProfileKind } from "@multica/core/types";
 import { useWorkspaceId } from "@multica/core/hooks";
 import { useWorkspacePaths } from "@multica/core/paths";
 import { useCurrentMember } from "@multica/core/permissions";
@@ -15,6 +15,7 @@ import {
   modelProfileListOptions,
   modelRowLabel,
   toModelOptionInputs,
+  useAgentPersonalProfile,
   useCreateModelProfile,
   useDeleteModelProfile,
   usePreviewModelProfile,
@@ -43,9 +44,11 @@ import { cn } from "@multica/ui/lib/utils";
 import { CollectionPageHeader, CollectionPageHeaderAction } from "../layout/collection-page";
 import { SectionTabs } from "../layout/section-tabs";
 import { PAGE_GUTTER } from "../layout/page-header";
-import { AppLink } from "../navigation";
+import { AppLink, useNavigation } from "../navigation";
 import { useT } from "../i18n";
 import { ModelRowsEditor } from "./model-rows-editor";
+import { ProfileDiffBadge } from "./profile-diff";
+import { ResetPersonalDialog } from "./reset-personal-dialog";
 
 const WAIT = "wait";
 const EMPTY = "empty";
@@ -69,6 +72,43 @@ function inputOf(profile: ModelProfile): ModelProfileInput {
   };
 }
 
+const KINDS: ModelProfileKind[] = ["all", "shared", "personal"];
+
+/** The kind filter lives in the address: a link and a reload restore the same view. */
+function parseKind(value: string | null): ModelProfileKind {
+  return KINDS.find((kind) => kind === value) ?? "all";
+}
+
+/** "Return to shared" for one agent's personal profile, behind a confirmation. */
+function ResetPersonalButton({ wsId, agent, baseName }: { wsId: string; agent: { id: string; name: string }; baseName: string }) {
+  const { t } = useT("agents");
+  const personal = useAgentPersonalProfile(wsId, agent.id);
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Button size="sm" variant="ghost" onClick={() => setOpen(true)}>
+        {t(($) => $.models.reset_to_shared)}
+        <span className="sr-only">: {agent.name}</span>
+      </Button>
+      <ResetPersonalDialog
+        open={open}
+        baseName={baseName}
+        busy={personal.reset.isPending}
+        onOpenChange={setOpen}
+        onConfirm={() =>
+          void personal.reset.mutateAsync().then(
+            () => {
+              toast.success(t(($) => $.models.reset_done));
+              setOpen(false);
+            },
+            (error: unknown) => toast.error(error instanceof Error ? error.message : String(error)),
+          )
+        }
+      />
+    </>
+  );
+}
+
 /**
  * Profiles of the workspace: ordered model lists that agents and issues
  * reference. An edit reaches every referencing agent and issue from its next
@@ -80,7 +120,10 @@ export function ModelProfilesPage() {
   const paths = useWorkspacePaths();
   const { role, userId } = useCurrentMember(wsId);
   const canManage = role === "owner" || role === "admin";
-  const profiles = useQuery(modelProfileListOptions(wsId));
+  const navigation = useNavigation();
+  const kind = parseKind(navigation.searchParams.get("kind"));
+  const profiles = useQuery(modelProfileListOptions(wsId, "shared"));
+  const personalProfiles = useQuery(modelProfileListOptions(wsId, "personal"));
   const { data: runtimes = [] } = useQuery(runtimeListOptions(wsId));
   const { data: members = [] } = useQuery(memberListOptions(wsId));
   const { data: agents = [] } = useQuery(agentListOptions(wsId));
@@ -93,6 +136,16 @@ export function ModelProfilesPage() {
   const previewing = previewMutation.isPending;
 
   const list = profiles.data ?? [];
+  const personalList = personalProfiles.data ?? [];
+  const showShared = kind !== "personal";
+  const showPersonal = kind !== "shared";
+  const setKind = (next: ModelProfileKind) => {
+    const params = new URLSearchParams(navigation.searchParams);
+    if (next === "all") params.delete("kind");
+    else params.set("kind", next);
+    const query = params.toString();
+    navigation.replace(query ? `${navigation.pathname}?${query}` : navigation.pathname);
+  };
   const nameOf = (id: string | null) => list.find((p) => p.id === id)?.name ?? "";
   const busy = create.isPending || update.isPending || previewing;
 
@@ -169,16 +222,29 @@ export function ModelProfilesPage() {
           ) : null
         }
       />
-      <div className={cn("min-h-0 flex-1 overflow-y-auto py-4", PAGE_GUTTER)}>
+      <div className={cn("min-h-0 flex-1 space-y-4 overflow-y-auto py-4", PAGE_GUTTER)}>
+        <div role="group" aria-label={t(($) => $.model_profiles.kind_label)} className="flex w-fit max-w-full flex-wrap gap-1 rounded-lg bg-muted p-0.5">
+          {KINDS.map((value) => (
+            <Button
+              key={value}
+              size="sm"
+              variant={kind === value ? "outline" : "ghost"}
+              aria-pressed={kind === value}
+              onClick={() => setKind(value)}
+            >
+              {t(($) => $.model_profiles.kind[value])}
+            </Button>
+          ))}
+        </div>
         {profiles.isError ? (
           <p className="rounded-md border border-destructive/40 px-3 py-2 text-caption text-destructive">
             {t(($) => $.model_profiles.load_failed)}
           </p>
         ) : null}
-        {profiles.data && list.length === 0 ? (
+        {showShared && profiles.data && list.length === 0 ? (
           <p className="text-caption text-muted-foreground">{t(($) => $.model_profiles.empty)}</p>
         ) : null}
-        {list.length > 0 ? (
+        {showShared && list.length > 0 ? (
           <div className="overflow-x-auto rounded-lg border">
             <Table className="w-full text-body" data-testid="model-profiles-table">
               <TableHeader className="text-left text-caption text-muted-foreground">
@@ -226,9 +292,18 @@ export function ModelProfilesPage() {
                             ))
                           : "—"}
                       </div>
-                      {profile.own_list_agents.length ? (
-                        <div className="text-muted-foreground">
-                          {t(($) => $.model_profiles.refs_own)}: {profile.own_list_agents.map((a) => a.name).join(", ")}
+                      {profile.personal_profiles.length ? (
+                        <div className="space-y-1 pt-1" data-testid="personal-of-profile">
+                          <div className="text-muted-foreground">{t(($) => $.model_profiles.refs_personal)}</div>
+                          {profile.personal_profiles.map((personal) => (
+                            <div key={personal.profile_id} className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                              <AppLink href={paths.agentDetail(personal.agent.id)} className="hover:underline">
+                                {personal.agent.name}
+                              </AppLink>
+                              <ProfileDiffBadge matchesBase={personal.matches_base} diffRows={personal.diff_rows} />
+                              {canManage ? <ResetPersonalButton wsId={wsId} agent={personal.agent} baseName={profile.name} /> : null}
+                            </div>
+                          ))}
                         </div>
                       ) : null}
                     </TableCell>
@@ -260,6 +335,69 @@ export function ModelProfilesPage() {
               </TableBody>
             </Table>
           </div>
+        ) : null}
+        {showPersonal ? (
+          <section className="space-y-2" aria-labelledby="personal-profiles-title">
+            <h2 id="personal-profiles-title" className="text-body font-medium">
+              {t(($) => $.model_profiles.personal_title)}
+              <span className="ml-2 text-caption font-normal text-muted-foreground">{personalList.length}</span>
+            </h2>
+            {personalProfiles.data && personalList.length === 0 ? (
+              <p className="text-caption text-muted-foreground">{t(($) => $.model_profiles.personal_empty)}</p>
+            ) : null}
+            {personalList.length > 0 ? (
+              <div className="overflow-x-auto rounded-lg border">
+                <Table className="w-full text-body" data-testid="personal-profiles-table">
+                  <TableHeader className="text-left text-caption text-muted-foreground">
+                    <TableRow className="border-b">
+                      <TableHead className="px-3 py-2 font-medium">{t(($) => $.model_profiles.col_agent)}</TableHead>
+                      <TableHead className="px-3 py-2 font-medium">{t(($) => $.model_profiles.col_base)}</TableHead>
+                      <TableHead className="px-3 py-2 font-medium">{t(($) => $.model_profiles.col_models)}</TableHead>
+                      <TableHead className="px-3 py-2 font-medium">{t(($) => $.model_profiles.col_refs)}</TableHead>
+                      <TableHead className="px-3 py-2" />
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {personalList.map((profile) => (
+                      <TableRow key={profile.id} className="border-b align-top last:border-b-0">
+                        <TableCell className="px-3 py-2">
+                          {profile.owner_agent ? (
+                            <AppLink href={paths.agentDetail(profile.owner_agent.id)} className="font-medium hover:underline">
+                              {profile.owner_agent.name}
+                            </AppLink>
+                          ) : (
+                            <span className="font-medium">{profile.name}</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="space-y-1 px-3 py-2 text-caption">
+                          <div>{profile.based_on ? profile.based_on.name : "—"}</div>
+                          <ProfileDiffBadge matchesBase={profile.matches_base} diffRows={profile.diff_rows} />
+                        </TableCell>
+                        <TableCell className="px-3 py-2 font-mono text-caption">{compactModelRows(profile.options) || "—"}</TableCell>
+                        <TableCell className="space-y-1 px-3 py-2 text-caption">
+                          {profile.open_issues.length
+                            ? profile.open_issues.map((issue, i) => (
+                                <span key={issue.id}>
+                                  {i ? ", " : ""}
+                                  <AppLink href={paths.issueDetail(issue.id)} className="hover:underline">{issue.identifier}</AppLink>
+                                </span>
+                              ))
+                            : "—"}
+                        </TableCell>
+                        <TableCell className="px-3 py-2">
+                          {canManage && profile.owner_agent && profile.based_on ? (
+                            <div className="flex justify-end">
+                              <ResetPersonalButton wsId={wsId} agent={profile.owner_agent} baseName={profile.based_on.name} />
+                            </div>
+                          ) : null}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            ) : null}
+          </section>
         ) : null}
       </div>
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { useCreateRuntimePool } from "@multica/core/subscriptions";
+import { useCreatePool } from "@multica/core/subscriptions";
 import type { Subscription, SubscriptionFamily } from "@multica/core/types";
 import { RadioGroup, RadioGroupItem } from "@multica/ui/components/ui/radio-group";
 import { Button } from "@multica/ui/components/ui/button";
@@ -20,7 +20,7 @@ import { SubscriptionOrderList } from "./subscription-order-list";
 
 const FAMILIES: SubscriptionFamily[] = ["claude", "codex"];
 
-/** «Новая среда»: a subscription pool in one, several or all workspaces. */
+/** A new pool of accounts, granted to one, several or all workspaces. */
 export function NewPoolDialog({
   open,
   onOpenChange,
@@ -33,7 +33,7 @@ export function NewPoolDialog({
   subscriptions: Subscription[];
 }) {
   const { t } = useT("agents");
-  const create = useCreateRuntimePool();
+  const create = useCreatePool();
   const [family, setFamily] = useState<SubscriptionFamily>("claude");
   const [order, setOrder] = useState<string[]>([]);
   const [target, setTarget] = useState<PoolTarget>(() => emptyPoolTarget(wsId));
@@ -50,17 +50,14 @@ export function NewPoolDialog({
 
   const submit = async () => {
     try {
-      const result = await create.mutateAsync({
-        display_name: target.name.trim(),
+      await create.mutateAsync({
+        name: target.name.trim(),
         runtime_type: family,
         subscriptions: order,
         spend_order: target.spendOrder,
         ...poolTargetScope(target),
       });
       toast.success(t(($) => $.subscriptions.new_pool.done, { name: target.name.trim() }));
-      if (result.skipped_workspace_ids.length) {
-        toast.warning(t(($) => $.subscriptions.new_pool.skipped, { count: result.skipped_workspace_ids.length }));
-      }
       onOpenChange(false);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error));

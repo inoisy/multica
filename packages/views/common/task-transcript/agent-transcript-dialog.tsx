@@ -58,6 +58,7 @@ import { resolveWorkdirCopyTarget } from "@multica/core/issues";
 import { runtimeDisplayName, providerDisplayName } from "@multica/core/runtimes";
 import { useCustomPricingStore } from "@multica/core/runtimes/custom-pricing-store";
 import { redactSecrets } from "./redact";
+import { useAccountFactText, useModelText } from "../../model-profiles";
 import {
   createLiveEndFollow,
   FOLLOW_EDGE_THRESHOLD,
@@ -326,6 +327,8 @@ export function AgentTranscriptDialog({
   contentState,
 }: AgentTranscriptDialogProps) {
   const { t } = useT("agents");
+  const modelText = useModelText();
+  const accountText = useAccountFactText();
   const locale = useLocale();
   const formatText = useTraceIssueLabels(useWorkspaceId(), task.issue_id, items, open);
   const [selectedSeq, setSelectedSeq] = useState<number | null>(null);
@@ -855,6 +858,7 @@ export function AgentTranscriptDialog({
       ? failureReasonLabel(task.failure_reason, t)
       : cancelReasonLabel(task, t);
   const hasRunDetails =
+    !!task.model_choice ||
     !!runtimeInfo ||
     !!workdirCopyTarget?.relativePath ||
     !!task.branch_name ||
@@ -970,6 +974,18 @@ export function AgentTranscriptDialog({
                       )}
                       {runtimeInfo && (
                         <RunDetailRow label={t(($) => $.transcript.details_mode)} value={runtimeInfo.runtime_mode} />
+                      )}
+                      {task.model_choice && modelText.chosen(task.model_choice) && (
+                        <RunDetailRow label={t(($) => $.transcript.details_model)} value={modelText.chosen(task.model_choice)} />
+                      )}
+                      {task.model_choice && (
+                        <RunDetailRow
+                          label={t(($) => $.transcript.details_selection)}
+                          value={`${modelText.source(task.model_choice)} · ${modelText.reason(task.model_choice)}`}
+                        />
+                      )}
+                      {task.model_choice && (
+                        <RunDetailRow label={t(($) => $.transcript.details_account)} value={accountText(task.account_fact)} />
                       )}
                       {workdirCopyTarget?.relativePath && (
                         <RunDetailRow
