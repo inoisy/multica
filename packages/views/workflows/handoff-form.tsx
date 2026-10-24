@@ -507,7 +507,7 @@ function HandlerPicker({
           ))}
         </PickerSection>
       )}
-      {agentRows.length === 0 && memberRows.length === 0 && (q || kind === "agent") && <PickerEmpty />}
+      {agentRows.length === 0 && memberRows.length === 0 && q && <PickerEmpty />}
     </PropertyPicker>
   );
 }
