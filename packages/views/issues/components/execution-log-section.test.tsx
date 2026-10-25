@@ -106,6 +106,37 @@ describe("ActiveTaskRow", () => {
   });
 });
 
+describe("ActiveTaskRow waiting for a model", () => {
+  const waiting = (over: Record<string, unknown>) =>
+    ({
+      source: "agent_profile", profile_id: "p1", profile_name: "Strong", issue_id: "", excluded_family: "", reason: "all_unavailable",
+      position: 0, chosen: null, runtime_name: "", provider: "", exhausted_profiles: [], wait_until: "2026-06-08T10:40:00Z",
+      wait_reason_code: "agent_cap", wait_until_estimated: false, profile_personal: false, rows: [], ...over,
+    }) as AgentTask["model_choice"];
+
+  it("says why a queued run waits and until when, from the reason code", () => {
+    renderWithI18n(<ActiveTaskRow task={makeTask({ status: "queued", model_choice: waiting({}) })} issueId="issue-1" />);
+    const reason = screen.getByTestId("task-wait-reason");
+    expect(reason.textContent).toContain("Started from comment");
+    expect(reason.textContent).toMatch(/every model unavailable \(Agent limit reached · until .*\) — the run waits/);
+  });
+
+  it("marks an estimated time as an estimate", () => {
+    renderWithI18n(
+      <ActiveTaskRow task={makeTask({ status: "queued", model_choice: waiting({ wait_reason_code: "provider_limit", wait_until_estimated: true }) })} issueId="issue-1" />,
+    );
+    expect(screen.getByTestId("task-wait-reason").textContent).toMatch(/Provider limit · about .*, estimate/);
+  });
+
+  it("shows no waiting line for a run that is not waiting for a model", () => {
+    renderWithI18n(<ActiveTaskRow task={makeTask({ status: "queued", model_choice: waiting({ reason: "primary", wait_reason_code: null }) })} issueId="issue-1" />);
+    expect(screen.queryByTestId("task-wait-reason")).toBeNull();
+    cleanup();
+    renderWithI18n(<ActiveTaskRow task={makeTask({ status: "running", model_choice: waiting({}) })} issueId="issue-1" />);
+    expect(screen.queryByTestId("task-wait-reason")).toBeNull();
+  });
+});
+
 describe("TaskCommentCoverage", () => {
   it.each<AgentTask["status"]>([
     "queued",

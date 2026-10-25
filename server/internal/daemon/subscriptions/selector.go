@@ -4,6 +4,8 @@ import (
 	"context"
 	"sync"
 	"time"
+
+	"github.com/multica-ai/multica/server/pkg/protocol"
 )
 
 // Probe cadence: Anthropic answers 429 to frequent polling, so Claude
@@ -86,7 +88,8 @@ type Choice struct {
 	Subscription Subscription
 	Marks        []Mark
 	// Blocked is the refusal text for an agent run, or "".
-	Blocked string
+	Blocked     string
+	RefusalCode string
 	// BlockedUntil is the earliest reset among the refused pool's
 	// subscriptions; zero when one of them names none.
 	BlockedUntil time.Time
@@ -104,6 +107,7 @@ func (s *Selector) Choose(pool Pool, agentRun bool) (Choice, bool) {
 		c := Choice{Subscription: pool.Subscriptions[0]}
 		if agentRun {
 			c.Blocked = DisabledText(pool.Subscriptions)
+			c.RefusalCode = protocol.AccountRefusalDisabled
 			c.BlockedUntil = disabledUntil(pool.Subscriptions)
 		}
 		return c, true
@@ -122,6 +126,7 @@ func (s *Selector) Choose(pool Pool, agentRun bool) (Choice, bool) {
 		c.Blocked = Blocked(marks)
 		if c.Blocked != "" {
 			c.BlockedUntil = FreeAt(marks, s.now(), 0)
+			c.RefusalCode = protocol.AccountRefusalAgentCap
 		}
 	}
 	return c, true

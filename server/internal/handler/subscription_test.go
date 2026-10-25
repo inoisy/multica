@@ -18,13 +18,23 @@ func subscriptionTestHandler(t *testing.T) *Handler {
 	}
 	h := *testHandler
 	h.cfg.InstanceAdmins = []string{" HANDLER-TEST@multica.ai "}
-	t.Cleanup(func() {
-		ctx := context.Background()
-		testPool.Exec(ctx, `DELETE FROM subscription_usage WHERE subscription_id IN (SELECT id FROM subscription WHERE key LIKE 'subtest-%')`)
-		testPool.Exec(ctx, `DELETE FROM subscription WHERE key LIKE 'subtest-%'`)
-		testPool.Exec(ctx, `DELETE FROM runtime_profile WHERE display_name LIKE 'Subtest %'`)
-	})
+	cleanSubtestPools()
+	t.Cleanup(cleanSubtestPools)
 	return &h
+}
+
+// cleanSubtestPools removes what the subscription tests create: their
+// accounts, usage, pools with their members and grants, and environments.
+func cleanSubtestPools() {
+	ctx := context.Background()
+	testPool.Exec(ctx, `DELETE FROM runtime_unavailable WHERE subscription_id IN (SELECT id FROM subscription WHERE key LIKE 'subtest-%')`)
+	testPool.Exec(ctx, `DELETE FROM subscription_usage WHERE subscription_id IN (SELECT id FROM subscription WHERE key LIKE 'subtest-%')`)
+	testPool.Exec(ctx, `DELETE FROM subscription_host_state WHERE subscription_id IN (SELECT id FROM subscription WHERE key LIKE 'subtest-%')`)
+	testPool.Exec(ctx, `DELETE FROM runtime_profile WHERE display_name LIKE 'Subtest %' OR pool_id IN (SELECT id FROM subscription_pool WHERE name LIKE 'Subtest %')`)
+	testPool.Exec(ctx, `DELETE FROM subscription_pool_member WHERE pool_id IN (SELECT id FROM subscription_pool WHERE name LIKE 'Subtest %')`)
+	testPool.Exec(ctx, `DELETE FROM subscription_pool_grant WHERE pool_id IN (SELECT id FROM subscription_pool WHERE name LIKE 'Subtest %')`)
+	testPool.Exec(ctx, `DELETE FROM subscription_pool WHERE name LIKE 'Subtest %'`)
+	testPool.Exec(ctx, `DELETE FROM subscription WHERE key LIKE 'subtest-%'`)
 }
 
 func callSubscription(t *testing.T, fn http.HandlerFunc, req *http.Request, want int) map[string]any {
@@ -168,11 +178,12 @@ func TestSubscriptionUpdateMergesCapsAndUsage(t *testing.T) {
 	}), "key", "subtest-codex")
 	got := callSubscription(t, h.UpdateSubscription, upd, http.StatusOK)
 	caps := got["caps"].(map[string]any)
-	if caps["5h"] != float64(70) || caps["week"] != float64(95) {
-		t.Fatalf("caps not merged: %v", caps)
+	// The reserve sent at creation was folded into the caps (week: min(95, 100-10)).
+	if caps["5h"] != float64(70) || caps["week"] != float64(90) || got["reserve"] != float64(0) {
+		t.Fatalf("caps not merged: %v reserve %v", caps, got["reserve"])
 	}
 	if eff := got["effective_caps"].(map[string]any); eff["5h"] != float64(70) || eff["week"] != float64(90) {
-		t.Fatalf("effective caps = %v, want 5h 70 and week 90 (100 - reserve)", eff)
+		t.Fatalf("effective caps = %v, want 5h 70 and week 90", eff)
 	}
 	if got["disabled"] != true {
 		t.Fatalf("disabled_until not applied: %v", got)
@@ -277,9 +288,10 @@ func TestRuntimePoolSharedAcrossWorkspaces(t *testing.T) {
 	callSubscription(t, h.DeleteSubscription,
 		withURLParam(newRequest("DELETE", "/api/subscriptions/subtest-c2", nil), "key", "subtest-c2"), http.StatusOK)
 	var subs string
-	testPool.QueryRow(context.Background(), `SELECT subscriptions::text FROM runtime_profile WHERE id = $1`, theirs).Scan(&subs)
-	if subs != `["subtest-c1"]` {
-		t.Fatalf("subscriptions after delete = %s", subs)
+	testPool.QueryRow(context.Background(), `SELECT coalesce(string_agg(s.key || '@' || m.position, ',' ORDER BY m.position), '') FROM runtime_profile rp
+		JOIN subscription_pool_member m ON m.pool_id = rp.pool_id JOIN subscription s ON s.id = m.subscription_id WHERE rp.id = $1`, theirs).Scan(&subs)
+	if subs != "subtest-c1@1" {
+		t.Fatalf("pool members after delete = %q, want the one left with the gap closed", subs)
 	}
 }
 
@@ -303,24 +315,25 @@ func TestAllWorkspacesRuntimeReachesNewWorkspace(t *testing.T) {
 	created := callSubscription(t, h.CreateRuntimePool, newRequest("POST", "/api/runtime-pools", map[string]any{
 		"display_name": "Subtest everywhere", "runtime_type": "claude", "all_workspaces": true,
 	}), http.StatusCreated)
-	shareKey := created["share_key"].(string)
+	_ = created["share_key"].(string)
 
 	newWS := subtestWorkspace(t, "subtest-new-ws")
 	// The new workspace was inserted after the pool, so it has no copy yet;
 	// CreateWorkspace runs this inside its transaction.
-	if err := copyAllWorkspaceRuntimeProfiles(context.Background(), testHandler.Queries, parseUUID(newWS)); err != nil {
+	if err := copyAllWorkspaceRuntimeProfiles(context.Background(), testHandler.Queries, parseUUID(newWS), parseUUID(testUserID)); err != nil {
 		t.Fatalf("copy: %v", err)
 	}
+	poolID := created["pool_id"].(string)
 	var n int
-	testPool.QueryRow(context.Background(), `SELECT count(*) FROM runtime_profile WHERE workspace_id = $1 AND share_key = $2 AND all_workspaces`, newWS, shareKey).Scan(&n)
+	testPool.QueryRow(context.Background(), `SELECT count(*) FROM runtime_profile WHERE workspace_id = $1 AND pool_id = $2`, newWS, poolID).Scan(&n)
 	if n != 1 {
 		t.Fatalf("new workspace copies = %d, want 1", n)
 	}
 	// Copying again is a no-op.
-	if err := copyAllWorkspaceRuntimeProfiles(context.Background(), testHandler.Queries, parseUUID(newWS)); err != nil {
+	if err := copyAllWorkspaceRuntimeProfiles(context.Background(), testHandler.Queries, parseUUID(newWS), parseUUID(testUserID)); err != nil {
 		t.Fatalf("second copy: %v", err)
 	}
-	testPool.QueryRow(context.Background(), `SELECT count(*) FROM runtime_profile WHERE workspace_id = $1 AND share_key = $2`, newWS, shareKey).Scan(&n)
+	testPool.QueryRow(context.Background(), `SELECT count(*) FROM runtime_profile WHERE workspace_id = $1 AND pool_id = $2`, newWS, poolID).Scan(&n)
 	if n != 1 {
 		t.Fatalf("copies after second run = %d, want 1", n)
 	}

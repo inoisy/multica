@@ -11,7 +11,6 @@ import (
 	"math"
 	"net/http"
 	"regexp"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -19,6 +18,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/multica-ai/multica/server/internal/service"
 	db "github.com/multica-ai/multica/server/pkg/db/generated"
 	"github.com/multica-ai/multica/server/pkg/protocol"
 )
@@ -43,23 +43,14 @@ import (
 // ---------------------------------------------------------------------------
 
 var (
-	subscriptionProviders = map[string]string{
-		"claude":     "claude",
-		"zai":        "claude",
-		"minimax":    "claude",
-		"loodsen-ai": "claude",
-		"openrouter": "claude",
-		"codex":      "codex",
-	}
 	subscriptionAuths = map[string]bool{
 		"claude_login": true,
 		"claude_oauth": true,
 		"codex_auth":   true,
 		"api_key":      true,
 	}
-	subscriptionSpendOrders = map[string]bool{"first": true, "balanced": true}
-	subscriptionKeyPattern  = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,62}$`)
-	subscriptionWindowRe    = regexp.MustCompile(`^[a-z0-9_]{1,32}$`)
+	subscriptionKeyPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,62}$`)
+	subscriptionWindowRe   = regexp.MustCompile(`^[a-z0-9_]{1,32}$`)
 	// Values that are credentials, not settings. The list errs on the side of
 	// refusing: a refused write is a message, a stored secret is a leak.
 	secretValuePrefixes = []string{"sk-", "sk_", "ghp_", "gho_", "github_pat_", "mat_", "mul_", "mcn_", "xox", "eyJ", "AIza"}
@@ -75,7 +66,7 @@ const subscriptionUsageMaxRows = 2000
 
 // SubscriptionFamily is the CLI family a provider runs on: every provider but
 // codex speaks the Anthropic API through Claude Code.
-func SubscriptionFamily(provider string) string { return subscriptionProviders[provider] }
+func SubscriptionFamily(provider string) string { return service.SubscriptionFamily(provider) }
 
 type SubscriptionUsageResponse struct {
 	Window       string  `json:"window"`
@@ -141,31 +132,38 @@ func decodeCaps(raw []byte) map[string]int {
 	return out
 }
 
-// effectiveSubscriptionCaps is the cap agents stop at per window: the lower of
-// the window cap and 100 - reserve. Windows with no effective limit are left
-// out, as in the control panel export the wrappers used to read.
-func effectiveSubscriptionCaps(windows []string, caps map[string]int, reserve int) map[string]int {
+// foldReserve applies the reserve an older client sends to the caps: the limit
+// agents stop at is min(cap, 100 - reserve), and the reserve itself is not
+// stored any more.
+func foldReserve(windows []string, caps map[string]int, reserve int) map[string]int {
 	out := map[string]int{}
+	for k, v := range caps {
+		out[k] = v
+	}
+	if reserve <= 0 {
+		return out
+	}
 	keys := append([]string(nil), windows...)
 	for k := range caps {
 		keys = append(keys, k)
 	}
 	for _, k := range keys {
-		limit := 100
+		cur := 100
 		if c, ok := caps[k]; ok {
-			limit = c
+			cur = c
 		}
-		if 100-reserve < limit {
-			limit = 100 - reserve
-		}
-		if limit < 100 {
-			out[k] = limit
+		if 100-reserve < cur {
+			out[k] = 100 - reserve
 		}
 	}
 	return out
 }
 
 func subscriptionToResponse(s db.Subscription, usage []db.SubscriptionUsage, users []SubscriptionUserResponse) SubscriptionResponse {
+	return subscriptionToResponseAt(s, usage, users, time.Now())
+}
+
+func subscriptionToResponseAt(s db.Subscription, usage []db.SubscriptionUsage, users []SubscriptionUserResponse, now time.Time) SubscriptionResponse {
 	windows := decodeStringList(s.Windows)
 	caps := decodeCaps(s.Caps)
 	settings := map[string]any{}
@@ -186,8 +184,8 @@ func subscriptionToResponse(s db.Subscription, usage []db.SubscriptionUsage, use
 		CredentialPath: s.CredentialPath,
 		Windows:        windows,
 		Caps:           caps,
-		Reserve:        int(s.Reserve),
-		EffectiveCaps:  effectiveSubscriptionCaps(windows, caps, int(s.Reserve)),
+		Reserve:        0,
+		EffectiveCaps:  service.EffectiveCaps(windows, caps),
 		Settings:       settings,
 		AccountGroup:   s.AccountGroup,
 		Usage:          []SubscriptionUsageResponse{},
@@ -203,7 +201,7 @@ func subscriptionToResponse(s db.Subscription, usage []db.SubscriptionUsage, use
 	if s.DisabledUntil.Valid {
 		at := timestampToString(s.DisabledUntil)
 		resp.DisabledUntil = &at
-		resp.Disabled = s.DisabledUntil.Time.After(time.Now())
+		resp.Disabled = s.DisabledUntil.Time.After(now)
 	}
 	for _, u := range usage {
 		resp.Usage = append(resp.Usage, subscriptionUsageToResponse(u))
@@ -220,6 +218,15 @@ func (h *Handler) withHostState(resp SubscriptionResponse, hosts map[string][]Su
 	resp.LoginState = loginStateFromHosts(resp.Hosts)
 	if h.SubscriptionLogins != nil {
 		resp.Login = h.SubscriptionLogins.current(resp.Key)
+	}
+	return resp
+}
+
+func subscriptionForReader(resp SubscriptionResponse, canManage bool) SubscriptionResponse {
+	if !canManage {
+		resp.CredentialPath = ""
+		resp.Hosts = []SubscriptionHostResponse{}
+		resp.Login = nil
 	}
 	return resp
 }
@@ -404,14 +411,16 @@ func validateCredentialPath(p string) error {
 }
 
 func validateWindowsAndCaps(windows []string, caps map[string]int) error {
+	known := make(map[string]bool, len(windows))
 	for _, w := range windows {
 		if !subscriptionWindowRe.MatchString(w) {
 			return fmt.Errorf("invalid window %q", w)
 		}
+		known[w] = true
 	}
 	for k, v := range caps {
-		if !subscriptionWindowRe.MatchString(k) {
-			return fmt.Errorf("invalid cap window %q", k)
+		if !known[k] {
+			return fmt.Errorf("unknown cap window %q", k)
 		}
 		if v < 0 || v > 100 {
 			return fmt.Errorf("cap %s must be between 0 and 100", k)
@@ -487,26 +496,29 @@ func (h *Handler) latestUsageBySubscription(ctx context.Context) (map[string][]d
 	return out, nil
 }
 
-// subscriptionUsers maps subscription key -> the profiles that spend it, only
-// in the given workspaces.
+// subscriptionUsers maps subscription key -> the environments that spend it
+// through their pool, only in the given workspaces.
 func (h *Handler) subscriptionUsers(ctx context.Context, visible map[string]bool) (map[string][]SubscriptionUserResponse, error) {
-	profiles, err := h.Queries.ListRuntimeProfilesWithSubscriptions(ctx)
+	d, err := h.loadPoolDirectory(ctx)
 	if err != nil {
 		return nil, err
 	}
 	out := map[string][]SubscriptionUserResponse{}
-	for _, p := range profiles {
-		ws := uuidToString(p.WorkspaceID)
-		if !visible[ws] {
-			continue
-		}
-		for i, key := range decodeStringList(p.Subscriptions) {
-			out[key] = append(out[key], SubscriptionUserResponse{
-				WorkspaceID:      ws,
-				RuntimeProfileID: uuidToString(p.ID),
-				DisplayName:      p.DisplayName,
-				Position:         i + 1,
-			})
+	for _, poolID := range d.order {
+		for _, env := range d.envs[poolID] {
+			ws := uuidToString(env.WorkspaceID)
+			if !visible[ws] {
+				continue
+			}
+			for _, m := range d.members[poolID] {
+				a, ok := d.accounts[uuidToString(m.SubscriptionID)]
+				if !ok {
+					continue
+				}
+				out[a.Key] = append(out[a.Key], SubscriptionUserResponse{
+					WorkspaceID: ws, RuntimeProfileID: uuidToString(env.ID), DisplayName: env.DisplayName, Position: int(m.Position),
+				})
+			}
 		}
 	}
 	return out, nil
@@ -534,13 +546,14 @@ func (h *Handler) ListSubscriptions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	hosts := h.hostStatesBySubscription(r.Context())
+	canManage := r.Header.Get("X-Actor-Source") == "" && h.isInstanceAdmin(r.Context(), requestUserID(r))
 	resp := make([]SubscriptionResponse, len(subs))
 	for i, s := range subs {
-		resp[i] = h.withHostState(subscriptionToResponse(s, usage[uuidToString(s.ID)], users[s.Key]), hosts)
+		resp[i] = subscriptionForReader(h.withHostState(subscriptionToResponse(s, usage[uuidToString(s.ID)], users[s.Key]), hosts), canManage)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"subscriptions": resp,
-		"can_manage":    r.Header.Get("X-Actor-Source") == "" && h.isInstanceAdmin(r.Context(), requestUserID(r)),
+		"can_manage":    canManage,
 	})
 }
 
@@ -565,7 +578,8 @@ func (h *Handler) GetSubscription(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to load subscription users")
 		return
 	}
-	writeJSON(w, http.StatusOK, h.withHostState(subscriptionToResponse(sub, usage[uuidToString(sub.ID)], users[sub.Key]), h.hostStatesBySubscription(r.Context())))
+	canManage := r.Header.Get("X-Actor-Source") == "" && h.isInstanceAdmin(r.Context(), requestUserID(r))
+	writeJSON(w, http.StatusOK, subscriptionForReader(h.withHostState(subscriptionToResponse(sub, usage[uuidToString(sub.ID)], users[sub.Key]), h.hostStatesBySubscription(r.Context())), canManage))
 }
 
 // ListSubscriptionUsage — GET /api/subscriptions/{key}/usage?since=7d.
@@ -624,19 +638,44 @@ func parseUsageSince(s string, now time.Time) (time.Time, error) {
 // Write
 // ---------------------------------------------------------------------------
 
+type subscriptionCaps map[string]int
+
+func (caps *subscriptionCaps) UnmarshalJSON(data []byte) error {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	if raw == nil {
+		return errors.New("caps must be an object of integer percentages")
+	}
+	out := make(subscriptionCaps, len(raw))
+	for window, data := range raw {
+		var value *int
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		if value == nil {
+			return fmt.Errorf("cap %s must be an integer percentage", window)
+		}
+		out[window] = *value
+	}
+	*caps = out
+	return nil
+}
+
 type subscriptionRequest struct {
-	Key            *string         `json:"key"`
-	Provider       *string         `json:"provider"`
-	Title          *string         `json:"title"`
-	OwnerNote      *string         `json:"owner_note"`
-	Auth           *string         `json:"auth"`
-	CredentialPath *string         `json:"credential_path"`
-	Windows        *[]string       `json:"windows"`
-	Caps           *map[string]int `json:"caps"`
-	Reserve        *int            `json:"reserve"`
-	Settings       *map[string]any `json:"settings"`
-	AccountGroup   *string         `json:"account_group"`
-	DisabledUntil  *string         `json:"disabled_until"`
+	Key            *string          `json:"key"`
+	Provider       *string          `json:"provider"`
+	Title          *string          `json:"title"`
+	OwnerNote      *string          `json:"owner_note"`
+	Auth           *string          `json:"auth"`
+	CredentialPath *string          `json:"credential_path"`
+	Windows        *[]string        `json:"windows"`
+	Caps           subscriptionCaps `json:"caps"`
+	Reserve        *int             `json:"reserve"`
+	Settings       *map[string]any  `json:"settings"`
+	AccountGroup   *string          `json:"account_group"`
+	DisabledUntil  *string          `json:"disabled_until"`
 	// Never accepted: listed so a client sending them gets a clear refusal
 	// instead of a silent drop.
 	Token  *string `json:"token"`
@@ -666,7 +705,7 @@ func (h *Handler) CreateSubscription(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	provider := strings.TrimSpace(deref(req.Provider))
-	if _, ok := subscriptionProviders[provider]; !ok {
+	if SubscriptionFamily(provider) == "" {
 		writeError(w, http.StatusBadRequest, "provider must be one of claude, codex, zai, minimax, loodsen-ai, openrouter")
 		return
 	}
@@ -722,19 +761,18 @@ func (h *Handler) CreateSubscription(w http.ResponseWriter, r *http.Request) {
 	}
 	caps := map[string]int{}
 	if req.Caps != nil {
-		caps = *req.Caps
+		caps = req.Caps
 	}
 	if err := validateWindowsAndCaps(windows, caps); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	reserve := 0
-	if req.Reserve != nil {
-		reserve = *req.Reserve
-	}
-	if reserve < 0 || reserve > 100 {
+	if req.Reserve != nil && (*req.Reserve < 0 || *req.Reserve > 100) {
 		writeError(w, http.StatusBadRequest, "reserve must be between 0 and 100")
 		return
+	}
+	if req.Reserve != nil {
+		caps = foldReserve(windows, caps, *req.Reserve)
 	}
 	settings := map[string]any{}
 	if req.Settings != nil {
@@ -763,7 +801,7 @@ func (h *Handler) CreateSubscription(w http.ResponseWriter, r *http.Request) {
 		CredentialPath: credential,
 		Windows:        windowsJSON,
 		Caps:           capsJSON,
-		Reserve:        int32(reserve),
+		Reserve:        0,
 		Settings:       settingsJSON,
 		AccountGroup:   strings.TrimSpace(deref(req.AccountGroup)),
 		DisabledUntil:  disabledUntil,
@@ -913,7 +951,7 @@ func (h *Handler) UpdateSubscription(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Caps != nil {
 		// Caps merge per window: --cap 5h=70 must not drop the week cap.
-		for k, v := range *req.Caps {
+		for k, v := range req.Caps {
 			caps[k] = v
 		}
 		params.Caps, _ = json.Marshal(caps)
@@ -927,7 +965,11 @@ func (h *Handler) UpdateSubscription(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "reserve must be between 0 and 100")
 			return
 		}
-		params.Reserve = pgtype.Int4{Int32: int32(*req.Reserve), Valid: true}
+		if *req.Reserve > 0 {
+			caps = foldReserve(windows, caps, *req.Reserve)
+			params.Caps, _ = json.Marshal(caps)
+		}
+		params.Reserve = pgtype.Int4{Int32: 0, Valid: true}
 	}
 	if req.Settings != nil {
 		if err := validateSubscriptionSettings(*req.Settings, ""); err != nil {
@@ -961,7 +1003,7 @@ func (h *Handler) UpdateSubscription(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to update subscription")
 		return
 	}
-	h.refreshSubscriptionAvailability(r.Context())
+	h.afterAccountChange(r.Context())
 	writeJSON(w, http.StatusOK, subscriptionToResponse(sub, nil, nil))
 }
 
@@ -986,9 +1028,14 @@ func (h *Handler) DeleteSubscription(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "subscription not found")
 		return
 	}
-	profiles, err := qtx.RemoveSubscriptionFromRuntimeProfiles(r.Context(), key)
+	changedPools, err := service.RemoveAccount(r.Context(), qtx, sub.ID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to detach subscription from runtimes")
+		writeError(w, http.StatusInternalServerError, "failed to detach subscription from pools")
+		return
+	}
+	profiles, err := qtx.ListRuntimeProfilesByPools(r.Context(), changedPools)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to detach subscription from pools")
 		return
 	}
 	if err := qtx.DeleteSubscriptionHostStates(r.Context(), sub.ID); err != nil {
@@ -1008,7 +1055,7 @@ func (h *Handler) DeleteSubscription(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.publishRuntimeProfilesChanged(profiles, userID)
-	h.refreshSubscriptionAvailability(r.Context())
+	h.afterAccountChange(r.Context())
 	detached := make([]string, len(profiles))
 	for i, p := range profiles {
 		detached[i] = uuidToString(p.ID)
@@ -1080,48 +1127,13 @@ func (h *Handler) RecordSubscriptionUsage(w http.ResponseWriter, r *http.Request
 		}
 		out = append(out, subscriptionUsageToResponse(row))
 	}
-	h.refreshSubscriptionAvailability(r.Context())
+	h.afterAccountChange(r.Context())
 	writeJSON(w, http.StatusCreated, map[string]any{"key": sub.Key, "usage": out})
 }
 
 // ---------------------------------------------------------------------------
-// Runtime profiles as subscription pools
+// Environments of a pool (the older, runtime-profile shaped API)
 // ---------------------------------------------------------------------------
-
-// validatePoolSubscriptions checks every key exists, appears once, and runs on
-// the profile's CLI family.
-func (h *Handler) validatePoolSubscriptions(ctx context.Context, family string, keys []string) ([]db.Subscription, error) {
-	seen := map[string]bool{}
-	for _, k := range keys {
-		if seen[k] {
-			return nil, fmt.Errorf("subscription %s is listed twice", k)
-		}
-		seen[k] = true
-	}
-	if len(keys) == 0 {
-		return nil, nil
-	}
-	subs, err := h.Queries.ListSubscriptionsByKeys(ctx, keys)
-	if err != nil {
-		return nil, err
-	}
-	byKey := map[string]db.Subscription{}
-	for _, s := range subs {
-		byKey[s.Key] = s
-	}
-	ordered := make([]db.Subscription, 0, len(keys))
-	for _, k := range keys {
-		s, ok := byKey[k]
-		if !ok {
-			return nil, fmt.Errorf("subscription %s not found", k)
-		}
-		if SubscriptionFamily(s.Provider) != family {
-			return nil, fmt.Errorf("subscription %s (%s) does not run on a %s runtime", k, s.Provider, family)
-		}
-		ordered = append(ordered, s)
-	}
-	return ordered, nil
-}
 
 func (h *Handler) publishRuntimeProfilesChanged(profiles []db.RuntimeProfile, userID string) {
 	for _, p := range profiles {
@@ -1141,6 +1153,7 @@ type poolSubscriptionsResponse struct {
 	Missing []string `json:"missing"`
 	// Agents bound to this runtime's instances.
 	Agents []PoolAgentResponse `json:"agents"`
+	PoolID *string             `json:"pool_id"`
 }
 
 // PoolAgentResponse is an agent running on a runtime of the profile.
@@ -1151,8 +1164,8 @@ type PoolAgentResponse struct {
 
 // GetRuntimeProfileSubscriptions — GET
 // /api/workspaces/{id}/runtime-profiles/{profileId}/subscriptions. Member
-// visible: subs-run calls it with the run's task token to choose a
-// subscription. The response carries credential paths, never credentials.
+// visible: it answers for the pool the environment spends. The response
+// carries credential paths, never credentials.
 func (h *Handler) GetRuntimeProfileSubscriptions(w http.ResponseWriter, r *http.Request) {
 	wsID := strings.TrimSpace(chi.URLParam(r, "id"))
 	if _, ok := h.requireWorkspaceMember(w, r, wsID, "workspace not found"); !ok {
@@ -1174,40 +1187,55 @@ func (h *Handler) GetRuntimeProfileSubscriptions(w http.ResponseWriter, r *http.
 	writeJSON(w, http.StatusOK, h.poolResponse(r.Context(), profile))
 }
 
+// poolResponse is the accounts of the pool an environment spends, in order.
 func (h *Handler) poolResponse(ctx context.Context, profile db.RuntimeProfile) poolSubscriptionsResponse {
-	keys := decodeStringList(profile.Subscriptions)
 	resp := poolSubscriptionsResponse{
-		RuntimeProfile: runtimeProfileToResponse(profile),
-		SpendOrder:     profile.SpendOrder,
+		RuntimeProfile: h.runtimeProfileResponse(ctx, profile),
+		SpendOrder:     "first",
 		Subscriptions:  []SubscriptionResponse{},
 		Missing:        []string{},
 		Agents:         []PoolAgentResponse{},
+		PoolID:         uuidToPtr(profile.PoolID),
 	}
 	if agents, err := h.Queries.ListAgentsOnRuntimeProfiles(ctx, []pgtype.UUID{profile.ID}); err == nil {
 		for _, a := range agents {
 			resp.Agents = append(resp.Agents, PoolAgentResponse{ID: uuidToString(a.ID), Name: a.Name})
 		}
 	}
-	if len(keys) == 0 {
+	if !profile.PoolID.Valid {
 		return resp
 	}
-	subs, err := h.Queries.ListSubscriptionsByKeys(ctx, keys)
+	pool, err := h.Queries.GetSubscriptionPool(ctx, profile.PoolID)
 	if err != nil {
-		slog.Error("ListSubscriptionsByKeys failed", "error", err)
+		return resp
+	}
+	resp.SpendOrder = pool.SpendOrder
+	members, err := h.Queries.ListSubscriptionPoolMembersByPools(ctx, []pgtype.UUID{pool.ID})
+	if err != nil {
+		slog.Error("ListSubscriptionPoolMembersByPools failed", "error", err)
+		return resp
+	}
+	ids := make([]pgtype.UUID, len(members))
+	for i, m := range members {
+		ids[i] = m.SubscriptionID
+	}
+	subs, err := h.Queries.ListSubscriptionsByIDs(ctx, ids)
+	if err != nil {
+		slog.Error("ListSubscriptionsByIDs failed", "error", err)
 		return resp
 	}
 	usage, err := h.latestUsageBySubscription(ctx)
 	if err != nil {
 		usage = nil
 	}
-	byKey := map[string]db.Subscription{}
+	byID := map[string]db.Subscription{}
 	for _, s := range subs {
-		byKey[s.Key] = s
+		byID[uuidToString(s.ID)] = s
 	}
-	for _, k := range keys {
-		s, ok := byKey[k]
+	for _, m := range members {
+		s, ok := byID[uuidToString(m.SubscriptionID)]
 		if !ok {
-			resp.Missing = append(resp.Missing, k)
+			resp.Missing = append(resp.Missing, uuidToString(m.SubscriptionID))
 			continue
 		}
 		resp.Subscriptions = append(resp.Subscriptions, subscriptionToResponse(s, usage[uuidToString(s.ID)], nil))
@@ -1218,11 +1246,15 @@ func (h *Handler) poolResponse(ctx context.Context, profile db.RuntimeProfile) p
 type setPoolRequest struct {
 	Subscriptions *[]string `json:"subscriptions"`
 	SpendOrder    *string   `json:"spend_order"`
+	// Revision is the pool revision the client read; when sent, a pool that
+	// has moved on is refused with 409.
+	Revision *int32 `json:"revision"`
 }
 
 // SetRuntimeProfileSubscriptions — PUT
 // /api/workspaces/{id}/runtime-profiles/{profileId}/subscriptions. Instance
-// admin only. Applies to every copy that shares the profile's share_key.
+// admin only. It edits the pool the environment spends, so it reaches every
+// workspace the pool is granted to.
 func (h *Handler) SetRuntimeProfileSubscriptions(w http.ResponseWriter, r *http.Request) {
 	userID, ok := h.requireInstanceAdmin(w, r)
 	if !ok {
@@ -1241,48 +1273,23 @@ func (h *Handler) SetRuntimeProfileSubscriptions(w http.ResponseWriter, r *http.
 		writeError(w, http.StatusNotFound, "runtime profile not found")
 		return
 	}
+	if !profile.PoolID.Valid {
+		writeError(w, http.StatusBadRequest, "this runtime does not spend a subscription pool; create a pool and grant it to the workspace")
+		return
+	}
 	var req setPoolRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	keys := decodeStringList(profile.Subscriptions)
-	if req.Subscriptions != nil {
-		keys = *req.Subscriptions
-	}
-	order := profile.SpendOrder
-	if req.SpendOrder != nil {
-		order = strings.TrimSpace(*req.SpendOrder)
-	}
-	if !subscriptionSpendOrders[order] {
-		writeError(w, http.StatusBadRequest, "spend_order must be first or balanced")
-		return
-	}
-	if _, err := h.validatePoolSubscriptions(r.Context(), profile.ProtocolFamily, keys); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	keysJSON, _ := json.Marshal(keys)
-	updated, err := h.Queries.SetRuntimeProfileSubscriptions(r.Context(), db.SetRuntimeProfileSubscriptionsParams{
-		Subscriptions: keysJSON,
-		SpendOrder:    order,
-		ID:            profile.ID,
-		ShareKey:      profile.ShareKey.String,
-	})
+	res, err := h.pools().Update(r.Context(), profile.PoolID, parseUUID(userID), req.Revision, service.PoolPatch{Subscriptions: req.Subscriptions, SpendOrder: req.SpendOrder})
 	if err != nil {
-		slog.Error("SetRuntimeProfileSubscriptions failed", "error", err, "profile_id", uuidToString(profile.ID))
-		writeError(w, http.StatusInternalServerError, "failed to update runtime subscriptions")
+		writePoolError(w, err)
 		return
 	}
-	h.publishRuntimeProfilesChanged(updated, userID)
-	h.refreshSubscriptionAvailability(r.Context())
-	for _, p := range updated {
-		if p.ID == profile.ID {
-			writeJSON(w, http.StatusOK, h.poolResponse(r.Context(), p))
-			return
-		}
-	}
-	writeError(w, http.StatusNotFound, "runtime profile not found")
+	h.publishRuntimeProfilesChanged(append(res.Profiles, profile), userID)
+	h.afterAccountChange(r.Context())
+	writeJSON(w, http.StatusOK, h.poolResponse(r.Context(), profile))
 }
 
 type createPoolRequest struct {
@@ -1295,20 +1302,15 @@ type createPoolRequest struct {
 	AllWorkspaces bool     `json:"all_workspaces"`
 }
 
-// A subscription pool runs the provider CLI itself (claude / codex): the
-// daemon receives the pool at claim time, picks the subscription and points
-// the CLI at its credential, so no host wrapper is involved.
-
 func newShareKey() string {
 	b := make([]byte, 8)
 	_, _ = rand.Read(b)
 	return "pool-" + hex.EncodeToString(b)
 }
 
-// CreateRuntimePool — POST /api/runtime-pools. Instance admin only. Creates
-// one runtime profile per target workspace, all sharing one share_key, so an
-// edit to any copy reaches every copy. With all_workspaces, new workspaces
-// get a copy as well.
+// CreateRuntimePool — POST /api/runtime-pools. Instance admin only. The older
+// way to make a pool: it creates the pool, grants it to the workspaces and
+// makes the environment in each, and answers in the shape older clients read.
 func (h *Handler) CreateRuntimePool(w http.ResponseWriter, r *http.Request) {
 	userID, ok := h.requireInstanceAdmin(w, r)
 	if !ok {
@@ -1319,189 +1321,48 @@ func (h *Handler) CreateRuntimePool(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	req.DisplayName = strings.TrimSpace(req.DisplayName)
-	if req.DisplayName == "" {
+	if strings.TrimSpace(req.DisplayName) == "" {
 		writeError(w, http.StatusBadRequest, "display_name is required")
 		return
 	}
-	family := strings.TrimSpace(req.RuntimeType)
-	if family != "claude" && family != "codex" {
-		writeError(w, http.StatusBadRequest, "runtime_type must be claude or codex")
+	if !req.AllWorkspaces && len(req.WorkspaceIDs) == 0 {
+		writeError(w, http.StatusBadRequest, "workspace_ids or all_workspaces is required")
 		return
 	}
-	order := strings.TrimSpace(req.SpendOrder)
-	if order == "" {
-		order = "first"
-	}
-	if !subscriptionSpendOrders[order] {
-		writeError(w, http.StatusBadRequest, "spend_order must be first or balanced")
+	workspaces, ok := parseWorkspaceIDs(w, req.WorkspaceIDs)
+	if !ok {
 		return
 	}
-	if _, err := h.validatePoolSubscriptions(r.Context(), family, req.Subscriptions); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	var targets []pgtype.UUID
-	if req.AllWorkspaces {
-		ids, err := h.Queries.ListAllWorkspaceIDs(r.Context())
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "failed to list workspaces")
-			return
-		}
-		targets = ids
-	} else {
-		if len(req.WorkspaceIDs) == 0 {
-			writeError(w, http.StatusBadRequest, "workspace_ids or all_workspaces is required")
-			return
-		}
-		for _, id := range req.WorkspaceIDs {
-			u, ok := parseUUIDOrBadRequest(w, strings.TrimSpace(id), "workspace id")
-			if !ok {
-				return
-			}
-			if _, err := h.Queries.GetWorkspace(r.Context(), u); err != nil {
-				writeError(w, http.StatusNotFound, "workspace not found: "+id)
-				return
-			}
-			targets = append(targets, u)
-		}
-	}
-	keysJSON, _ := json.Marshal(req.Subscriptions)
-	if req.Subscriptions == nil {
-		keysJSON = []byte("[]")
-	}
-	fixedArgs := []byte("[]")
-	shareKey := newShareKey()
-
-	tx, err := h.TxStarter.Begin(r.Context())
+	res, err := h.pools().Create(r.Context(), parseUUID(userID), service.PoolInput{
+		Name: req.DisplayName, RuntimeType: req.RuntimeType, Description: deref(req.Description), SpendOrder: req.SpendOrder,
+		Subscriptions: req.Subscriptions, Workspaces: workspaces, AllWorkspaces: req.AllWorkspaces,
+	})
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to begin transaction")
+		writePoolError(w, err)
 		return
 	}
-	defer tx.Rollback(r.Context())
-	qtx := h.Queries.WithTx(tx)
-	created := []db.RuntimeProfile{}
-	skipped := []string{}
-	for _, ws := range targets {
-		p, err := qtx.CreateSharedRuntimeProfile(r.Context(), db.CreateSharedRuntimeProfileParams{
-			WorkspaceID:    ws,
-			DisplayName:    req.DisplayName,
-			ProtocolFamily: family,
-			CommandName:    family,
-			Description:    ptrToText(req.Description),
-			FixedArgs:      fixedArgs,
-			Visibility:     runtimeProfileDefaultVisibility,
-			CreatedBy:      parseUUID(userID),
-			Enabled:        true,
-			RuntimeType:    family,
-			Subscriptions:  keysJSON,
-			SpendOrder:     order,
-			ShareKey:       strToText(shareKey),
-			AllWorkspaces:  req.AllWorkspaces,
-		})
-		if errors.Is(err, pgx.ErrNoRows) {
-			// A profile with this display_name already exists there.
-			skipped = append(skipped, uuidToString(ws))
-			continue
-		}
-		if err != nil {
-			slog.Error("CreateSharedRuntimeProfile failed", "error", err, "workspace_id", uuidToString(ws))
-			writeError(w, http.StatusInternalServerError, "failed to create runtime profile")
-			return
-		}
-		created = append(created, p)
+	h.publishRuntimeProfilesChanged(res.Profiles, userID)
+	profiles := h.runtimeProfileResponses(r.Context(), res.Profiles)
+	skipped := make([]string, len(res.Skipped))
+	for i, ws := range res.Skipped {
+		skipped[i] = uuidToString(ws)
 	}
-	if len(created) == 0 {
-		writeError(w, http.StatusConflict, "a runtime profile with this display_name already exists in every target workspace")
-		return
-	}
-	if err := tx.Commit(r.Context()); err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to commit transaction")
-		return
-	}
-	h.publishRuntimeProfilesChanged(created, userID)
-	resp := make([]RuntimeProfileResponse, len(created))
-	for i, p := range created {
-		resp[i] = runtimeProfileToResponse(p)
+	shareKey := ""
+	if k := legacyShareKey(res.Pool, len(res.Grants)); k != nil {
+		shareKey = *k
 	}
 	writeJSON(w, http.StatusCreated, map[string]any{
+		"pool_id":                      uuidToString(res.Pool.ID),
 		"share_key":                    shareKey,
-		"runtime_profiles":             resp,
+		"runtime_profiles":             profiles,
 		"skipped_workspace_ids":        skipped,
 		"skipped_workspace_ids_reason": "a runtime profile with this display_name already exists",
 	})
 }
 
-// copyAllWorkspaceRuntimeProfiles gives a new workspace a copy of every
-// profile marked for all workspaces. Runs inside CreateWorkspace's
+// copyAllWorkspaceRuntimeProfiles gives a new workspace the environment of
+// every pool granted to all workspaces. Runs inside CreateWorkspace's
 // transaction; a name already taken is skipped.
-func copyAllWorkspaceRuntimeProfiles(ctx context.Context, q *db.Queries, workspaceID pgtype.UUID) error {
-	templates, err := q.ListAllWorkspaceRuntimeProfiles(ctx)
-	if err != nil {
-		return err
-	}
-	sort.SliceStable(templates, func(i, j int) bool {
-		return templates[i].CreatedAt.Time.Before(templates[j].CreatedAt.Time)
-	})
-	for _, t := range templates {
-		_, err := q.CreateSharedRuntimeProfile(ctx, db.CreateSharedRuntimeProfileParams{
-			WorkspaceID:    workspaceID,
-			DisplayName:    t.DisplayName,
-			ProtocolFamily: t.ProtocolFamily,
-			CommandName:    t.CommandName,
-			Description:    t.Description,
-			FixedArgs:      t.FixedArgs,
-			Visibility:     t.Visibility,
-			CreatedBy:      t.CreatedBy,
-			Enabled:        t.Enabled,
-			RuntimeType:    t.RuntimeType,
-			Subscriptions:  t.Subscriptions,
-			SpendOrder:     t.SpendOrder,
-			ShareKey:       t.ShareKey,
-			AllWorkspaces:  true,
-		})
-		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-			return err
-		}
-	}
-	return nil
-}
-
-// spreadRuntimeProfileToAllWorkspaces creates the missing copies of a shared
-// profile after it was marked for all workspaces.
-func spreadRuntimeProfileToAllWorkspaces(ctx context.Context, q *db.Queries, src db.RuntimeProfile) ([]db.RuntimeProfile, error) {
-	ids, err := q.ListAllWorkspaceIDs(ctx)
-	if err != nil {
-		return nil, err
-	}
-	created := []db.RuntimeProfile{}
-	for _, ws := range ids {
-		if ws == src.WorkspaceID {
-			continue
-		}
-		p, err := q.CreateSharedRuntimeProfile(ctx, db.CreateSharedRuntimeProfileParams{
-			WorkspaceID:    ws,
-			DisplayName:    src.DisplayName,
-			ProtocolFamily: src.ProtocolFamily,
-			CommandName:    src.CommandName,
-			Description:    src.Description,
-			FixedArgs:      src.FixedArgs,
-			Visibility:     src.Visibility,
-			CreatedBy:      src.CreatedBy,
-			Enabled:        src.Enabled,
-			RuntimeType:    src.RuntimeType,
-			Subscriptions:  src.Subscriptions,
-			SpendOrder:     src.SpendOrder,
-			ShareKey:       src.ShareKey,
-			AllWorkspaces:  true,
-		})
-		if errors.Is(err, pgx.ErrNoRows) {
-			continue
-		}
-		if err != nil {
-			return nil, err
-		}
-		created = append(created, p)
-	}
-	return created, nil
+func copyAllWorkspaceRuntimeProfiles(ctx context.Context, q *db.Queries, workspaceID, actor pgtype.UUID) error {
+	return service.EnsureAllWorkspacePools(ctx, q, workspaceID, actor)
 }

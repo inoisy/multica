@@ -31,3 +31,35 @@ export function moveModelOption<T>(rows: T[], index: number, delta: number): T[]
   next.splice(target, 0, item as T);
   return next;
 }
+
+/** A row of a personal profile next to the row of the shared profile it was made from. */
+export interface RowDifference {
+  /** One-based place of the row. */
+  position: number;
+  /** The personal row; null where only the shared profile has a row. */
+  row: ModelRowState | null;
+  /** The shared profile's row at the same place; null where it has none. */
+  baseRow: ModelRowState | null;
+  differs: boolean;
+}
+
+/**
+ * Pairs the rows of a personal profile with the shared profile's rows by
+ * place. Which places differ is the server's verdict (`diffRows`, one-based),
+ * never compared again here.
+ */
+export function rowDifferences(
+  personalRows: ModelRowState[],
+  baseRows: ModelRowState[],
+  diffRows: number[],
+): RowDifference[] {
+  const own = [...personalRows].sort((a, b) => a.position - b.position);
+  const base = [...baseRows].sort((a, b) => a.position - b.position);
+  const differing = new Set(diffRows);
+  return Array.from({ length: Math.max(own.length, base.length) }, (_, index) => ({
+    position: index + 1,
+    row: own[index] ?? null,
+    baseRow: base[index] ?? null,
+    differs: differing.has(index + 1),
+  }));
+}
