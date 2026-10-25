@@ -49,8 +49,8 @@ var (
 		"codex_auth":   true,
 		"api_key":      true,
 	}
-	subscriptionKeyPattern  = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,62}$`)
-	subscriptionWindowRe    = regexp.MustCompile(`^[a-z0-9_]{1,32}$`)
+	subscriptionKeyPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,62}$`)
+	subscriptionWindowRe   = regexp.MustCompile(`^[a-z0-9_]{1,32}$`)
 	// Values that are credentials, not settings. The list errs on the side of
 	// refusing: a refused write is a message, a stored secret is a leak.
 	secretValuePrefixes = []string{"sk-", "sk_", "ghp_", "gho_", "github_pat_", "mat_", "mul_", "mcn_", "xox", "eyJ", "AIza"}
@@ -218,6 +218,15 @@ func (h *Handler) withHostState(resp SubscriptionResponse, hosts map[string][]Su
 	resp.LoginState = loginStateFromHosts(resp.Hosts)
 	if h.SubscriptionLogins != nil {
 		resp.Login = h.SubscriptionLogins.current(resp.Key)
+	}
+	return resp
+}
+
+func subscriptionForReader(resp SubscriptionResponse, canManage bool) SubscriptionResponse {
+	if !canManage {
+		resp.CredentialPath = ""
+		resp.Hosts = []SubscriptionHostResponse{}
+		resp.Login = nil
 	}
 	return resp
 }
@@ -402,14 +411,16 @@ func validateCredentialPath(p string) error {
 }
 
 func validateWindowsAndCaps(windows []string, caps map[string]int) error {
+	known := make(map[string]bool, len(windows))
 	for _, w := range windows {
 		if !subscriptionWindowRe.MatchString(w) {
 			return fmt.Errorf("invalid window %q", w)
 		}
+		known[w] = true
 	}
 	for k, v := range caps {
-		if !subscriptionWindowRe.MatchString(k) {
-			return fmt.Errorf("invalid cap window %q", k)
+		if !known[k] {
+			return fmt.Errorf("unknown cap window %q", k)
 		}
 		if v < 0 || v > 100 {
 			return fmt.Errorf("cap %s must be between 0 and 100", k)
@@ -535,13 +546,14 @@ func (h *Handler) ListSubscriptions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	hosts := h.hostStatesBySubscription(r.Context())
+	canManage := r.Header.Get("X-Actor-Source") == "" && h.isInstanceAdmin(r.Context(), requestUserID(r))
 	resp := make([]SubscriptionResponse, len(subs))
 	for i, s := range subs {
-		resp[i] = h.withHostState(subscriptionToResponse(s, usage[uuidToString(s.ID)], users[s.Key]), hosts)
+		resp[i] = subscriptionForReader(h.withHostState(subscriptionToResponse(s, usage[uuidToString(s.ID)], users[s.Key]), hosts), canManage)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"subscriptions": resp,
-		"can_manage":    r.Header.Get("X-Actor-Source") == "" && h.isInstanceAdmin(r.Context(), requestUserID(r)),
+		"can_manage":    canManage,
 	})
 }
 
@@ -566,7 +578,8 @@ func (h *Handler) GetSubscription(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to load subscription users")
 		return
 	}
-	writeJSON(w, http.StatusOK, h.withHostState(subscriptionToResponse(sub, usage[uuidToString(sub.ID)], users[sub.Key]), h.hostStatesBySubscription(r.Context())))
+	canManage := r.Header.Get("X-Actor-Source") == "" && h.isInstanceAdmin(r.Context(), requestUserID(r))
+	writeJSON(w, http.StatusOK, subscriptionForReader(h.withHostState(subscriptionToResponse(sub, usage[uuidToString(sub.ID)], users[sub.Key]), h.hostStatesBySubscription(r.Context())), canManage))
 }
 
 // ListSubscriptionUsage — GET /api/subscriptions/{key}/usage?since=7d.
@@ -625,19 +638,44 @@ func parseUsageSince(s string, now time.Time) (time.Time, error) {
 // Write
 // ---------------------------------------------------------------------------
 
+type subscriptionCaps map[string]int
+
+func (caps *subscriptionCaps) UnmarshalJSON(data []byte) error {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	if raw == nil {
+		return errors.New("caps must be an object of integer percentages")
+	}
+	out := make(subscriptionCaps, len(raw))
+	for window, data := range raw {
+		var value *int
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		if value == nil {
+			return fmt.Errorf("cap %s must be an integer percentage", window)
+		}
+		out[window] = *value
+	}
+	*caps = out
+	return nil
+}
+
 type subscriptionRequest struct {
-	Key            *string         `json:"key"`
-	Provider       *string         `json:"provider"`
-	Title          *string         `json:"title"`
-	OwnerNote      *string         `json:"owner_note"`
-	Auth           *string         `json:"auth"`
-	CredentialPath *string         `json:"credential_path"`
-	Windows        *[]string       `json:"windows"`
-	Caps           *map[string]int `json:"caps"`
-	Reserve        *int            `json:"reserve"`
-	Settings       *map[string]any `json:"settings"`
-	AccountGroup   *string         `json:"account_group"`
-	DisabledUntil  *string         `json:"disabled_until"`
+	Key            *string          `json:"key"`
+	Provider       *string          `json:"provider"`
+	Title          *string          `json:"title"`
+	OwnerNote      *string          `json:"owner_note"`
+	Auth           *string          `json:"auth"`
+	CredentialPath *string          `json:"credential_path"`
+	Windows        *[]string        `json:"windows"`
+	Caps           subscriptionCaps `json:"caps"`
+	Reserve        *int             `json:"reserve"`
+	Settings       *map[string]any  `json:"settings"`
+	AccountGroup   *string          `json:"account_group"`
+	DisabledUntil  *string          `json:"disabled_until"`
 	// Never accepted: listed so a client sending them gets a clear refusal
 	// instead of a silent drop.
 	Token  *string `json:"token"`
@@ -723,7 +761,7 @@ func (h *Handler) CreateSubscription(w http.ResponseWriter, r *http.Request) {
 	}
 	caps := map[string]int{}
 	if req.Caps != nil {
-		caps = *req.Caps
+		caps = req.Caps
 	}
 	if err := validateWindowsAndCaps(windows, caps); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -913,7 +951,7 @@ func (h *Handler) UpdateSubscription(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Caps != nil {
 		// Caps merge per window: --cap 5h=70 must not drop the week cap.
-		for k, v := range *req.Caps {
+		for k, v := range req.Caps {
 			caps[k] = v
 		}
 		params.Caps, _ = json.Marshal(caps)

@@ -440,7 +440,7 @@ export function ModelProfilesPage() {
 
       <Dialog open={editor !== null} onOpenChange={(next) => !next && !busy && setEditor(null)}>
         {editor ? (
-          <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+          <DialogContent className="max-h-[90vh] grid-cols-[minmax(0,1fr)] overflow-y-auto sm:max-w-2xl">
             <DialogHeader>
               <DialogTitle>
                 {editor.id ? t(($) => $.model_profiles.edit_title) : t(($) => $.model_profiles.create_title)}
@@ -466,7 +466,7 @@ export function ModelProfilesPage() {
                   disabled={busy}
                   onValueChange={(value) => value && patch({ when_exhausted_profile_id: value === WAIT ? null : value })}
                 >
-                  <SelectTrigger className="w-full" aria-label={t(($) => $.model_profiles.col_exhausted)}>
+                  <SelectTrigger className="w-full pr-7" aria-label={t(($) => $.model_profiles.col_exhausted)}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -487,7 +487,7 @@ export function ModelProfilesPage() {
                     disabled={busy}
                     onValueChange={(value) => value && setEditor({ ...editor, fromAgent: value === EMPTY ? "" : value })}
                   >
-                    <SelectTrigger className="w-full" aria-label={t(($) => $.model_profiles.source)}>
+                    <SelectTrigger className="w-full pr-7" aria-label={t(($) => $.model_profiles.source)}>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
