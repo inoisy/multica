@@ -206,17 +206,19 @@ class DaemonForceTest(unittest.TestCase):
                     cli.require_idle(health)
                 cli.require_idle(health, force=True)
 
-    def run_installer(self, force=False, wrong_pid=False, fail_new_health=False, replaced=False):
-        root = Path(self.enterContext(tempfile.TemporaryDirectory()))
+    def run_installer(self, force=False, wrong_pid=False, fail_new_health=False, replaced=False,
+                      foreign_binary=False, prior=None, keep=None):
+        root = keep or Path(self.enterContext(tempfile.TemporaryDirectory()))
         package = root / "package"
         (package / "bin").mkdir(parents=True)
         (package / "bin/multica").write_bytes(b"new binary")
+        (package / "bin/foreign").write_bytes(b"other binary")
         target = root / "multica"
         target.write_bytes(b"old binary")
         unit_pid = [42]
         r = SimpleNamespace(
             state=root, package=package, manifest={"revision": REV},
-            data={"phase": "installed", "protected": {"daemon_pid": "42"}},
+            data={"phase": "installed", "protected": {"daemon_pid": "42"}, **(prior or {})},
             load=MagicMock(), save=MagicMock(), compose=MagicMock(), wait=MagicMock(), psql=MagicMock(),
         )
 
@@ -233,13 +235,15 @@ class DaemonForceTest(unittest.TestCase):
             return io.BytesIO(json.dumps({
                 "status": "starting" if fail_new_health and unit_pid[0] > 42 else "running",
                 "pid": 99 if wrong_pid else unit_pid[0],
-                "cli_commit": REV, "active_task_count": 1,
+                "cli_commit": "unknown", "active_task_count": 1,
                 "pending_terminal_report_count": 0, "failed_terminal_report_count": 0,
             }).encode())
 
         def path(value):
             if str(value) == "/proc/42/exe":
                 return target
+            if str(value).startswith("/proc/") and str(value).endswith("/exe"):
+                return target if unit_pid[0] > 42 and not foreign_binary else package / "bin/foreign"
             if str(value) == "/proc/42":
                 return root / "stopped-process"
             return Path(value)
@@ -276,6 +280,25 @@ class DaemonForceTest(unittest.TestCase):
         self.assertEqual(r.data["protected"]["daemon_pid"], "43")
         r.psql.assert_not_called()
         self.assertIn(("systemctl", "stop", "multica-agents"), [call.args for call in r.run.call_args_list])
+
+    def test_daemon_running_another_binary_is_not_accepted(self):
+        r, target, error = self.run_installer(force=True, foreign_binary=True)
+        self.assertRegex(str(error), "readiness timeout")
+        self.assertEqual(target.read_bytes(), b"old binary")
+
+    def test_retry_after_returned_old_binary(self):
+        root = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        target = root / "multica"
+        target.write_bytes(b"old binary")
+        (root / "multica-before").write_bytes(b"old binary")
+        failed = {"phase": "failed_returned_old_binary", "target": str(target),
+                  "old_sha256": cli.deploy.sha(target)}
+        r, target, error = self.run_installer(force=True, prior={"cli": failed}, keep=root)
+        self.assertIsNone(error)
+        self.assertEqual(target.read_bytes(), b"new binary")
+        self.assertEqual(r.data["cli_attempts"], [failed])
+        self.assertEqual((root / "multica-before.attempt-1").read_bytes(), b"old binary")
+        self.assertEqual(r.data["cli"]["phase"], "installed")
 
     def test_binary_replaced_on_disk_after_start_is_updated(self):
         r, target, error = self.run_installer(force=True, replaced=True)

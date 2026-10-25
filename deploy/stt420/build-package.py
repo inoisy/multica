@@ -41,7 +41,7 @@ def main():
         with tarfile.open(out / "source.tar.gz") as tar:
             tar.extractall(src, filter="data")
         for cmd, name in (("server", "server"), ("migrate", "migrate"), ("multica", "multica"), ("model-choice-compare", "choice-after")):
-            subprocess.run(["go", "build", "-trimpath", "-ldflags", f"-s -w -X main.commit={revision} -X main.version=stt420-{revision[:12]}", "-o", str(out / "bin" / name), "./cmd/" + cmd], cwd=src / "server", env=env, check=True)
+            subprocess.run(["go", "build", "-trimpath", "-ldflags", f"-s -w -X main.commit={revision} -X main.buildCommit={revision} -X main.version=stt420-{revision[:12]}", "-o", str(out / "bin" / name), "./cmd/" + cmd], cwd=src / "server", env=env, check=True)
         migrations = sorted(f.stem.removesuffix(".up") for f in (src / "server/migrations").glob("*.up.sql"))
         old = Path(tmp) / "before"
         old.mkdir()

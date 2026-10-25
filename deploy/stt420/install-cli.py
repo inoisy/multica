@@ -35,7 +35,17 @@ def main():
         r = deploy.Release(Path(args.state).resolve() / "package", "/opt/multica/docker-compose.selfhost.yml", "", "")
         r.load(args.state)
         deploy.require(r.data["phase"] == "installed", "backend/web release must be installed first")
+        old = r.state / "multica-before"
+        previous = r.data.get("cli")
+        if previous and previous.get("phase") == "failed_returned_old_binary":
+            # The old binary is back in place; keep that attempt and start over.
+            deploy.require(deploy.sha(previous["target"]) == previous["old_sha256"], "daemon binary changed after the failed attempt")
+            attempt = len(r.data.get("cli_attempts", [])) + 1
+            old.rename(r.state / f"multica-before.attempt-{attempt}")
+            r.data.setdefault("cli_attempts", []).append(r.data.pop("cli"))
+            r.save()
         deploy.require("cli" not in r.data, "CLI operation already recorded; inspect its state")
+        release_sha = deploy.sha(r.package / "bin/multica")
 
         def health():
             with urllib.request.urlopen(f"http://127.0.0.1:{args.health_port}/health", timeout=5) as response:
@@ -57,7 +67,6 @@ def main():
         # the file at that path is what the unit starts next, so it is the one kept.
         target = Path(os.readlink(f"/proc/{pid}/exe").removesuffix(" (deleted)"))
         deploy.require(target.is_absolute() and target.is_file(), "daemon binary cannot be replaced safely")
-        old = r.state / "multica-before"
         deploy.require(not old.exists(), "existing CLI backup must be inspected")
         shutil.copy2(target, old)
         r.data["cli"] = {"target": str(target), "old_pid": pid, "old_sha256": deploy.sha(old),
@@ -84,7 +93,12 @@ def main():
             for i in range(60):
                 try:
                     h = health()
-                    deploy.require(h.get("status") == "running" and h.get("cli_commit") == r.manifest["revision"], "new daemon health/revision mismatch")
+                    # The bundle CLI reports its SHA in cli_version only, so the
+                    # running executable itself is compared with the bundle.
+                    unit_pid = int(r.run("systemctl", "show", "multica-agents", "-p", "MainPID", "--value"))
+                    deploy.require(h.get("status") == "running" and h.get("pid") == unit_pid
+                                   and deploy.sha(Path(f"/proc/{unit_pid}/exe")) == release_sha,
+                                   "new daemon health/binary mismatch")
                     break
                 except Exception:
                     deploy.require(i < 59, "new daemon readiness timeout")
