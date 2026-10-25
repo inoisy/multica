@@ -31,7 +31,7 @@ def main():
     out = args.out.resolve()
     out.mkdir(mode=0o700)  # Refuse to overwrite any existing bundle.
     subprocess.run(["git", "-C", str(repo), "archive", "--format=tar.gz", "-o", str(out / "source.tar.gz"), revision], check=True)
-    for name in ("deploy.py", "install-cli.py", "snapshot.py", "README.md"):
+    for name in ("deploy.py", "install.sh", "install-cli.py", "snapshot.py", "README.md"):
         (out / name).write_text(git("show", f"{revision}:deploy/stt420/{name}") + "\n")
     (out / "bin").mkdir()
     env = {**os.environ, "CGO_ENABLED": "0", "GOOS": "linux", "GOARCH": "amd64"}

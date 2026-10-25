@@ -392,6 +392,47 @@ describe("Connect an account", () => {
     return { ...view, dialog };
   }
 
+  it("creates a standalone pool without granting it to a workspace", async () => {
+    api.createPool.mockResolvedValue(pool("ungranted", [], { workspace_ids: [], environments: [] }));
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "New pool" }));
+    const dialog = await screen.findByRole("dialog", { name: "New pool" });
+    fireEvent.click(await within(dialog).findByRole("checkbox", { name: "STT" }));
+    expect(within(dialog).getByRole("button", { name: "Create" })).toBeDisabled();
+    fireEvent.change(within(dialog).getByLabelText("Name"), { target: { value: "  Ungranted pool  " } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create" }));
+    await waitFor(() => expect(api.createPool).toHaveBeenCalledWith({
+      name: "Ungranted pool", runtime_type: "claude", subscriptions: [], spend_order: "first", workspace_ids: [],
+    }));
+    expect(api.createPool).toHaveBeenCalledTimes(1);
+    expect(api.setPoolGrants).not.toHaveBeenCalled();
+  });
+
+  it("connects one account to a new pool with no workspace grants", async () => {
+    api.createPool.mockResolvedValue(pool("ungranted", [entry("plan-c", 1)], { workspace_ids: [], environments: [] }));
+    const { dialog } = await openWizard();
+    fireEvent.change(within(dialog).getByLabelText("Name"), { target: { value: "Plan C" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Next" }));
+    fireEvent.click(within(dialog).getByRole("radio", { name: "New pool" }));
+    fireEvent.click(await within(dialog).findByRole("checkbox", { name: "STT" }));
+    const name = within(dialog).getByLabelText("Name");
+    fireEvent.change(name, { target: { value: "   " } });
+    expect(within(dialog).getByRole("button", { name: "Next" })).toBeDisabled();
+    fireEvent.change(name, { target: { value: "Ungranted pool" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Next" }));
+    expect(within(dialog).getByTestId("connect-usage").textContent).toContain(
+      "It is granted to no workspace, so no environment is created.",
+    );
+    fireEvent.click(within(dialog).getByRole("button", { name: "Connect" }));
+    await waitFor(() => expect(api.createPool).toHaveBeenCalledWith({
+      name: "Ungranted pool", runtime_type: "claude", subscriptions: ["plan-c"], spend_order: "first", workspace_ids: [],
+    }));
+    expect(api.createSubscription).toHaveBeenCalledTimes(1);
+    expect(api.createPool).toHaveBeenCalledTimes(1);
+    expect(api.updatePool).not.toHaveBeenCalled();
+    expect(api.startSubscriptionLogin).not.toHaveBeenCalled();
+  });
+
   it("adds the account to an existing pool of the same CLI at the chosen place and signs in once", async () => {
     api.updatePool.mockResolvedValue(pool("claude", [], { revision: 13 }));
     const { dialog } = await openWizard();
