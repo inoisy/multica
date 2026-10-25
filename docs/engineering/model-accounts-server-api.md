@@ -37,6 +37,13 @@ Account keys in mutation bodies resolve to ids; joins and grants store ids.
 
 ## Agent profiles
 
+Reads use the same agent visibility rules as the agent list and detail view.
+Personal profiles of inaccessible agents are absent from `kind=personal|all`,
+shared-profile references, and impact previews. Direct profile reads/previews
+return 404; `GET /api/agents/{id}/models` returns 403 for a private agent the
+member cannot view. Agent owners, workspace admins, and allowed members retain
+their existing access.
+
 Personal-profile writes have the same agent-owner / workspace-admin permission
 check as the existing agent model editor.
 
@@ -63,6 +70,20 @@ responses retain computed `subscriptions`, `spend_order`, `share_key`, and
 Legacy subscription mutations are routed through the pool service.
 Legacy `reserve` input folds into `caps`; returned `reserve` is zero and
 `effective_caps` is the cap map without entries equal to 100.
+
+## Account read privacy and caps
+
+`GET /api/subscriptions` and `GET /api/subscriptions/{key}` return credential
+paths, host details, and active login sessions only to an instance administrator
+authenticated in person. For other readers (including task tokens), the existing
+response fields remain `credential_path: ""`, `hosts: []`, and `login: null`.
+Aggregate `login_state`, usage, and workspace-filtered consumers remain visible.
+Daemon provisioning keeps its separate authenticated contract.
+
+On account creation and update, `caps` must be an object of integer percentages
+from 0 through 100. Null values, fractional/string values, and keys absent from
+the account's resulting `windows` are rejected with 400 without changing data.
+An omitted `caps` leaves caps unchanged; updates merge by window.
 
 ## Claim and account confirmation
 

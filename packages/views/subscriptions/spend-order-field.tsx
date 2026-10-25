@@ -20,7 +20,7 @@ export function SpendOrderField({
 }) {
   const { t } = useT("agents");
   return (
-    <fieldset className="space-y-2" disabled={disabled}>
+    <fieldset className="min-w-0 space-y-2" disabled={disabled}>
       <legend className="mb-2 text-body font-medium">{t(($) => $.subscriptions.pool.spend_title)}</legend>
       <RadioGroup name={name} value={value} onValueChange={onChange} disabled={disabled}>
       {ORDERS.map((order) => (

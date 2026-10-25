@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -98,9 +97,20 @@ type modelWorkspace struct {
 	personal map[string]service.ModelProfileData
 }
 
-func (h *Handler) loadModelWorkspace(ctx context.Context, workspaceID pgtype.UUID, now time.Time) (modelWorkspace, error) {
+func (h *Handler) loadModelWorkspace(r *http.Request, workspaceID pgtype.UUID, now time.Time) (modelWorkspace, error) {
 	var m modelWorkspace
 	var err error
+	ctx := r.Context()
+	wsID := uuidToString(workspaceID)
+	member, err := h.getWorkspaceMember(ctx, requestUserID(r), wsID)
+	if err != nil {
+		return m, err
+	}
+	actorType, actorID := h.resolveActor(r, requestUserID(r), wsID)
+	visible, ok := h.accessibleAgentIDs(ctx, wsID, actorType, actorID, member.Role)
+	if !ok {
+		return m, errors.New("failed to load visible agents")
+	}
 	if m.world, err = service.LoadModelWorld(ctx, h.Queries, workspaceID, now); err != nil {
 		return m, err
 	}
@@ -110,6 +120,24 @@ func (h *Handler) loadModelWorkspace(ctx context.Context, workspaceID pgtype.UUI
 	if m.agents, err = h.Queries.ListAgents(ctx, workspaceID); err != nil {
 		return m, err
 	}
+	agents := m.agents[:0]
+	for _, a := range m.agents {
+		if _, ok := visible[uuidToString(a.ID)]; ok {
+			agents = append(agents, a)
+		}
+	}
+	m.agents = agents
+	profiles := m.profiles[:0]
+	for _, p := range m.profiles {
+		if p.OwnerAgentID.Valid {
+			if _, ok := visible[uuidToString(p.OwnerAgentID)]; !ok {
+				delete(m.world.Profiles, uuidToString(p.ID))
+				continue
+			}
+		}
+		profiles = append(profiles, p)
+	}
+	m.profiles = profiles
 	m.personal = map[string]service.ModelProfileData{}
 	for _, p := range m.world.Profiles {
 		if p.Personal() {
@@ -233,7 +261,7 @@ func (h *Handler) ListModelProfiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	now := time.Now()
-	m, err := h.loadModelWorkspace(r.Context(), wsID, now)
+	m, err := h.loadModelWorkspace(r, wsID, now)
 	if err != nil {
 		writeModelProfileError(w, err)
 		return
@@ -266,7 +294,7 @@ func (h *Handler) GetModelProfile(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) writeModelProfile(w http.ResponseWriter, r *http.Request, wsID, id pgtype.UUID, status int) {
 	now := time.Now()
-	m, err := h.loadModelWorkspace(r.Context(), wsID, now)
+	m, err := h.loadModelWorkspace(r, wsID, now)
 	if err != nil {
 		writeModelProfileError(w, err)
 		return
@@ -400,7 +428,7 @@ func (h *Handler) PreviewModelProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	now := time.Now()
-	m, err := h.loadModelWorkspace(r.Context(), wsID, now)
+	m, err := h.loadModelWorkspace(r, wsID, now)
 	if err != nil {
 		writeModelProfileError(w, err)
 		return
@@ -604,13 +632,22 @@ func (h *Handler) GetAgentModels(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	wsID := uuidToString(agent.WorkspaceID)
+	if _, ok := h.requireWorkspaceMember(w, r, wsID, "workspace not found"); !ok {
+		return
+	}
+	actorType, actorID := h.resolveActor(r, requestUserID(r), wsID)
+	if !h.canAccessPrivateAgent(r.Context(), agent, actorType, actorID, wsID) {
+		writeError(w, http.StatusForbidden, "you do not have access to this agent")
+		return
+	}
 	h.writeAgentModels(w, r, agent)
 }
 
 func (h *Handler) writeAgentModels(w http.ResponseWriter, r *http.Request, agent db.Agent) {
 	ctx := r.Context()
 	now := time.Now()
-	m, err := h.loadModelWorkspace(ctx, agent.WorkspaceID, now)
+	m, err := h.loadModelWorkspace(r, agent.WorkspaceID, now)
 	if err != nil {
 		writeModelProfileError(w, err)
 		return

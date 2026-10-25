@@ -424,10 +424,11 @@ func (s *ModelProfileService) ResetPersonalProfile(ctx context.Context, agent db
 	return updated, err
 }
 
-// personalProfileName is "<agent> · личный", with the start of the agent's id
-// added when the lower-cased name is taken in the workspace.
+// personalProfileName is the agent's name, with the start of the agent's id
+// added when the lower-cased name is taken in the workspace. The name carries
+// no "personal" word: clients label personal profiles in their own language.
 func personalProfileName(ctx context.Context, q *db.Queries, agent db.Agent) (string, error) {
-	name := truncateRunes(strings.TrimSpace(agent.Name), 70) + " · личный"
+	name := truncateRunes(strings.TrimSpace(agent.Name), 70)
 	_, err := q.GetModelProfileByNameInWorkspace(ctx, db.GetModelProfileByNameInWorkspaceParams{WorkspaceID: agent.WorkspaceID, Name: name})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return name, nil
@@ -435,7 +436,7 @@ func personalProfileName(ctx context.Context, q *db.Queries, agent db.Agent) (st
 	if err != nil {
 		return "", err
 	}
-	return truncateRunes(strings.TrimSpace(agent.Name), 60) + " · личный · " + util.UUIDToString(agent.ID)[:8], nil
+	return truncateRunes(strings.TrimSpace(agent.Name), 60) + " · " + util.UUIDToString(agent.ID)[:8], nil
 }
 
 func truncateRunes(s string, n int) string {
