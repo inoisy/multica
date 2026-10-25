@@ -1352,7 +1352,8 @@
       "no_environments": "No environment spends this pool yet. Granting it to a workspace creates one there.",
       "not_found": "The pool is not visible to you or was deleted.",
       "of_environment": "Pool “{{name}}”",
-      "workspaces_n": "{{n}} workspaces"
+      "workspaces_n_one": "{{count}} workspace",
+      "workspaces_n_other": "{{count}} workspaces"
     },
     "new_pool": {
       "open": "New pool",
@@ -1387,7 +1388,7 @@
         "loodsen-ai": "Lotsia model (needs the cisco VPN)"
       },
       "step_name": "Name",
-      "name_placeholder": "For example, Claude, third subscription",
+      "name_placeholder": "Claude account",
       "step_login": "Sign in",
       "codex_login": "After adding, a link and a code for the account appear here.",
       "claude_login": "On your computer, signed in to this Claude account in the browser, run claude setup-token and paste the token.",

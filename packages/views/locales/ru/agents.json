@@ -1396,7 +1396,10 @@
       "no_environments": "Этот пул пока не использует ни одна среда. Выдача workspace создаёт среду в нём.",
       "not_found": "Пул не виден вам или удалён.",
       "of_environment": "Пул «{{name}}»",
-      "workspaces_n": "workspace: {{n}}"
+      "workspaces_n_one": "{{count}} пространство",
+      "workspaces_n_few": "{{count}} пространства",
+      "workspaces_n_many": "{{count}} пространств",
+      "workspaces_n_other": "{{count}} пространства"
     },
     "new_pool": {
       "open": "Новый пул",
@@ -1431,7 +1434,7 @@
         "loodsen-ai": "Модель Лоции (нужен cisco VPN)"
       },
       "step_name": "Название",
-      "name_placeholder": "Например, Claude, третья подписка",
+      "name_placeholder": "Аккаунт Claude",
       "step_login": "Вход",
       "codex_login": "После добавления здесь появятся ссылка и код для входа в аккаунт.",
       "claude_login": "На своём компьютере, войдя в браузере в этот аккаунт Claude, выполните claude setup-token и вставьте токен.",

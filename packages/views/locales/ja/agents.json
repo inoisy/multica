@@ -1325,7 +1325,7 @@
       "no_environments": "このプールを使う環境はまだありません。ワークスペースに付与すると作成されます。",
       "not_found": "このプールは表示できないか削除されました。",
       "of_environment": "プール「{{name}}」",
-      "workspaces_n": "ワークスペース {{n}} 件"
+      "workspaces_n_other": "{{count}} ワークスペース"
     },
     "new_pool": {
       "open": "新しいプール",
@@ -1360,7 +1360,7 @@
         "loodsen-ai": "Lotsia モデル（cisco VPN が必要）"
       },
       "step_name": "名前",
-      "name_placeholder": "例：Claude、3 つ目のサブスクリプション",
+      "name_placeholder": "Claude アカウント",
       "step_login": "サインイン",
       "codex_login": "追加後、アカウント用のリンクとコードがここに表示されます。",
       "claude_login": "ブラウザーでこの Claude アカウントにログインしたコンピューターで claude setup-token を実行し、トークンを貼り付けてください。",

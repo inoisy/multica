@@ -1325,7 +1325,7 @@
       "no_environments": "尚无环境使用此池。授予工作区后会在其中创建环境。",
       "not_found": "该池对你不可见或已被删除。",
       "of_environment": "池“{{name}}”",
-      "workspaces_n": "{{n}} 个工作区"
+      "workspaces_n_other": "{{count}} 个工作区"
     },
     "new_pool": {
       "open": "新建池",
@@ -1360,7 +1360,7 @@
         "loodsen-ai": "Lotsia 模型（需要 cisco VPN）"
       },
       "step_name": "名称",
-      "name_placeholder": "例如：Claude，第三个订阅",
+      "name_placeholder": "Claude 账号",
       "step_login": "登录",
       "codex_login": "添加后，这里会显示该账号的登录链接和代码。",
       "claude_login": "在浏览器已登录此 Claude 账号的电脑上运行 claude setup-token，并粘贴令牌。",

@@ -1352,7 +1352,9 @@
       "no_environments": "Aucun environnement n'utilise ce pool. L'accorder à un espace de travail en crée un.",
       "not_found": "Le pool n'est pas visible ou a été supprimé.",
       "of_environment": "Pool « {{name}} »",
-      "workspaces_n": "{{n}} espaces de travail"
+      "workspaces_n_one": "{{count}} espace de travail",
+      "workspaces_n_many": "{{count}} espaces de travail",
+      "workspaces_n_other": "{{count}} espaces de travail"
     },
     "new_pool": {
       "open": "Nouveau pool",
@@ -1387,7 +1389,7 @@
         "loodsen-ai": "Modèle Lotsia (VPN cisco requis)"
       },
       "step_name": "Nom",
-      "name_placeholder": "Par exemple, Claude, troisième abonnement",
+      "name_placeholder": "Compte Claude",
       "step_login": "Connexion",
       "codex_login": "Après l'ajout, un lien et un code pour le compte s'affichent ici.",
       "claude_login": "Sur votre ordinateur, connecté à ce compte Claude dans le navigateur, exécutez claude setup-token et collez le jeton.",

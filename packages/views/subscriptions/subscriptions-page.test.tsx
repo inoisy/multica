@@ -110,7 +110,7 @@ function profile(id: string, extra: Partial<RuntimeProfile> = {}): RuntimeProfil
   };
 }
 
-function renderPage(search = "") {
+function renderPage(search = "", locale: "en" | "ru" = "en") {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const replace = vi.fn();
   const navigation: NavigationAdapter = {
@@ -123,6 +123,7 @@ function renderPage(search = "") {
         <SubscriptionsContent />
       </QueryClientProvider>
     </NavigationProvider>,
+    { locale },
   );
   return { ...view, replace };
 }
@@ -215,15 +216,24 @@ describe("SubscriptionsPage", () => {
 
   it("lists discrepancies by kind and opens the pool of an environment", async () => {
     api.listSubscriptionDiscrepancies.mockResolvedValue([
-      { kind: "credential_missing", message: "", subscription_key: "acc-a", device_name: "vps", runtime_profile_id: null, runtime_name: null, workspace_id: null, agent_id: null, agent_name: null },
+      { kind: "credential_missing", message: "учётка на хосте /private/token", subscription_key: "acc-a", device_name: "vps", runtime_profile_id: null, runtime_name: null, workspace_id: null, agent_id: null, agent_name: null },
       { kind: "runtime_without_subscriptions", message: "", subscription_key: null, device_name: null, runtime_profile_id: "env-claude", runtime_name: "Claude env", workspace_id: "ws-1", agent_id: null, agent_name: null },
     ]);
     const { replace } = renderPage();
     const block = (await screen.findByRole("heading", { name: "Discrepancies" })).closest("section")!;
     expect(within(block as HTMLElement).getByText("No credential on the host")).toBeTruthy();
     expect(within(block as HTMLElement).getByText("Plan A · vps")).toBeTruthy();
+    expect(block.textContent).not.toContain("учётка");
+    expect(block.textContent).not.toContain("/private/token");
     fireEvent.click(within(block as HTMLElement).getByRole("button", { name: "Open runtime" }));
     expect(replace).toHaveBeenCalledWith("/acme/usage?pool=claude");
+  });
+
+  it.each(["en", "ru"] as const)("uses localized workspace plural forms in %s", async (locale) => {
+    api.listPools.mockResolvedValue({ pools: [pool("one", [entry("acc-a", 1)]), pool("two", [entry("acc-b", 1)], { workspace_ids: ["ws-1", "ws-2"] })], can_manage: true });
+    renderPage("", locale);
+    expect(await screen.findByText(locale === "en" ? / · 1 workspace$/ : / · 1 пространство$/)).toBeTruthy();
+    expect(screen.getByText(locale === "en" ? / · 2 workspaces$/ : / · 2 пространства$/)).toBeTruthy();
   });
 
   it("filters accounts and keeps the filter in the address", async () => {

@@ -243,7 +243,7 @@ function RunDetailRow({
   copied?: boolean;
   copyTitle?: string;
 }) {
-  const valueClass = cn("min-w-0 select-text break-all text-foreground", mono && "font-mono");
+  const valueClass = cn("min-w-0 select-text break-words text-foreground", mono && "font-mono [overflow-wrap:anywhere]");
   if (onCopy) {
     return (
       <TooltipHint label={copyTitle}>

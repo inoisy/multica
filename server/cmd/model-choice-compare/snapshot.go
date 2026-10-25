@@ -101,6 +101,19 @@ func toChoice(c service.ModelChoice) (*choice, error) {
 	if err := json.Unmarshal(raw, &out); err != nil {
 		return nil, err
 	}
+	// API presentation uses seconds; the acceptance comparison must retain the
+	// original precision, including subsecond differences between algorithms.
+	preciseTime := func(value *time.Time) *string {
+		if value == nil {
+			return nil
+		}
+		text := value.UTC().Format(time.RFC3339Nano)
+		return &text
+	}
+	out.WaitUntil = preciseTime(c.WaitUntil)
+	for i := range out.Rows {
+		out.Rows[i].Until = preciseTime(c.Rows[i].Until)
+	}
 	if out.Rows == nil {
 		out.Rows = []row{}
 	}

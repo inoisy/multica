@@ -101,7 +101,8 @@ describe("SubscriptionLoginStatus", () => {
     fireEvent.click(screen.getByRole("button", { name: "Sign in again" }));
     fireEvent.change(await screen.findByLabelText("API key"), { target: { value: "bad" } });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
-    expect((await screen.findByRole("alert")).textContent).toBe("ключ отклонён");
+    expect((await screen.findByRole("alert")).textContent).toBe("Sign-in did not finish; the current credential is unchanged");
+    expect(screen.queryByText("ключ отклонён")).toBeNull();
     expect((screen.getByLabelText("API key") as HTMLInputElement).value).toBe("");
     expect(screen.getByRole("dialog")).toBeTruthy();
   });
