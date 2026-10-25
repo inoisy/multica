@@ -53,8 +53,10 @@ def main():
             deploy.require(r.psql("SELECT count(*) FROM agent_task_queue WHERE status IN ('running', 'dispatched')") == "0", "active server runs; leave daemon unchanged")
         else:
             print("FORCE_DAEMON: operator-authorized restart; active runs may be interrupted", flush=True)
-        target = Path(f"/proc/{pid}/exe").resolve(strict=True)
-        deploy.require(target.is_file() and not str(target).endswith(" (deleted)"), "daemon binary cannot be replaced safely")
+        # A binary replaced on disk after the daemon started shows as "(deleted)";
+        # the file at that path is what the unit starts next, so it is the one kept.
+        target = Path(os.readlink(f"/proc/{pid}/exe").removesuffix(" (deleted)"))
+        deploy.require(target.is_absolute() and target.is_file(), "daemon binary cannot be replaced safely")
         old = r.state / "multica-before"
         deploy.require(not old.exists(), "existing CLI backup must be inspected")
         shutil.copy2(target, old)

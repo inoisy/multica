@@ -206,7 +206,7 @@ class DaemonForceTest(unittest.TestCase):
                     cli.require_idle(health)
                 cli.require_idle(health, force=True)
 
-    def run_installer(self, force=False, wrong_pid=False, fail_new_health=False):
+    def run_installer(self, force=False, wrong_pid=False, fail_new_health=False, replaced=False):
         root = Path(self.enterContext(tempfile.TemporaryDirectory()))
         package = root / "package"
         (package / "bin").mkdir(parents=True)
@@ -257,6 +257,7 @@ class DaemonForceTest(unittest.TestCase):
              patch.object(cli.urllib.request, "urlopen", side_effect=health), \
              patch.object(cli, "Path", side_effect=path), \
              patch.object(cli.sys, "argv", argv), \
+             patch.object(cli.os, "readlink", return_value=str(target) + (" (deleted)" if replaced else "")), \
              patch.object(cli.time, "sleep"):
             try:
                 cli.main()
@@ -275,6 +276,12 @@ class DaemonForceTest(unittest.TestCase):
         self.assertEqual(r.data["protected"]["daemon_pid"], "43")
         r.psql.assert_not_called()
         self.assertIn(("systemctl", "stop", "multica-agents"), [call.args for call in r.run.call_args_list])
+
+    def test_binary_replaced_on_disk_after_start_is_updated(self):
+        r, target, error = self.run_installer(force=True, replaced=True)
+        self.assertIsNone(error)
+        self.assertEqual(target.read_bytes(), b"new binary")
+        self.assertEqual((r.state / "multica-before").read_bytes(), b"old binary")
 
     def test_busy_daemon_without_force_and_pid_mismatch_even_with_force_never_stop(self):
         for force, wrong_pid in ((False, False), (True, True)):
