@@ -984,7 +984,8 @@ export function AgentTranscriptDialog({
                           value={`${modelText.source(task.model_choice)} · ${modelText.reason(task.model_choice)}`}
                         />
                       )}
-                      {task.model_choice && (
+                      {/* A run on plain agent fields has no choice, but the daemon may still have confirmed its account. */}
+                      {(task.model_choice || task.account_fact) && (
                         <RunDetailRow label={t(($) => $.transcript.details_account)} value={accountText(task.account_fact)} />
                       )}
                       {workdirCopyTarget?.relativePath && (

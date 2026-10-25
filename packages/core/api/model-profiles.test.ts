@@ -73,7 +73,7 @@ it("degrades a malformed unavailability list to empty", async () => {
 it("reads a personal profile's base, match and differing rows", async () => {
   respond([
     {
-      id: "pp1", name: "Tester · personal", personal: true, owner_agent: { id: "a1", name: "Tester" },
+      id: "pp1", name: "Tester", personal: true, owner_agent: { id: "a1", name: "Tester" },
       based_on: { id: "p1", name: "Above average" }, matches_base: false, diff_rows: [1, 3], options: [],
     },
     { id: "p1", name: "Above average", personal_profiles: [{ profile_id: "pp1", agent: { id: "a1", name: "Tester" }, matches_base: false, diff_rows: [1] }] },

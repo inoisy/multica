@@ -133,6 +133,17 @@ describe("RuntimePicker (agent settings)", () => {
     ).toBeTruthy();
   });
 
+  // Inside a form the field sits next to the 32px kit Input and Select.
+  it("matches the form controls' height when compact", () => {
+    const { unmount } = renderPicker();
+    expect(screen.getByRole("button", { name: /^Runtime · / }).className).toContain("min-h-10");
+    unmount();
+    renderPicker({ compact: true });
+    const trigger = screen.getByRole("button", { name: /^Runtime · / });
+    expect(trigger.className).toContain("min-h-8");
+    expect(trigger.className).not.toContain("min-h-10");
+  });
+
   it("opens inside the selected runtime's machine with runtime-labelled rows", () => {
     renderPicker();
     openPicker();

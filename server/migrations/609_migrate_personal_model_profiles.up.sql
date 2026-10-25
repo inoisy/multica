@@ -6,10 +6,10 @@
 -- Repeatable: an agent that already owns a personal profile is skipped.
 -- agent_model_option is kept as it is until the old schema is removed.
 --
--- Names: "<agent> · личный"; when the lower-cased name is taken in the
--- workspace (by a profile, or by the personal profile of an agent named
--- "Claude" next to one named "claude") the first 8 characters of the agent id
--- are added.
+-- Names: "<agent>"; when the lower-cased name is taken in the workspace (by a
+-- profile, or by the personal profile of an agent named "Claude" next to one
+-- named "claude") the first 8 characters of the agent id are added. The name
+-- has no "personal" word: clients label personal profiles in their language.
 DO $$
 DECLARE
     a record;
@@ -24,9 +24,9 @@ BEGIN
           AND NOT EXISTS (SELECT 1 FROM model_profile p WHERE p.owner_agent_id = ag.id)
         ORDER BY ag.workspace_id, ag.created_at, ag.id
     LOOP
-        final_name := left(btrim(a.name), 70) || ' · личный';
+        final_name := left(btrim(a.name), 70);
         IF EXISTS (SELECT 1 FROM model_profile p WHERE p.workspace_id = a.workspace_id AND lower(p.name) = lower(final_name)) THEN
-            final_name := left(btrim(a.name), 60) || ' · личный · ' || left(a.id::text, 8);
+            final_name := left(btrim(a.name), 60) || ' · ' || left(a.id::text, 8);
         END IF;
 
         based := NULL;
