@@ -143,7 +143,7 @@ def main():
         deploy.require(release.manifest["revision"] == args.revision == release.data["revision"], "release SHA mismatch")
         deploy.require_acceptance(release.package / "acceptance.json", args.revision)
         print("STATE=" + str(release.state), flush=True)
-        if args.retry_after_rollback and release.data["phase"] != "building":
+        if args.retry_after_rollback and release.data["phase"] in ("migrating", "rolled_back"):
             reset_after_rollback(release)
         resume(release)
     # The daemon installer takes the same lock and has its own PID/health checks.
