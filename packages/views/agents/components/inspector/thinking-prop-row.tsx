@@ -79,6 +79,7 @@ export function ThinkingSettingField({
   value,
   canEdit,
   onChange,
+  compact = false,
 }: {
   label: ReactNode;
   runtimeId: string | null;
@@ -88,6 +89,7 @@ export function ThinkingSettingField({
   value: string;
   canEdit: boolean;
   onChange: (next: string) => Promise<void> | void;
+  compact?: boolean;
 }) {
   const modelsQuery = useQuery(
     runtimeModelsOptions(runtimeOnline ? runtimeId : null),
@@ -103,6 +105,7 @@ export function ThinkingSettingField({
       <ThinkingPicker
         variant="field"
         showLabel={false}
+        compact={compact}
         value={value}
         levels={levels}
         canEdit={canEdit}

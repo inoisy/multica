@@ -47,6 +47,7 @@ import { RuntimeAccessEditor, RuntimeAccessReadout } from "./runtime-access-edit
 import { DeleteRuntimeProfileDialog } from "./delete-runtime-profile-dialog";
 import { runtimeRowLabel } from "./runtime-machines";
 import { useT, useTimeAgo } from "../../i18n";
+import { PoolAccountsSection } from "../../subscriptions";
 
 function getCliVersion(metadata: Record<string, unknown>): string | null {
   if (
@@ -194,6 +195,7 @@ export function RuntimeDetail({
               cliVersion={cliVersion}
               daemonShort={daemonShort}
             />
+            {canReadRuntime && <PoolAccountsSection poolId={runtimeProfile?.pool_id} />}
             {canReadRuntime && <UsageSection runtime={runtime} />}
           </div>
 

@@ -5501,6 +5501,7 @@ func (h *Handler) GetTaskStatus(w http.ResponseWriter, r *http.Request) {
 
 // FailTask marks a running task as failed.
 type TaskFailRequest struct {
+	RefusalCode    string `json:"refusal_code,omitempty"`
 	Error          string `json:"error"`
 	SessionID      string `json:"session_id,omitempty"`
 	WorkDir        string `json:"work_dir,omitempty"`
@@ -5539,6 +5540,10 @@ func (h *Handler) FailTask(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
+	if req.RefusalCode != "" && !protocol.IsAccountRefusalCode(req.RefusalCode) {
+		writeError(w, http.StatusBadRequest, "unknown refusal_code")
+		return
+	}
 	// TaskService.FailTask normalizes req.Error itself, but every other field
 	// here lands in a TEXT column too and a NUL in any one of them fails the
 	// same transaction (GH #7098).
@@ -5562,7 +5567,7 @@ func (h *Handler) failTask(w http.ResponseWriter, r *http.Request, taskID, works
 	if req.QuotaResetAt != nil {
 		quotaResetAt = *req.QuotaResetAt
 	}
-	task, transitioned, err := h.TaskService.FailTaskWithQuotaReset(r.Context(), parseUUID(taskID), req.Error, req.SessionID, req.WorkDir, req.BranchName, req.FailureReason, req.SessionRolloutMissing, req.RetiredSessionID, req.DurableWorkDir, quotaResetAt)
+	task, transitioned, err := h.TaskService.FailTaskWithQuotaReset(r.Context(), parseUUID(taskID), req.Error, req.SessionID, req.WorkDir, req.BranchName, req.FailureReason, req.SessionRolloutMissing, req.RetiredSessionID, req.DurableWorkDir, quotaResetAt, req.RefusalCode)
 	if err != nil {
 		// A FailTask error is an infrastructure failure (the terminal
 		// transaction that also clears the withheld session, writes the

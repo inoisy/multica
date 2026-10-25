@@ -183,7 +183,7 @@ func poolCreateFlags(cmd *cobra.Command) {
 func TestRuntimePoolCreate(t *testing.T) {
 	got := subscriptionTestServer(t, map[string]any{
 		"GET /api/subscriptions/claude-second": map[string]any{"key": "claude-second", "family": "claude"},
-		"POST /api/runtime-pools":              map[string]any{"share_key": "pool-1", "runtime_profiles": []any{}},
+		"POST /api/pools":                      map[string]any{"share_key": "pool-1", "runtime_profiles": []any{}},
 	})
 	cmd := subscriptionTestCmd(poolCreateFlags)
 	_ = cmd.Flags().Set("subs", "claude-second,claude-3,claude-main")
@@ -213,9 +213,10 @@ func TestRuntimePoolCreate(t *testing.T) {
 func TestRuntimePoolSetByName(t *testing.T) {
 	got := subscriptionTestServer(t, map[string]any{
 		"GET /api/workspaces/ws-123/runtime-profiles": map[string]any{"runtime_profiles": []any{
-			map[string]any{"id": "p1", "display_name": "Claude · подписки", "subscriptions": []any{"claude-second", "claude-main"}},
+			map[string]any{"id": "p1", "display_name": "Claude · подписки", "pool_id": "pool-1", "subscriptions": []any{"claude-second", "claude-main"}},
 		}},
-		"PUT /api/workspaces/ws-123/runtime-profiles/p1/subscriptions": map[string]any{"runtime_profile": map[string]any{"id": "p1"}},
+		"GET /api/pools":          map[string]any{"pools": []any{map[string]any{"id": "pool-1", "name": "Claude", "revision": 7, "subscriptions": []any{map[string]any{"key": "claude-second"}, map[string]any{"key": "claude-main"}}}}},
+		"PATCH /api/pools/pool-1": map[string]any{"id": "pool-1", "revision": 8},
 	})
 	cmd := subscriptionTestCmd(func(c *cobra.Command) {
 		c.Flags().String("add", "", "")
@@ -228,8 +229,8 @@ func TestRuntimePoolSetByName(t *testing.T) {
 	if err := runRuntimePoolSet(cmd, []string{"claude · ПОДПИСКИ"}); err != nil {
 		t.Fatalf("set: %v", err)
 	}
-	put := (*got)[1]
-	if put.Method != http.MethodPut || !reflect.DeepEqual(put.Body["subscriptions"], []any{"claude-3", "claude-second", "claude-main"}) {
+	put := (*got)[2]
+	if put.Method != http.MethodPatch || put.Body["revision"] != float64(7) || !reflect.DeepEqual(put.Body["subscriptions"], []any{"claude-3", "claude-second", "claude-main"}) {
 		t.Fatalf("put: %+v", put)
 	}
 }

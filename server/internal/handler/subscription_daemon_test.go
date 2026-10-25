@@ -152,7 +152,7 @@ func TestSubscriptionLoginThroughHeartbeat(t *testing.T) {
 
 func TestSubscriptionDiscrepancies(t *testing.T) {
 	h := subscriptionTestHandler(t)
-	profileID, _ := poolFixture(t, h, "subtest-disc")
+	profileID, runtimeID := poolFixture(t, h, "subtest-disc")
 	createSubtestSubscription(t, h, map[string]any{"key": "subtest-idle", "provider": "codex"})
 	empty := callSubscription(t, h.CreateRuntimePool, newRequest("POST", "/api/runtime-pools", map[string]any{
 		"display_name": "Subtest empty pool", "runtime_type": "codex", "workspace_ids": []string{testWorkspaceID},
@@ -179,7 +179,24 @@ func TestSubscriptionDiscrepancies(t *testing.T) {
 	if !kinds["missing"] || !kinds["unused"] || !kinds["empty"] {
 		t.Fatalf("discrepancies %v: %v", kinds, out)
 	}
-	_ = profileID
+	if strings.Contains(subtestJSON(out), "~/.config/") || strings.Contains(subtestJSON(out), "никто") {
+		t.Fatalf("discrepancies leak paths or mixed-language prose: %v", out)
+	}
+	member := subtestOutsider(t)
+	memberOut := callSubscription(t, h.ListSubscriptionDiscrepancies, newRequestAs(member, "GET", "/x", nil), http.StatusOK)
+	if strings.Contains(subtestJSON(memberOut), "host-1") || strings.Contains(subtestJSON(memberOut), "credential_missing") {
+		t.Fatalf("member sees private host diagnostics: %v", memberOut)
+	}
+	privateAgent := dbfx.Agent(t, "subtest hidden disabled agent", runtimeID, testutil.Cols{"permission_mode": "private", "owner_id": testUserID})
+	dbfx.Exec(t, `UPDATE runtime_profile SET enabled = false WHERE id = $1`, profileID)
+	memberOut = callSubscription(t, h.ListSubscriptionDiscrepancies, newRequestAs(member, "GET", "/x", nil), http.StatusOK)
+	if strings.Contains(subtestJSON(memberOut), privateAgent) || strings.Contains(subtestJSON(memberOut), "subtest hidden disabled agent") {
+		t.Fatalf("discrepancies reveal a private agent: %v", memberOut)
+	}
+	adminOut := callSubscription(t, h.ListSubscriptionDiscrepancies, newRequest("GET", "/x", nil), http.StatusOK)
+	if !strings.Contains(subtestJSON(adminOut), privateAgent) {
+		t.Fatalf("private agent owner lost their diagnostic: %v", adminOut)
+	}
 }
 
 func subtestJSON(v any) string {
@@ -239,15 +256,18 @@ func TestDaemonUsageParksTwoSubscriptionPoolUntilEarliestReset(t *testing.T) {
 
 func TestTaskFailRequestDecodesQuotaReset(t *testing.T) {
 	var req TaskFailRequest
-	if err := json.Unmarshal([]byte(`{"error":"usage limit","quota_reset_at":"2026-10-20T20:30:00Z"}`), &req); err != nil {
+	if err := json.Unmarshal([]byte(`{"error":"arbitrary text","refusal_code":"agent_cap_refusal","quota_reset_at":"2026-10-20T20:30:00Z"}`), &req); err != nil {
 		t.Fatal(err)
+	}
+	if req.RefusalCode != "agent_cap_refusal" {
+		t.Fatalf("refusal_code: %s", req.RefusalCode)
 	}
 	if req.QuotaResetAt == nil || !req.QuotaResetAt.Equal(time.Date(2026, 10, 20, 20, 30, 0, 0, time.UTC)) {
 		t.Fatalf("quota_reset_at: %v", req.QuotaResetAt)
 	}
 	req = TaskFailRequest{}
 	json.Unmarshal([]byte(`{"error":"x"}`), &req)
-	if req.QuotaResetAt != nil {
+	if req.QuotaResetAt != nil || req.RefusalCode != "" {
 		t.Fatal("older daemons send none")
 	}
 }

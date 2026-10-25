@@ -185,6 +185,16 @@ export class TestApiClient {
     }
   }
 
+  /** Always create a fresh workspace when a test reuses an admin identity. */
+  async createWorkspace(name: string, slug: string): Promise<TestWorkspace> {
+    const res = await this.authedFetch("/api/workspaces", { method: "POST", body: JSON.stringify({ name, slug }) });
+    if (!res.ok) throw new Error(`create workspace failed: ${res.status}`);
+    const workspace = (await res.json()) as TestWorkspace;
+    this.workspaceId = workspace.id;
+    this.workspaceSlug = workspace.slug;
+    return workspace;
+  }
+
   /** Create a project and register it for cleanup. */
   async createProject(title: string, opts?: Record<string, unknown>) {
     const res = await this.authedFetch("/api/projects", {
@@ -358,6 +368,31 @@ export class TestApiClient {
         [this.workspaceId, name, this.email],
       );
       return result.rows[0].id as string;
+    } finally {
+      await client.end();
+    }
+  }
+
+  /** A historical run for diagnostic UI checks; never dispatches an agent. */
+  async seedCompletedRun(issueId: string, runtimeId: string, { withChoice = true } = {}): Promise<void> {
+    if (!this.workspaceId || !this.email) throw new Error("Select a workspace before seeding a run");
+    const client = new pg.Client(DATABASE_URL);
+    await client.connect();
+    try {
+      const agent = await client.query(
+        `INSERT INTO agent (workspace_id, name, runtime_mode, runtime_id, owner_id)
+         SELECT $1, $4, 'local', $2, id FROM "user" WHERE email = $3 RETURNING id`,
+        [this.workspaceId, runtimeId, this.email, withChoice ? "Diagnostic agent" : "Fields agent"],
+      );
+      await client.query(
+        `INSERT INTO agent_task_queue (agent_id, issue_id, runtime_id, status, started_at, completed_at, model_choice, account_fact)
+         VALUES ($1, $2, $3, 'completed', now() - interval '1 minute', now(), $4, $5)`,
+        [agent.rows[0].id, issueId, runtimeId,
+          !withChoice ? null : JSON.stringify({ source: "agent_fields", reason: "primary", position: 1,
+            chosen: { position: 1, runtime_id: runtimeId, model: "claude-sonnet-4-6", thinking_level: "high", custom_args: null },
+            rows: [{ position: 1, runtime_id: runtimeId, runtime_name: "Diagnostic runtime", provider: "claude", model: "claude-sonnet-4-6", thinking_level: "high", custom_args: null, chosen: true, state: "available" }] }),
+          JSON.stringify({ subscription_id: "00000000-0000-4000-8000-000000000001", subscription_key: "diagnostic-account", account_group: "", pool_id: "00000000-0000-4000-8000-000000000002", pool_revision: 12, daemon_id: "fixture", confirmed_at: new Date().toISOString() })],
+      );
     } finally {
       await client.end();
     }

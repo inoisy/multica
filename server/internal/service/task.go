@@ -5062,7 +5062,7 @@ func (s *TaskService) FailTaskWithTransition(ctx context.Context, taskID pgtype.
 // FailTaskWithQuotaReset is FailTaskWithTransition with the reset the daemon
 // reported for a refused run: a quota repeat parks the runtime until then
 // rather than until a time read from the error text. Zero: read the text.
-func (s *TaskService) FailTaskWithQuotaReset(ctx context.Context, taskID pgtype.UUID, errMsg, sessionID, workDir, branchName, failureReason string, sessionRolloutMissing bool, retiredSessionID, durableWorkDir string, quotaResetAt time.Time) (*db.AgentTaskQueue, bool, error) {
+func (s *TaskService) FailTaskWithQuotaReset(ctx context.Context, taskID pgtype.UUID, errMsg, sessionID, workDir, branchName, failureReason string, sessionRolloutMissing bool, retiredSessionID, durableWorkDir string, quotaResetAt time.Time, refusalCodes ...string) (*db.AgentTaskQueue, bool, error) {
 	// Strip bytes PostgreSQL cannot store before anything else reads errMsg, so
 	// the classifier, the transaction and every downstream consumer see the one
 	// text we will actually persist (GH #7098). Kept at the service boundary
@@ -5089,6 +5089,9 @@ func (s *TaskService) FailTaskWithQuotaReset(ctx context.Context, taskID pgtype.
 	// is normalised too, and before the retry pre-compute below so the upgraded
 	// reason is what decides retry eligibility.
 	failureReason = taskfailure.NormalizeDaemonReason(failureReason, errMsg).String()
+	if len(refusalCodes) > 0 && protocol.IsAccountRefusalCode(refusalCodes[0]) {
+		failureReason = taskfailure.ReasonAgentProviderQuotaLimit.String()
+	}
 
 	// Pre-compute the auto-retry so the retry child can be created inside the
 	// SAME transaction as the fail (MUL-4351). Doing it atomically closes the
@@ -5256,7 +5259,7 @@ func (s *TaskService) FailTaskWithQuotaReset(ctx context.Context, taskID pgtype.
 		// can never abort this transaction — which also carries the parent's
 		// failed status.
 		if quotaRetry {
-			if err := markRuntimeUnavailable(ctx, qtx, t, errMsg, quotaResetAt, time.Now()); err != nil {
+			if err := markRuntimeUnavailable(ctx, qtx, t, errMsg, quotaResetAt, time.Now(), refusalCodes...); err != nil {
 				return fmt.Errorf("mark runtime unavailable: %w", err)
 			}
 		}

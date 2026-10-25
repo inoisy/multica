@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -42,11 +43,15 @@ func runDiff(args []string) (bool, error) {
 	fs := flag.NewFlagSet("diff", flag.ExitOnError)
 	beforePath := fs.String("before", "", "snapshot of the original algorithm")
 	afterPath := fs.String("after", "", "snapshot of the new algorithm")
+	accept := fs.String("accept", "", "accepted behavior change: "+acceptFullWindow)
 	if err := fs.Parse(args); err != nil {
 		return false, err
 	}
 	if *beforePath == "" || *afterPath == "" {
 		return false, fmt.Errorf("--before and --after are required")
+	}
+	if *accept != "" && *accept != acceptFullWindow {
+		return false, fmt.Errorf("unknown --accept %q", *accept)
 	}
 	before, err := readSnapshot(*beforePath)
 	if err != nil {
@@ -61,12 +66,126 @@ func runDiff(args []string) (bool, error) {
 		before.Manifest.Schema, before.Manifest.Now, before.Manifest.Recomputed, before.Manifest.Counts, before.Manifest.ContextSetSHA)
 	fmt.Printf("after:  schema=%s now=%s recomputed=%t counts=%v contexts_sha256=%s\n",
 		after.Manifest.Schema, after.Manifest.Now, after.Manifest.Recomputed, after.Manifest.Counts, after.Manifest.ContextSetSHA)
+	accepted := map[string]bool{}
+	if *accept == acceptFullWindow {
+		accepted = fullWindowContexts(before, after, diffs)
+	}
+	remaining := 0
+	for _, d := range diffs {
+		if !accepted[d.Context] {
+			remaining++
+		}
+	}
 	fmt.Printf("compared %d contexts, %d normalized (agent_list -> agent_profile + profile_personal), %d differences\n",
 		len(before.Contexts), normalized, len(diffs))
-	for _, d := range diffs {
-		fmt.Printf("DIFF %s %s: before=%s after=%s\n", anonKey(d.Context), d.Path, d.Before, d.After)
+	if *accept != "" {
+		fmt.Printf("accepted %s: %d contexts, %d differences; %d differences remain\n",
+			*accept, len(accepted), len(diffs)-remaining, remaining)
 	}
-	return len(diffs) == 0, nil
+	for _, d := range diffs {
+		tag := "DIFF"
+		if accepted[d.Context] {
+			tag = "ACCEPTED"
+		}
+		fmt.Printf("%s %s %s: before=%s after=%s\n", tag, anonKey(d.Context), d.Path, d.Before, d.After)
+	}
+	return remaining == 0, nil
+}
+
+// acceptFullWindow is the one behavior change of the switch that a rollout
+// accepts (STT-424): a fresh usage snapshot at 100 % of a window counts as a
+// spent window even without the provider's limit flag. The original
+// algorithm read every runtime refusal, so a row it had available and the new
+// one limits with provider_limit can only come from that rule.
+const acceptFullWindow = "provider-full-window"
+
+var (
+	fullWindowRowPath = regexp.MustCompile(`^choice\.rows\[(\d+)\]\.(state|until)$`)
+	// What follows in the choice when rows stop being available.
+	fullWindowFollowPath = regexp.MustCompile(`^choice\.(rows\[\d+\]\.chosen|chosen(\..+)?|position|reason|wait_until)$`)
+)
+
+// fullWindowContexts lists the contexts whose every difference is that change.
+func fullWindowContexts(before, after snapshot, diffs []difference) map[string]bool {
+	byContext := map[string][]difference{}
+	for _, d := range diffs {
+		byContext[d.Context] = append(byContext[d.Context], d)
+	}
+	b, a := map[string]contextResult{}, map[string]contextResult{}
+	for _, c := range before.Contexts {
+		b[c.Key] = c
+	}
+	for _, c := range after.Contexts {
+		a[c.Key] = c
+	}
+	out := map[string]bool{}
+	for key, ds := range byContext {
+		bc, inBefore := b[key]
+		ac, inAfter := a[key]
+		if inBefore && inAfter && fullWindowContext(bc, ac, ds) {
+			out[key] = true
+		}
+	}
+	return out
+}
+
+func fullWindowContext(bc, ac contextResult, diffs []difference) bool {
+	if bc.Choice == nil || ac.Choice == nil || bc.Error != "" || ac.Error != "" || bc.Archived != ac.Archived {
+		return false
+	}
+	b, a := bc.Choice, ac.Choice
+	if len(b.Rows) != len(a.Rows) {
+		return false
+	}
+	flipped := map[int]bool{}
+	for i := range b.Rows {
+		if b.Rows[i].State == "available" && a.Rows[i].State == "limited" &&
+			a.Rows[i].ReasonCode == "provider_limit" && a.Rows[i].Until != nil {
+			flipped[i] = true
+		}
+	}
+	if len(flipped) == 0 {
+		return false
+	}
+	for _, d := range diffs {
+		if m := fullWindowRowPath.FindStringSubmatch(d.Path); m != nil {
+			if i, _ := strconv.Atoi(m[1]); !flipped[i] {
+				return false
+			}
+			continue
+		}
+		if !fullWindowFollowPath.MatchString(d.Path) {
+			return false
+		}
+	}
+	// The new choice never runs a row the original one held back.
+	for i, r := range a.Rows {
+		if r.Chosen && (flipped[i] || b.Rows[i].State != "available") {
+			return false
+		}
+	}
+	switch a.Reason {
+	case "primary", "fallback_row":
+		if a.Chosen == nil {
+			return false
+		}
+	case "all_unavailable":
+		if a.Chosen != nil {
+			return false
+		}
+	default:
+		return false
+	}
+	// A new wait ends when one of the newly spent windows resets.
+	if a.WaitUntil != nil && (b.WaitUntil == nil || *a.WaitUntil != *b.WaitUntil) {
+		for i := range flipped {
+			if *a.Rows[i].Until == *a.WaitUntil {
+				return true
+			}
+		}
+		return false
+	}
+	return true
 }
 
 func compareSnapshots(before, after snapshot) ([]difference, int) {
@@ -131,6 +250,13 @@ func compareSnapshots(before, after snapshot) ([]difference, int) {
 			continue
 		}
 		bch, ach := *bc.Choice, *ac.Choice
+		ach.Rows = append([]row(nil), ach.Rows...)
+		bch.Rows = append([]row(nil), bch.Rows...)
+		for i := range bch.Rows {
+			if i < len(ach.Rows) && (bch.Rows[i].ReasonCode == "" || ach.Rows[i].ReasonCode == "") {
+				bch.Rows[i].ReasonCode, ach.Rows[i].ReasonCode = "", ""
+			}
+		}
 		if normalizePersonal(&bch, &ach) {
 			normalized++
 		}

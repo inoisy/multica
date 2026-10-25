@@ -724,3 +724,30 @@ func TestModelChoiceReturnsAStrayAcceptRun(t *testing.T) {
 		t.Fatalf("accept claim after the return: %+v", claimed)
 	}
 }
+
+func TestStructuredQuotaRefusalStoresCodeAndRetriesWithoutText(t *testing.T) {
+	for _, code := range []string{UnavailableAgentCapRefusal, UnavailableDisabledRefusal, UnavailableProviderLimit} {
+		t.Run(code, func(t *testing.T) {
+			r := newModelClaimRig(t)
+			a := r.agent("structured refusal", r.strong)
+			task := r.enqueue(a, pgtype.UUID{})
+			if r.claim("codex") == nil {
+				t.Fatal("no claim")
+			}
+			reset := time.Now().UTC().Add(20 * time.Minute).Truncate(time.Second)
+			failed, transitioned, err := r.svc.FailTaskWithQuotaReset(r.ctx, task.ID, "arbitrary translated text", "", "", "", "agent_error.unknown", false, "", "", reset, code)
+			if err != nil || !transitioned || failed.Status != "failed" {
+				t.Fatalf("fail %+v %v %v", failed, transitioned, err)
+			}
+			var stored string
+			var until time.Time
+			r.fx.QueryRow(t, "SELECT reason_code, until FROM runtime_unavailable WHERE runtime_id=$1", r.rt["codex"]).Scan(&stored, &until)
+			if stored != code || !until.Equal(reset) {
+				t.Fatalf("stored %s %v", stored, until)
+			}
+			if n := r.count("SELECT count(*) FROM agent_task_queue WHERE retry_of_task_id=$1", task.ID); n != 1 {
+				t.Fatalf("retries %d", n)
+			}
+		})
+	}
+}
