@@ -4,7 +4,7 @@ from pathlib import Path
 import tempfile
 from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 
 spec = importlib.util.spec_from_file_location("deploy", Path(__file__).with_name("deploy.py"))
@@ -107,6 +107,40 @@ class InstallRehearsalTest(unittest.TestCase):
         self.assertRegex(str(error), "rollback_preview_diff has unaccepted")
         self.assertEqual(rolled_back, [True])
         self.assertEqual(state["rehearsal"]["rollback_preview_diff"], "DIFF agent/x choice.reason\n")
+
+
+class SmokeTest(unittest.TestCase):
+    """wait() gates both install and rollback; it must pass on old and new web."""
+
+    def probe(self, commit):
+        package = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        (package / "manifest.json").write_text(json.dumps({"revision": REVISION}))
+        release = deploy.Release(package, package / "compose.yml", "http://api", "http://web")
+        urls = []
+
+        def urlopen(url, timeout):
+            urls.append(url)
+            response = MagicMock(status=200)
+            response.__enter__.return_value = response
+            return response
+
+        with patch.object(release, "health", return_value={"status": "ok", "commit": commit}), \
+             patch.object(deploy.urllib.request, "urlopen", side_effect=urlopen), \
+             patch.object(deploy.time, "sleep"):
+            try:
+                return release.wait(REVISION), urls
+            except RuntimeError as exc:
+                return exc, urls
+
+    def test_reserved_workspace_paths_are_not_probed(self):
+        result, urls = self.probe(REVISION[:9])
+        self.assertEqual(result["commit"], REVISION[:9])
+        self.assertEqual(urls, ["http://web/login"])
+
+    def test_timeout_names_the_last_failure(self):
+        result, urls = self.probe("c" * 9)
+        self.assertRegex(str(result), "smoke timeout: wrong backend revision c{9}")
+        self.assertEqual(urls, [])
 
 
 if __name__ == "__main__":

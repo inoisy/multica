@@ -111,6 +111,58 @@ class ResumeTest(unittest.TestCase):
         release.assert_not_called()
 
 
+class RetryAfterRollbackTest(unittest.TestCase):
+    def release(self, versions=("596",), running="old"):
+        state = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        (state / "rehearsal-data").mkdir()
+        (state / "database.dump").write_bytes(b"attempt 1")
+        old = {"backend": "old-b", "frontend": "old-f"}
+        r = SimpleNamespace(
+            state=state, manifest={"revision": REV, "previous_revision": "b" * 40},
+            data={"phase": "migrating", "protected": {"daemon_pid": "42"}, "old_images": old,
+                  "old_containers": {"backend": "c1", "frontend": "c2", "postgres": "pg"},
+                  "backup": {"versions": ["596"], "path": str(state / "database.dump")},
+                  "rehearsal": {"schema_roundtrip": True}, "snapshot_time": "t", "rehearsal_container": "copy"},
+            save=MagicMock(), wait=MagicMock(), versions=MagicMock(return_value=list(versions)),
+            protected=MagicMock(return_value={"daemon_pid": "42"}),
+            cid=MagicMock(side_effect=lambda service: "new-" + service),
+            inspect=MagicMock(side_effect=lambda cid: {"Image": old[cid[4:]] if running == "old" else "new"}),
+        )
+        return r
+
+    def test_verified_rollback_returns_to_completed_build(self):
+        r = self.release()
+        resume.reset_after_rollback(r)
+        self.assertEqual(r.data["phase"], "building")
+        self.assertNotIn("backup", r.data)
+        self.assertNotIn("rehearsal", r.data)
+        self.assertEqual(r.data["old_containers"], {"backend": "new-backend", "frontend": "new-frontend", "postgres": "pg"})
+        self.assertFalse((r.state / "rehearsal-data").exists())
+        self.assertEqual((r.state / "database.attempt-1.dump").read_bytes(), b"attempt 1")
+        self.assertEqual(r.data["attempts"][0]["backup"]["path"], str(r.state / "database.attempt-1.dump"))
+        r.wait.assert_called_once_with("b" * 40)
+        r.save.assert_called_once()
+
+    def test_unverified_rollback_changes_nothing(self):
+        for kwargs in ({"versions": ("596", "612")}, {"running": "new"}):
+            with self.subTest(**kwargs):
+                r = self.release(**kwargs)
+                with self.assertRaises(RuntimeError):
+                    resume.reset_after_rollback(r)
+                self.assertEqual(r.data["phase"], "migrating")
+                self.assertTrue((r.state / "database.dump").exists())
+                r.save.assert_not_called()
+
+    def test_failure_is_logged_before_rollback(self):
+        r = ResumeTest.release(self, "building")
+        r.migrate.side_effect = RuntimeError("migration 607 failed")
+        with patch.object(resume, "validate_images"), patch("sys.stderr", new_callable=io.StringIO) as err, \
+             self.assertRaises(RuntimeError):
+            resume.resume(r)
+        self.assertIn("rolling back: migration 607 failed", err.getvalue())
+        r.rollback.assert_called_once_with(automatic=True)
+
+
 class ImageValidationTest(unittest.TestCase):
     def test_saved_images_and_rollback_files_must_match_the_pinned_source(self):
         state = Path(self.enterContext(tempfile.TemporaryDirectory()))
