@@ -918,6 +918,51 @@ describe("AgentTranscriptDialog — delivered branch", () => {
   });
 });
 
+// The account of a run is a fact of the moment it started: the daemon's
+// confirmation, as saved. A run without one — an older daemon, or one from
+// before confirmation existed — says "unknown" instead of guessing from today's pool.
+describe("AgentTranscriptDialog — model and account of the run", () => {
+  const picked = {
+    source: "agent_profile", profile_id: "p1", profile_name: "Strong", issue_id: "", excluded_family: "", reason: "fallback_row", position: 2,
+    chosen: null, runtime_name: "claude", provider: "claude", exhausted_profiles: [], wait_until: null, wait_reason_code: null,
+    wait_until_estimated: false, profile_personal: false,
+    rows: [
+      { position: 1, runtime_id: "rt-1", runtime_name: "codex", provider: "codex", model: "sol", thinking_level: "high", custom_args: null, state: "limited", until: "2026-06-08T09:00:00Z", reason_code: "agent_cap", until_estimated: false, chosen: false },
+      { position: 2, runtime_id: "rt-2", runtime_name: "claude", provider: "claude", model: "opus", thinking_level: "", custom_args: null, state: "available", until: null, reason_code: null, until_estimated: false, chosen: true },
+    ],
+  };
+  const fact = { subscription_id: "s1", subscription_key: "claude-3", account_group: "g", pool_id: "pool1", pool_revision: 12, daemon_id: "d1", confirmed_at: "2026-06-08T08:00:00Z" };
+
+  it("shows the confirmed account with the pool version of that moment", async () => {
+    renderDialog(items, { task: { ...baseTask, model_choice: picked, account_fact: fact } });
+    await userEvent.click(screen.getByRole("button", { name: "Run details" }));
+    expect(screen.getByText("claude·opus")).toBeInTheDocument();
+    expect(screen.getByText(/claude-3 · confirmed by the daemon · pool version 12 at the time of the run/)).toBeInTheDocument();
+    expect(screen.getByText(/row 1 unavailable \(Agent limit reached/)).toBeInTheDocument();
+  });
+
+  it("says unknown when the run has no confirmed account", async () => {
+    renderDialog(items, { task: { ...baseTask, model_choice: picked, account_fact: null } });
+    await userEvent.click(screen.getByRole("button", { name: "Run details" }));
+    expect(screen.getByText("unknown")).toBeInTheDocument();
+  });
+
+  it("shows the confirmed account of a run on plain agent fields", async () => {
+    renderDialog(items, { task: { ...baseTask, model_choice: null, account_fact: fact } });
+    await userEvent.click(screen.getByRole("button", { name: "Run details" }));
+    expect(screen.getByText("Account")).toBeInTheDocument();
+    expect(screen.getByText(/claude-3 · confirmed by the daemon · pool version 12/)).toBeInTheDocument();
+    expect(screen.queryByText("Choice")).not.toBeInTheDocument();
+  });
+
+  it("shows neither row for a run that never chose a model", async () => {
+    renderDialog(items, { task: { ...baseTask, branch_name: "agent/j/abc12345" } });
+    await userEvent.click(screen.getByRole("button", { name: "Run details" }));
+    expect(screen.queryByText("Account")).not.toBeInTheDocument();
+    expect(screen.queryByText("Choice")).not.toBeInTheDocument();
+  });
+});
+
 // A server-cancelled run (worktree claim gate, preserved-work delivery) must
 // explain itself: the localized reason rides the status badge and heads the
 // "Reason" row in Run details, while the raw persisted diagnostic sits under

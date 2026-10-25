@@ -70,7 +70,10 @@ type row struct {
 	ProfileID string  `json:"profile_id,omitempty"`
 	State     string  `json:"state"`
 	Until     *string `json:"until,omitempty"`
-	Chosen    bool    `json:"chosen"`
+	// ReasonCode is written only by the algorithm after the switch; the
+	// original one has no such field, so it is compared only when both have it.
+	ReasonCode string `json:"reason_code,omitempty"`
+	Chosen     bool   `json:"chosen"`
 }
 
 type choice struct {
@@ -100,6 +103,19 @@ func toChoice(c service.ModelChoice) (*choice, error) {
 	var out choice
 	if err := json.Unmarshal(raw, &out); err != nil {
 		return nil, err
+	}
+	// API presentation uses seconds; the acceptance comparison must retain the
+	// original precision, including subsecond differences between algorithms.
+	preciseTime := func(value *time.Time) *string {
+		if value == nil {
+			return nil
+		}
+		text := value.UTC().Format(time.RFC3339Nano)
+		return &text
+	}
+	out.WaitUntil = preciseTime(c.WaitUntil)
+	for i := range out.Rows {
+		out.Rows[i].Until = preciseTime(c.Rows[i].Until)
 	}
 	if out.Rows == nil {
 		out.Rows = []row{}

@@ -2035,6 +2035,62 @@ const TaskUsageSchema = z.object({
   cost_usd_ticks: z.number().optional(),
 }).loose();
 
+// Model profiles (server-side model choice). Enum-like fields stay strings so
+// a newer server's values still parse; every optional field has a default.
+export const ModelOptionSchema = z.object({
+  position: z.number().int().default(0),
+  runtime_id: z.string(),
+  model: z.string().default(""),
+  thinking_level: z.string().default(""),
+  custom_args: z.array(z.string()).nullish().catch(null).transform((v) => v ?? null),
+});
+
+const optionalCode = z.string().nullish().catch(null).transform((v) => v || null);
+const estimateFlag = z.boolean().nullish().catch(false).transform((v) => v === true);
+
+export const ModelRowStateSchema = ModelOptionSchema.extend({
+  profile_id: z.string().optional().catch(undefined),
+  runtime_name: z.string().default(""),
+  provider: z.string().default(""),
+  state: z.string().default("available"),
+  until: z.string().nullish().catch(null).transform((v) => v ?? null),
+  reason_code: optionalCode,
+  until_estimated: estimateFlag,
+  chosen: z.boolean().default(false),
+});
+
+export const ModelChoiceSchema = z.object({
+  source: z.string().default("agent_fields"),
+  profile_id: z.string().default(""),
+  profile_name: z.string().default(""),
+  issue_id: z.string().default(""),
+  excluded_family: z.string().nullish().catch("").transform((v) => v ?? ""),
+  reason: z.string().default("no_models"),
+  position: z.number().int().default(0),
+  chosen: ModelOptionSchema.nullish().catch(null).transform((v) => v ?? null),
+  runtime_name: z.string().default(""),
+  provider: z.string().default(""),
+  exhausted_profiles: z.array(z.string()).nullish().catch([]).transform((v) => v ?? []),
+  wait_until: z.string().nullish().catch(null).transform((v) => v ?? null),
+  wait_reason_code: optionalCode,
+  wait_until_estimated: estimateFlag,
+  profile_personal: estimateFlag,
+  rows: z.array(ModelRowStateSchema).nullish().catch([]).transform((v) => v ?? []),
+});
+
+// The account a run confirmed with the daemon. A run from before the
+// confirmation, or on an older daemon, has none: the interface says "unknown".
+export const AccountFactSchema = z.object({
+  subscription_id: z.string(),
+  subscription_key: z.string(),
+  account_group: z.string().nullish().catch("").transform((v) => v ?? ""),
+  pool_id: z.string().nullish().catch("").transform((v) => v ?? ""),
+  pool_revision: z.number().int().nullish().catch(0).transform((v) => v ?? 0),
+  daemon_id: z.string().nullish().catch("").transform((v) => v ?? ""),
+  confirmed_at: z.string().nullish().catch("").transform((v) => v ?? ""),
+});
+const optionalAccountFact = AccountFactSchema.nullish().catch(null).transform((v) => v ?? null);
+
 export const AgentTaskSchema = z.object({
   wakeup_id: z.string().optional().catch(undefined),
   cancelled_by_comment_change: z.boolean().optional().catch(undefined),
@@ -2079,6 +2135,10 @@ export const AgentTaskSchema = z.object({
   // `.catch(undefined)` collapses a bad array to "no usage recorded", which
   // the UI already renders as an em dash.
   usage: z.array(TaskUsageSchema).optional().catch(undefined),
+  // What the claim chose for the run, and the account the daemon confirmed.
+  // Both are stored facts of the moment of the run; absent means unknown.
+  model_choice: ModelChoiceSchema.nullish().catch(null).transform((v) => v ?? null),
+  account_fact: optionalAccountFact,
 }).loose();
 
 // Outcome counts are required: every backend that serves this endpoint
@@ -3838,6 +3898,7 @@ export const RuntimeProfileSchema = z
     spend_order: z.string().nullish().catch("first").transform((v) => v || "first"),
     share_key: z.string().nullish().catch(null).transform((v) => v || null),
     all_workspaces: z.boolean().nullish().catch(false).transform((v) => v === true),
+    pool_id: z.string().nullish().catch(null).transform((v) => v || null),
   })
   .passthrough()
   .transform((profile) => ({
@@ -3857,40 +3918,6 @@ export const CustomPagesStateSchema = z.object({
   can_edit: z.boolean().catch(false),
 });
 
-// Model lists (server-side model choice). Enum-like fields stay strings so a
-// newer server's values still parse; every optional field has a default.
-export const ModelOptionSchema = z.object({
-  position: z.number().int().default(0),
-  runtime_id: z.string(),
-  model: z.string().default(""),
-  thinking_level: z.string().default(""),
-  custom_args: z.array(z.string()).nullish().catch(null).transform((v) => v ?? null),
-});
-
-export const ModelRowStateSchema = ModelOptionSchema.extend({
-  profile_id: z.string().optional().catch(undefined),
-  runtime_name: z.string().default(""),
-  provider: z.string().default(""),
-  state: z.string().default("available"),
-  until: z.string().nullish().catch(null).transform((v) => v ?? null),
-  chosen: z.boolean().default(false),
-});
-
-export const ModelChoiceSchema = z.object({
-  source: z.string().default("agent_fields"),
-  profile_id: z.string().default(""),
-  profile_name: z.string().default(""),
-  issue_id: z.string().default(""),
-  reason: z.string().default("no_models"),
-  position: z.number().int().default(0),
-  chosen: ModelOptionSchema.nullish().catch(null).transform((v) => v ?? null),
-  runtime_name: z.string().default(""),
-  provider: z.string().default(""),
-  exhausted_profiles: z.array(z.string()).nullish().catch([]).transform((v) => v ?? []),
-  wait_until: z.string().nullish().catch(null).transform((v) => v ?? null),
-  rows: z.array(ModelRowStateSchema).nullish().catch([]).transform((v) => v ?? []),
-});
-
 export const ModelRefSchema = z.object({
   id: z.string(),
   name: z.string().default(""),
@@ -3904,10 +3931,26 @@ export const ModelProfileSchema = z.object({
   when_exhausted_profile_id: z.string().nullish().catch(null).transform((v) => v ?? null),
   options: z.array(ModelRowStateSchema).default([]),
   agents: z.array(ModelRefSchema).default([]),
-  own_list_agents: z.array(ModelRefSchema).default([]),
+  personal_profiles: z
+    .array(
+      z.object({
+        profile_id: z.string(),
+        agent: ModelRefSchema,
+        matches_base: estimateFlag,
+        diff_rows: z.array(z.number().int()).nullish().catch([]).transform((v) => v ?? []),
+      }),
+    )
+    .nullish()
+    .catch([])
+    .transform((v) => v ?? []),
   open_issues: z.array(ModelRefSchema).default([]),
   fallback_of: z.array(ModelRefSchema).default([]),
   updated_at: z.string().default(""),
+  personal: estimateFlag,
+  owner_agent: ModelRefSchema.nullish().catch(null).transform((v) => v ?? null),
+  based_on: ModelRefSchema.nullish().catch(null).transform((v) => v ?? null),
+  matches_base: z.boolean().nullish().catch(null).transform((v) => v ?? null),
+  diff_rows: z.array(z.number().int()).nullish().catch([]).transform((v) => v ?? []),
 });
 
 export const ModelProfileChangeSchema = z.object({
@@ -3926,6 +3969,7 @@ export const AgentModelChoiceEntrySchema = z.object({
   issue_title: z.string().default(""),
   position: z.number().int().default(0),
   choice: ModelChoiceSchema.nullish().catch(null).transform((v) => v ?? null),
+  account_fact: optionalAccountFact,
   created_at: z.string().default(""),
 });
 
@@ -3934,6 +3978,9 @@ export const RuntimeUnavailableSchema = z.object({
   runtime_name: z.string().default(""),
   until: z.string(),
   reason: z.string().default(""),
+  reason_code: optionalCode,
+  until_estimated: estimateFlag,
+  computed: estimateFlag,
   task_id: z.string().nullish().transform((v) => v ?? null),
   created_at: z.string().default(""),
 });
@@ -3945,6 +3992,14 @@ export const AgentModelsSchema = z.object({
   profile_name: z.string().default(""),
   profile_agents: z.number().int().nonnegative().default(0),
   profile_issues: z.number().int().nonnegative().default(0),
+  // An unknown mode from a newer server reads as "fields": no profile.
+  mode: z.enum(["fields", "profile", "personal", "single"]).catch("fields"),
+  personal_profile_id: z.string().nullish().catch(null).transform((v) => v ?? null),
+  base_profile_id: z.string().nullish().catch(null).transform((v) => v ?? null),
+  base_profile_name: z.string().nullish().catch("").transform((v) => v ?? ""),
+  matches_base: z.boolean().nullish().catch(null).transform((v) => v ?? null),
+  diff_rows: z.array(z.number().int()).nullish().catch([]).transform((v) => v ?? []),
+  personal_rows: z.array(ModelRowStateSchema).nullish().catch([]).transform((v) => v ?? []),
   own_list: z.boolean().default(false),
   options: z.array(ModelOptionSchema).default([]),
   profile_rows: z.array(ModelRowStateSchema).default([]),
@@ -4013,7 +4068,6 @@ export const SubscriptionSchema = z
     credential_path: stringOrEmpty,
     windows: z.array(z.string()).nullish().catch([]).transform((v) => v ?? []),
     caps: percentMap,
-    reserve: z.number().nullish().catch(0).transform((v) => v ?? 0),
     effective_caps: percentMap,
     account_group: stringOrEmpty,
     disabled_until: nullableString,
@@ -4105,6 +4159,7 @@ export const DeleteSubscriptionResultSchema = z.object({
 
 export const RuntimeProfileSubscriptionsSchema = z.object({
   runtime_profile: RuntimeProfileSchema,
+  pool_id: z.string().nullish().catch(null).transform((v) => v || null),
   spend_order: z.string().nullish().catch("first").transform((v) => v || "first"),
   subscriptions: z.array(SubscriptionSchema),
   missing: z.array(z.string()).nullish().catch([]).transform((v) => v ?? []),
@@ -4121,8 +4176,67 @@ export const RuntimeProfileSubscriptionsSchema = z.object({
     ),
 });
 
-export const CreateRuntimePoolResultSchema = z.object({
-  share_key: stringOrEmpty,
-  runtime_profiles: z.array(RuntimeProfileSchema).nullish().catch([]).transform((v) => v ?? []),
-  skipped_workspace_ids: z.array(z.string()).nullish().catch([]).transform((v) => v ?? []),
+// A verdict carries the reason as a code only; an unknown code stays a string.
+const availabilityVerdictShape = {
+  blocked: z.boolean().nullish().catch(false).transform((v) => v === true),
+  usable: z.boolean().nullish().catch(false).transform((v) => v === true),
+  reason_code: optionalCode,
+  until: nullableString,
+  until_estimated: estimateFlag,
+};
+
+export const AvailabilityVerdictSchema = z.object(availabilityVerdictShape);
+
+export const PoolAccountSchema = z.object({
+  id: z.string(),
+  key: z.string(),
+  title: stringOrEmpty,
+  provider: stringOrEmpty,
+  account_group: stringOrEmpty,
+  position: z.number().int().nullish().catch(0).transform((v) => v ?? 0),
+  ...availabilityVerdictShape,
+});
+
+export const PoolSchema = z
+  .object({
+    id: z.string(),
+    name: stringOrEmpty,
+    runtime_type: z.string().nullish().catch("claude"),
+    description: stringOrEmpty,
+    spend_order: z.string().nullish().catch("first"),
+    all_workspaces: estimateFlag,
+    revision: z.number().int().nullish().catch(0).transform((v) => v ?? 0),
+    subscriptions: z.array(PoolAccountSchema).nullish().catch([]).transform((v) => v ?? []),
+    workspace_ids: z.array(z.string()).nullish().catch([]).transform((v) => v ?? []),
+    environments: z
+      .array(
+        z.object({
+          runtime_profile_id: z.string(),
+          workspace_id: z.string(),
+          display_name: stringOrEmpty,
+          enabled: z.boolean().nullish().catch(true).transform((v) => v !== false),
+        }),
+      )
+      .nullish()
+      .catch([])
+      .transform((v) => v ?? []),
+    availability: AvailabilityVerdictSchema.nullish().catch(null),
+    created_at: stringOrEmpty,
+    updated_at: stringOrEmpty,
+  })
+  .transform((pool) => ({
+    ...pool,
+    runtime_type: pool.runtime_type === "codex" ? ("codex" as const) : ("claude" as const),
+    spend_order: pool.spend_order === "balanced" ? ("balanced" as const) : ("first" as const),
+    availability: pool.availability ?? { blocked: false, usable: false, reason_code: null, until: null, until_estimated: false },
+  }));
+
+export const PoolListSchema = z.object({
+  pools: z.array(PoolSchema),
+  can_manage: estimateFlag,
+});
+
+export const PoolRevisionConflictSchema = z.object({
+  code: z.literal("pool_revision_conflict"),
+  current_revision: z.number().int(),
 });

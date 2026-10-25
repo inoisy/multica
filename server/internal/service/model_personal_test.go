@@ -43,7 +43,7 @@ func TestPersonalProfileIsMadeEditedAndReset(t *testing.T) {
 	if !ok || agent.ModelProfileID != p.ID || p.BasedOnProfileID != r.strong || p.OwnerAgentID != agent.ID {
 		t.Fatalf("personal profile: %+v agent on %v", p, agent.ModelProfileID)
 	}
-	if p.Name != "personal agent · личный" {
+	if p.Name != "personal agent" {
 		t.Fatalf("name %q", p.Name)
 	}
 	world, err := LoadModelWorld(r.ctx, r.q, r.ws, timeNow())

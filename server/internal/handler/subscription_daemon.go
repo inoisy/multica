@@ -337,7 +337,7 @@ func NewSubscriptionLoginStore() *SubscriptionLoginStore {
 func (s *SubscriptionLoginStore) expireLocked(now time.Time) {
 	for id, l := range s.byID {
 		if l.session.State == "waiting" && now.Sub(l.started) > s.timeout {
-			l.session.State, l.session.Message, l.token = "expired", "вход не завершён за отведённое время", ""
+			l.session.State, l.session.Message, l.token = "expired", "sign-in timed out", ""
 		}
 		if l.session.State != "waiting" && now.Sub(l.started) > s.retention {
 			delete(s.byID, id)
@@ -354,10 +354,10 @@ func (s *SubscriptionLoginStore) start(key, runtimeID, token string) LoginSessio
 	now := time.Now()
 	s.expireLocked(now)
 	if cur := s.byKey[key]; cur != nil && cur.session.State == "waiting" {
-		cur.session.State, cur.session.Message, cur.token = "cancelled", "заменён новым входом", ""
+		cur.session.State, cur.session.Message, cur.token = "cancelled", "replaced by a new sign-in", ""
 	}
 	l := &pendingLogin{key: key, runtimeID: runtimeID, token: token, started: now,
-		session: LoginSession{ID: newShareKey()[5:], State: "waiting", Message: "ждём демон", StartedAt: now.UTC().Format(time.RFC3339)}}
+		session: LoginSession{ID: newShareKey()[5:], State: "waiting", Message: "waiting for daemon", StartedAt: now.UTC().Format(time.RFC3339)}}
 	s.byKey[key] = l
 	s.byID[l.session.ID] = l
 	return l.session
@@ -382,7 +382,7 @@ func (s *SubscriptionLoginStore) cancel(key string) *LoginSession {
 		return nil
 	}
 	if l.session.State == "waiting" {
-		l.session.State, l.session.Message, l.token = "cancelled", "вход отменён", ""
+		l.session.State, l.session.Message, l.token = "cancelled", "sign-in cancelled", ""
 	}
 	out := l.session
 	return &out
@@ -399,7 +399,7 @@ func (s *SubscriptionLoginStore) popForRuntime(runtimeID string) (*pendingLogin,
 			l.delivered = true
 			token := l.token
 			l.token = ""
-			l.session.Message = "демон выполняет вход"
+			l.session.Message = "daemon is signing in"
 			cp := *l
 			return &cp, token
 		}
@@ -441,7 +441,7 @@ func (h *Handler) pendingSubscriptionLoginFor(ctx context.Context, runtimeID str
 	}
 	sub, err := h.Queries.GetSubscriptionByKey(ctx, l.key)
 	if err != nil {
-		h.SubscriptionLogins.report(l.session.ID, runtimeID, "failed", nil, nil, "подписка удалена")
+		h.SubscriptionLogins.report(l.session.ID, runtimeID, "failed", nil, nil, "subscription deleted")
 		return nil
 	}
 	return &protocol.DaemonHeartbeatPendingSubscriptionLogin{
@@ -500,7 +500,7 @@ func (h *Handler) pickLoginRuntime(ctx context.Context, sub db.Subscription, use
 			}
 		}
 	}
-	return "", errors.New("нет демона онлайн, который может выполнить вход")
+	return "", errors.New("no online daemon can sign in")
 }
 
 // StartSubscriptionLogin — POST /api/subscriptions/{key}/login. Instance
@@ -690,6 +690,7 @@ func (h *Handler) ListSubscriptionDiscrepancies(w http.ResponseWriter, r *http.R
 		return
 	}
 	hosts := h.hostStatesBySubscription(ctx)
+	canManage := r.Header.Get("X-Actor-Source") == "" && h.isInstanceAdmin(ctx, requestUserID(r))
 	items := []Discrepancy{}
 
 	spent := map[string]bool{}
@@ -704,16 +705,19 @@ func (h *Handler) ListSubscriptionDiscrepancies(w http.ResponseWriter, r *http.R
 	}
 	for _, s := range subs {
 		for _, host := range hosts[uuidToString(s.ID)] {
+			if !canManage {
+				continue
+			}
 			if host.CredentialState == "missing" || host.CredentialState == "revoked" || host.CredentialState == "unreadable" {
 				items = append(items, Discrepancy{
 					Kind: "credential_missing", SubscriptionKey: s.Key, DeviceName: host.DeviceName,
-					Message: fmt.Sprintf("%s: учётка на %s — %s (%s)", s.Key, host.DeviceName, host.CredentialState, s.CredentialPath),
+					Message: fmt.Sprintf("%s: credential on %s is %s", s.Key, host.DeviceName, host.CredentialState),
 				})
 			}
 		}
 		if !spent[uuidToString(s.ID)] {
 			items = append(items, Discrepancy{Kind: "unused_subscription", SubscriptionKey: s.Key,
-				Message: fmt.Sprintf("%s никто не тратит", s.Key)})
+				Message: fmt.Sprintf("Nobody spends subscription %s", s.Key)})
 		}
 	}
 	// A pool without accounts leaves its environments with nothing to spend.
@@ -727,7 +731,7 @@ func (h *Handler) ListSubscriptionDiscrepancies(w http.ResponseWriter, r *http.R
 			}
 			items = append(items, Discrepancy{Kind: "runtime_without_subscriptions", RuntimeProfileID: uuidToString(p.ID),
 				RuntimeName: p.DisplayName, WorkspaceID: uuidToString(p.WorkspaceID),
-				Message: fmt.Sprintf("среда «%s» без подписок", p.DisplayName)})
+				Message: fmt.Sprintf("Runtime %s has no subscriptions", p.DisplayName)})
 		}
 	}
 	// Agents on a runtime that cannot run: profile disabled, or every
@@ -758,10 +762,15 @@ func (h *Handler) ListSubscriptionDiscrepancies(w http.ResponseWriter, r *http.R
 	if len(dead) > 0 {
 		agents, err := h.Queries.ListAgentsOnRuntimeProfiles(ctx, dead)
 		if err == nil {
+			actorType, actorID := h.resolveActor(r, requestUserID(r), h.resolveWorkspaceID(r))
 			for _, a := range agents {
+				agent, err := h.Queries.GetAgent(ctx, a.ID)
+				if err != nil || !h.canAccessPrivateAgent(ctx, agent, actorType, actorID, uuidToString(a.WorkspaceID)) {
+					continue
+				}
 				items = append(items, Discrepancy{Kind: "agent_on_disabled_runtime", AgentID: uuidToString(a.ID), AgentName: a.Name,
 					WorkspaceID: uuidToString(a.WorkspaceID), RuntimeProfileID: uuidToString(a.ProfileID), RuntimeName: deadName[uuidToString(a.ProfileID)],
-					Message: fmt.Sprintf("агент «%s» на выключенной среде «%s»", a.Name, deadName[uuidToString(a.ProfileID)])})
+					Message: fmt.Sprintf("Agent %s uses disabled runtime %s", a.Name, deadName[uuidToString(a.ProfileID)])})
 			}
 		}
 	}

@@ -154,7 +154,7 @@ export function LoginPanel({
       setWatching(null);
       onDone();
     } else if (session.state !== "waiting") {
-      setError(session.message || t(($) => $.subscriptions.login.failed));
+      setError(t(($) => $.subscriptions.login.failed));
     }
   }, [session, watching, onDone, t]);
 

@@ -1,4 +1,5 @@
 import type { RuntimeProfile } from "./agent";
+import type { ReasonCode } from "./model-profile";
 
 // ---------------------------------------------------------------------------
 // Instance subscriptions: provider accounts (a Claude or Codex plan, an API
@@ -73,11 +74,9 @@ export interface Subscription {
   /** Path of the credential file on the daemon host, never the credential. */
   credential_path: string;
   windows: string[];
-  /** Agents' cap per window, %. */
+  /** Agents' limit per window, whole %, 0…100; a window without an entry has no limit. People keep 100 − limit. */
   caps: Record<string, number>;
-  /** Share of every window kept for people, %. */
-  reserve: number;
-  /** min(cap, 100 − reserve); windows without a limit are absent. */
+  /** caps without the windows at 100. */
   effective_caps: Record<string, number>;
   /** Subscriptions of one provider account share a key here and one load. */
   account_group: string;
@@ -105,7 +104,6 @@ export interface CreateSubscriptionInput {
   owner_note?: string;
   windows?: string[];
   caps?: Record<string, number>;
-  reserve?: number;
   account_group?: string;
   /** Provider settings; secrets are refused by the server. */
   settings?: { env?: Record<string, string> };
@@ -116,7 +114,6 @@ export interface UpdateSubscriptionInput {
   owner_note?: string;
   /** Merged per window on the server. */
   caps?: Record<string, number>;
-  reserve?: number;
   /** RFC 3339 time; an empty string lifts the switch-off. */
   disabled_until?: string;
 }
@@ -153,6 +150,8 @@ export interface SubscriptionDiscrepancy {
 
 export interface RuntimeProfileSubscriptions {
   runtime_profile: RuntimeProfile;
+  /** The pool the environment spends; null for a plain CLI environment. */
+  pool_id: string | null;
   spend_order: string;
   subscriptions: Subscription[];
   /** Keys in the profile's order that no longer exist. */
@@ -161,24 +160,86 @@ export interface RuntimeProfileSubscriptions {
   agents: { id: string; name: string }[];
 }
 
-export interface UpdateRuntimeProfileSubscriptionsInput {
-  subscriptions?: string[];
-  spend_order?: SpendOrder;
+/** The verdict on one account, a pool or an environment: can it run now, and if not, why and until when. */
+export interface AvailabilityVerdict {
+  blocked: boolean;
+  usable: boolean;
+  /** null: nothing blocks, or a newer server sent no code. */
+  reason_code: ReasonCode | null;
+  until: string | null;
+  /** `until` is a retry estimate, not a reported reset. */
+  until_estimated: boolean;
 }
 
-export interface CreateRuntimePoolInput {
+export interface PoolAccount extends AvailabilityVerdict {
+  id: string;
+  key: string;
+  title: string;
+  provider: string;
+  account_group: string;
+  /** One-based place in the pool's order. */
+  position: number;
+}
+
+/** The environment a workspace keeps for a pool. */
+export interface PoolEnvironment {
+  runtime_profile_id: string;
+  workspace_id: string;
   display_name: string;
+  enabled: boolean;
+}
+
+export interface Pool {
+  id: string;
+  name: string;
   runtime_type: SubscriptionFamily;
-  subscriptions: string[];
+  description: string;
   spend_order: SpendOrder;
+  all_workspaces: boolean;
+  /** Changes with every change of the accounts or the order; sent back with an edit. */
+  revision: number;
+  subscriptions: PoolAccount[];
+  workspace_ids: string[];
+  environments: PoolEnvironment[];
+  availability: AvailabilityVerdict;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PoolList {
+  pools: Pool[];
+  /** Whether the current user may change pools and grants. */
+  can_manage: boolean;
+}
+
+export interface CreatePoolInput {
+  name: string;
+  runtime_type: SubscriptionFamily;
+  description?: string;
+  spend_order?: SpendOrder;
+  /** Account keys in the pool's order. */
+  subscriptions?: string[];
   workspace_ids?: string[];
   all_workspaces?: boolean;
-  description?: string;
 }
 
-export interface CreateRuntimePoolResult {
-  share_key: string;
-  runtime_profiles: RuntimeProfile[];
-  /** Workspaces that already had a runtime with this name. */
-  skipped_workspace_ids: string[];
+export interface UpdatePoolInput {
+  /** Pool revision the editor read. */
+  revision: number;
+  name?: string;
+  description?: string;
+  spend_order?: SpendOrder;
+  subscriptions?: string[];
+  all_workspaces?: boolean;
+}
+
+export interface SetPoolGrantsInput {
+  revision: number;
+  workspace_ids: string[];
+}
+
+/** 409 body of a pool edit made from a stale revision. */
+export interface PoolRevisionConflict {
+  code: "pool_revision_conflict";
+  current_revision: number;
 }

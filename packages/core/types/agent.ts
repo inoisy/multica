@@ -1,5 +1,6 @@
 import type { ChatSession } from "./chat";
 import type { Label } from "./label";
+import type { AccountFact, ModelChoice } from "./model-profile";
 
 export type AgentStatus = "idle" | "working" | "blocked" | "error" | "offline";
 
@@ -168,6 +169,8 @@ export interface RuntimeProfile {
   share_key?: string | null;
   /** New workspaces get a copy of the profile. */
   all_workspaces?: boolean;
+  /** The pool of accounts this environment spends; null for a plain CLI environment. */
+  pool_id?: string | null;
 }
 
 // POST body. runtime_type is the immutable compatibility target; the server
@@ -347,6 +350,10 @@ export interface AgentTask {
   // coarse values; `string & {}` admits the rest without collapsing the
   // hints.
   failure_reason?: TaskFailureReason | (string & {}) | "";
+  /** What the claim chose for the run, as stored at that moment; never recomputed from today's settings. */
+  model_choice?: ModelChoice | null;
+  /** The account the daemon confirmed for the run; null or absent: unknown (an older daemon, or a run before confirmation). */
+  account_fact?: AccountFact | null;
   /** The input comment was edited or deleted, invalidating this run. */
   cancelled_by_comment_change?: boolean;
   /** Present on cancellations recorded by a backend with actor provenance. */

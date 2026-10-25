@@ -251,3 +251,14 @@ func TestRuntimeBlocksReadStoredRefusalsByCode(t *testing.T) {
 		t.Fatalf("computed block: %+v", blocks)
 	}
 }
+
+func TestStructuredAccountRefusalIgnoresLegacyText(t *testing.T) {
+	for _, code := range []string{UnavailableProviderLimit, UnavailableAgentCapRefusal, UnavailableDisabledRefusal} {
+		if got := RefusalCodeForFailure("usage limit: подписки среды отключены до завтра", code); got != code {
+			t.Fatalf("code %s became %s", code, got)
+		}
+	}
+	if got := RefusalCodeForFailure("выше лимита агентам", "future_code"); got != UnavailableUnknown {
+		t.Fatalf("unknown code inferred from text: %s", got)
+	}
+}

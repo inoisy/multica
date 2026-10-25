@@ -20,18 +20,8 @@ import (
 	"github.com/multica-ai/multica/server/internal/cli"
 )
 
-// ---------------------------------------------------------------------------
-// `multica subscription ...` and `multica runtime pool ...`
-//
-// Subscriptions are instance-level provider accounts (Claude / Codex plans,
-// API keys). Anyone in a workspace can list them; only instance admins
-// (MULTICA_INSTANCE_ADMINS on the server) can change them. A runtime pool is a
-// runtime profile that spends an ordered list of subscriptions; the launch
-// wrapper subs-run picks one per run.
-//
-// Credentials never travel through these commands: a subscription records
-// where its credential file lives on the daemon host.
-// ---------------------------------------------------------------------------
+// Subscriptions record provider accounts; credentials remain on daemon hosts.
+// Pools and workspace grants are mutated only by the server's pool service.
 
 var subscriptionCmd = &cobra.Command{
 	Use:   "subscription",
@@ -61,7 +51,7 @@ var subscriptionLoginCmd = &cobra.Command{
 
 var subscriptionUpdateCmd = &cobra.Command{
 	Use:   "update <key>",
-	Short: "Change a subscription's caps, reserve, title or disable window",
+	Short: "Change a subscription's agent caps, title or disable window",
 	Args:  exactArgs(1),
 	RunE:  runSubscriptionUpdate,
 }
@@ -82,12 +72,12 @@ var subscriptionRmCmd = &cobra.Command{
 
 var runtimePoolCmd = &cobra.Command{
 	Use:   "pool",
-	Short: "Manage runtimes that spend subscriptions",
+	Short: "Compatibility alias for pool; show/set accept a runtime name",
 }
 
 var runtimePoolCreateCmd = &cobra.Command{
 	Use:   "create <name>",
-	Short: "Create a runtime that spends subscriptions, in this or every workspace",
+	Short: "Alias for pool create",
 	Args:  exactArgs(1),
 	RunE:  runRuntimePoolCreate,
 }
@@ -111,6 +101,13 @@ func init() {
 		subscriptionUpdateCmd, subscriptionUsageCmd, subscriptionRmCmd)
 	runtimeCmd.AddCommand(runtimePoolCmd)
 	runtimePoolCmd.AddCommand(runtimePoolCreateCmd, runtimePoolSetCmd, runtimePoolShowCmd)
+	aliases := newPoolCommand()
+	for _, c := range append([]*cobra.Command(nil), aliases.Commands()...) {
+		if c.Name() == "list" || c.Name() == "grant" {
+			runtimePoolCmd.AddCommand(c)
+		}
+	}
+	runtimePoolSetCmd.Flags().Int("revision", 0, "Expected pool revision (default: fetch current)")
 
 	subscriptionListCmd.Flags().String("output", "table", "Output format: table or json")
 
@@ -122,7 +119,8 @@ func init() {
 	f.String("credential-path", "", "Credential file on the daemon host (default ~/.config/<key>/...)")
 	f.StringSlice("windows", nil, "Quota windows, e.g. 5h,week")
 	f.StringArray("cap", nil, "Agent cap per window, e.g. --cap 5h=70 (repeatable)")
-	f.Int("reserve", 0, "Percent of every window kept for people")
+	f.Int("reserve", 0, "Deprecated: normalized by the server into agent caps")
+	_ = f.MarkHidden("reserve")
 	f.String("account-group", "", "Account shared with other subscriptions (one usage row)")
 	f.String("settings-json", "", "Non-secret settings as a JSON object (API keys: {\"env\": {...}})")
 	f.Bool("token-stdin", false, "Read the token (claude setup-token) or API key from stdin and sign in right away")
@@ -135,7 +133,8 @@ func init() {
 	u.String("credential-path", "", "New credential file on the daemon host")
 	u.StringSlice("windows", nil, "Quota windows, e.g. 5h,week")
 	u.StringArray("cap", nil, "Agent cap per window, e.g. --cap 5h=70 (repeatable; other windows keep theirs)")
-	u.Int("reserve", 0, "Percent of every window kept for people")
+	u.Int("reserve", 0, "Deprecated: normalized by the server into agent caps")
+	_ = u.MarkHidden("reserve")
 	u.String("account-group", "", "Account shared with other subscriptions")
 	u.String("settings-json", "", "Replace settings with this JSON object")
 	u.String("disable-until", "", "Keep agents off this subscription until this time (RFC 3339, e.g. 2026-10-21T12:00Z)")
@@ -278,6 +277,16 @@ func formatUsage(v any) string {
 	return strings.Join(parts, " · ")
 }
 
+func numberValue(v any) float64 {
+	switch n := v.(type) {
+	case int:
+		return float64(n)
+	case float64:
+		return n
+	}
+	return 100
+}
+
 func formatCaps(v any) string {
 	m, _ := v.(map[string]any)
 	keys := make([]string, 0, len(m))
@@ -287,10 +296,10 @@ func formatCaps(v any) string {
 	sort.Strings(keys)
 	parts := make([]string, 0, len(keys))
 	for _, k := range keys {
-		parts = append(parts, fmt.Sprintf("%s ≤%v%%", k, m[k]))
+		parts = append(parts, fmt.Sprintf("%s ≤%v%% (people: %v%%)", k, m[k], 100-numberValue(m[k])))
 	}
 	if len(parts) == 0 {
-		return "—"
+		return "100% (people: 0%)"
 	}
 	return strings.Join(parts, " ")
 }
@@ -350,6 +359,10 @@ func runSubscriptionAdd(cmd *cobra.Command, args []string) error {
 	}
 	if cmd.Flags().Changed("reserve") {
 		v, _ := cmd.Flags().GetInt("reserve")
+		if v < 0 || v > 100 {
+			return errors.New("--reserve must be between 0 and 100")
+		}
+		fmt.Fprintln(cmd.ErrOrStderr(), "Warning: --reserve is deprecated; the server normalizes it into --cap=min(cap,100-reserve). Use --cap; people retain 100-cap percent.")
 		body["reserve"] = v
 	}
 	if cmd.Flags().Changed("settings-json") {
@@ -496,6 +509,10 @@ func runSubscriptionUpdate(cmd *cobra.Command, args []string) error {
 	}
 	if cmd.Flags().Changed("reserve") {
 		v, _ := cmd.Flags().GetInt("reserve")
+		if v < 0 || v > 100 {
+			return errors.New("--reserve must be between 0 and 100")
+		}
+		fmt.Fprintln(cmd.ErrOrStderr(), "Warning: --reserve is deprecated; the server normalizes it into --cap=min(cap,100-reserve). Use --cap; people retain 100-cap percent.")
 		body["reserve"] = v
 	}
 	if cmd.Flags().Changed("settings-json") {
@@ -507,7 +524,7 @@ func runSubscriptionUpdate(cmd *cobra.Command, args []string) error {
 		body["settings"] = settings
 	}
 	if len(body) == 0 {
-		return errors.New("nothing to update: pass --cap, --reserve, --disable-until, --enable, --title, --owner-note, --credential-path, --windows, --account-group or --settings-json")
+		return errors.New("nothing to update: pass --cap, --disable-until, --enable, --title, --owner-note, --credential-path, --windows, --account-group or --settings-json")
 	}
 	client, err := newAPIClient(cmd)
 	if err != nil {
@@ -609,68 +626,7 @@ func resolveRuntimeProfile(ctx context.Context, client *cli.APIClient, workspace
 	}
 }
 
-func poolPath(workspaceID, profileID string) string {
-	return runtimeProfilesPath(workspaceID) + "/" + profileID + "/subscriptions"
-}
-
-func runRuntimePoolCreate(cmd *cobra.Command, args []string) error {
-	subs, _ := cmd.Flags().GetStringSlice("subs")
-	order, _ := cmd.Flags().GetString("order")
-	family, _ := cmd.Flags().GetString("type")
-	description, _ := cmd.Flags().GetString("description")
-	all, _ := cmd.Flags().GetBool("all-workspaces")
-
-	client, err := newAPIClient(cmd)
-	if err != nil {
-		return err
-	}
-	ctx, cancel := cli.APIContext(context.Background())
-	defer cancel()
-
-	if family == "" {
-		if len(subs) == 0 {
-			return errors.New("--type is required when --subs is empty")
-		}
-		var sub map[string]any
-		if err := client.GetJSON(ctx, subscriptionPath(subs[0]), &sub); err != nil {
-			return fmt.Errorf("subscription %s: %w", subs[0], err)
-		}
-		family = str(sub["family"])
-	}
-	body := map[string]any{
-		"display_name":   args[0],
-		"runtime_type":   family,
-		"subscriptions":  subs,
-		"spend_order":    order,
-		"all_workspaces": all,
-	}
-	if subs == nil {
-		body["subscriptions"] = []string{}
-	}
-	if description != "" {
-		body["description"] = description
-	}
-	if !all {
-		workspaceID, err := requireWorkspaceID(cmd)
-		if err != nil {
-			return err
-		}
-		body["workspace_ids"] = []string{workspaceID}
-	}
-	var resp map[string]any
-	if err := client.PostJSON(ctx, "/api/runtime-pools", body, &resp); err != nil {
-		return subscriptionError("create runtime pool", err)
-	}
-	if output, _ := cmd.Flags().GetString("output"); output == "table" {
-		profiles, _ := resp["runtime_profiles"].([]any)
-		fmt.Fprintf(os.Stdout, "Created %q in %d workspace(s), share key %s\n", args[0], len(profiles), str(resp["share_key"]))
-		if skipped, _ := resp["skipped_workspace_ids"].([]any); len(skipped) > 0 {
-			fmt.Fprintf(os.Stdout, "Skipped %d workspace(s): a runtime with this name already exists there\n", len(skipped))
-		}
-		return nil
-	}
-	return cli.PrintJSON(os.Stdout, resp)
-}
+func runRuntimePoolCreate(cmd *cobra.Command, args []string) error { return runPoolCreate(cmd, args) }
 
 // nextPoolKeys applies --add/--first/--remove to the current ordered list.
 func nextPoolKeys(current []string, add string, first bool, remove string) ([]string, error) {
@@ -693,102 +649,39 @@ func nextPoolKeys(current []string, add string, first bool, remove string) ([]st
 	return out, nil
 }
 
-func runRuntimePoolSet(cmd *cobra.Command, args []string) error {
-	add, _ := cmd.Flags().GetString("add")
-	first, _ := cmd.Flags().GetBool("first")
-	remove, _ := cmd.Flags().GetString("remove")
-	order, _ := cmd.Flags().GetString("order")
-	if add == "" && remove == "" && order == "" {
-		return errors.New("pass --add <key> [--first], --remove <key> or --order first|balanced")
-	}
-	if first && add == "" {
-		return errors.New("--first goes with --add")
-	}
-	client, err := newAPIClient(cmd)
+func legacyPoolRef(cmd *cobra.Command, ref string) (string, error) {
+	client, ctx, cancel, err := modelsClient(cmd)
 	if err != nil {
-		return err
+		return "", err
 	}
-	workspaceID, err := requireWorkspaceID(cmd)
-	if err != nil {
-		return err
-	}
-	ctx, cancel := cli.APIContext(context.Background())
 	defer cancel()
-	profile, err := resolveRuntimeProfile(ctx, client, workspaceID, args[0])
+	ws, err := requireWorkspaceID(cmd)
+	if err != nil {
+		return "", err
+	}
+	profile, err := resolveRuntimeProfile(ctx, client, ws, ref)
+	if err != nil {
+		return "", err
+	}
+	id := str(profile["pool_id"])
+	if id == "" {
+		return "", errors.New("this runtime has no account pool")
+	}
+	return id, nil
+}
+
+func runRuntimePoolSet(cmd *cobra.Command, args []string) error {
+	id, err := legacyPoolRef(cmd, args[0])
 	if err != nil {
 		return err
 	}
-	body := map[string]any{}
-	if add != "" || remove != "" {
-		current := []string{}
-		if raw, ok := profile["subscriptions"].([]any); ok {
-			for _, k := range raw {
-				current = append(current, str(k))
-			}
-		}
-		keys, err := nextPoolKeys(current, add, first, remove)
-		if err != nil {
-			return err
-		}
-		body["subscriptions"] = keys
-	}
-	if order != "" {
-		body["spend_order"] = order
-	}
-	var pool map[string]any
-	if err := client.PutJSON(ctx, poolPath(workspaceID, str(profile["id"])), body, &pool); err != nil {
-		return subscriptionError("update runtime pool", err)
-	}
-	return outputPool(cmd, pool)
+	return runPoolSet(cmd, []string{id})
 }
 
 func runRuntimePoolShow(cmd *cobra.Command, args []string) error {
-	client, err := newAPIClient(cmd)
+	id, err := legacyPoolRef(cmd, args[0])
 	if err != nil {
 		return err
 	}
-	workspaceID, err := requireWorkspaceID(cmd)
-	if err != nil {
-		return err
-	}
-	ctx, cancel := cli.APIContext(context.Background())
-	defer cancel()
-	profile, err := resolveRuntimeProfile(ctx, client, workspaceID, args[0])
-	if err != nil {
-		return err
-	}
-	var pool map[string]any
-	if err := client.GetJSON(ctx, poolPath(workspaceID, str(profile["id"])), &pool); err != nil {
-		return subscriptionError("show runtime pool", err)
-	}
-	return outputPool(cmd, pool)
-}
-
-func outputPool(cmd *cobra.Command, pool map[string]any) error {
-	if output, _ := cmd.Flags().GetString("output"); output == "json" {
-		return cli.PrintJSON(os.Stdout, pool)
-	}
-	profile, _ := pool["runtime_profile"].(map[string]any)
-	fmt.Fprintf(os.Stdout, "%s (%s) — spend order: %s\n", str(profile["display_name"]), str(profile["id"]), str(pool["spend_order"]))
-	if share := str(profile["share_key"]); share != "" {
-		fmt.Fprintf(os.Stdout, "Shared across workspaces: %s", share)
-		if profile["all_workspaces"] == true {
-			fmt.Fprint(os.Stdout, " (every workspace)")
-		}
-		fmt.Fprintln(os.Stdout)
-	}
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "#\tKEY\tTITLE\tUSAGE\tCAPS")
-	subs, _ := pool["subscriptions"].([]any)
-	for i, it := range subs {
-		s, _ := it.(map[string]any)
-		fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\n", i+1, str(s["key"]), str(s["title"]), formatUsage(s["usage"]), formatCaps(s["effective_caps"]))
-	}
-	if err := w.Flush(); err != nil {
-		return err
-	}
-	if missing, _ := pool["missing"].([]any); len(missing) > 0 {
-		fmt.Fprintf(os.Stdout, "Missing subscriptions (skipped by subs-run): %v\n", missing)
-	}
-	return nil
+	return runPoolShow(cmd, []string{id})
 }

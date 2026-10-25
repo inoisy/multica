@@ -695,7 +695,8 @@ describe("DashboardPage — the two questions are separate tabs", () => {
 
     expect(screen.getByRole("tab", { name: "Subscriptions" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("heading", { name: "Analytics" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Runtimes with subscriptions" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "State" })).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Search accounts and pools")).toBeInTheDocument();
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
     expect(screen.queryByRole("button", { name: "Project" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Period" })).not.toBeInTheDocument();

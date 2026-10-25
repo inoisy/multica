@@ -1,7 +1,7 @@
 # Model accounts: server API and verification
 
 The data contract and rollback policy are in [model-selection-and-accounts.md](model-selection-and-accounts.md).
-This document describes the server boundary for daemon and client implementations.
+This document describes contract `model-accounts/v1` for daemon and client implementations.
 No real provider CLI is needed to exercise these endpoints.
 
 ## Pools
@@ -37,6 +37,13 @@ Account keys in mutation bodies resolve to ids; joins and grants store ids.
 
 ## Agent profiles
 
+Reads use the same agent visibility rules as the agent list and detail view.
+Personal profiles of inaccessible agents are absent from `kind=personal|all`,
+shared-profile references, and impact previews. Direct profile reads/previews
+return 404; `GET /api/agents/{id}/models` returns 403 for a private agent the
+member cannot view. Agent owners, workspace admins, and allowed members retain
+their existing access.
+
 Personal-profile writes have the same agent-owner / workspace-admin permission
 check as the existing agent model editor.
 
@@ -63,6 +70,20 @@ responses retain computed `subscriptions`, `spend_order`, `share_key`, and
 Legacy subscription mutations are routed through the pool service.
 Legacy `reserve` input folds into `caps`; returned `reserve` is zero and
 `effective_caps` is the cap map without entries equal to 100.
+
+## Account read privacy and caps
+
+`GET /api/subscriptions` and `GET /api/subscriptions/{key}` return credential
+paths, host details, and active login sessions only to an instance administrator
+authenticated in person. For other readers (including task tokens), the existing
+response fields remain `credential_path: ""`, `hosts: []`, and `login: null`.
+Aggregate `login_state`, usage, and workspace-filtered consumers remain visible.
+Daemon provisioning keeps its separate authenticated contract.
+
+On account creation and update, `caps` must be an object of integer percentages
+from 0 through 100. Null values, fractional/string values, and keys absent from
+the account's resulting `windows` are rejected with 400 without changing data.
+An omitted `caps` leaves caps unchanged; updates merge by window.
 
 ## Claim and account confirmation
 
@@ -103,6 +124,31 @@ one another. Identical repeats after termination return the original fact and
 timestamp; a first write after termination fails. A reissued task gets a new
 offer and no prior fact. Task responses and model-choice journals expose the
 confirmed fact, never the offer. Old daemons leave the fact absent (unknown).
+
+## Structured failure reports
+
+`POST /api/daemon/tasks/{taskId}/fail` accepts optional `refusal_code`:
+`agent_cap_refusal`, `disabled_refusal`, or `provider_limit`. A supplied code
+wins over the human-readable `error` and classifies the failure as a quota
+refusal. Unknown request codes return 400 without changing the task.
+`quota_reset_at` remains optional. Both fields survive the daemon terminal
+report outbox and its retries. Older daemons omit the code; only that
+compatibility path classifies their local refusal text. No extra quota
+registry is kept in the CLI or daemon.
+
+The new daemon's account confirmation retries transient HTTP/transport errors
+using the existing bounded request retry helper, always with the same offer,
+account id, pool id and revision. A malformed/mismatched success response,
+409, or an exhausted retry fails preparation before CLI launch. Chi's plain
+`404 page not found` response identifies an old server without this route;
+its account remains unknown. A structured 404 from the supported endpoint
+means access/assignment failure and stops launch. Payloads without all three
+new pool fields use the old protocol only when all three are absent; partial
+new metadata and an empty new offer are rejected.
+
+`AccountFact` and `AccountConfirmation` are shared Go wire types in
+`server/pkg/protocol/account.go`; the service re-exports aliases. CLI commands
+are documented in [the CLI guide](../../apps/docs/content/docs/cli.mdx#model-profiles-and-account-pools).
 
 ## Availability and verification
 

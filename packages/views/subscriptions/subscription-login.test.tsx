@@ -19,7 +19,7 @@ import { SubscriptionLoginStatus } from "./subscription-login";
 function sub(extra: Partial<Subscription>): Subscription {
   return {
     id: "s1", key: "acc-a", provider: "claude", family: "claude", title: "Plan A", owner_note: "", auth: "claude_oauth",
-    credential_path: "", windows: [], caps: {}, reserve: 0, effective_caps: {}, account_group: "", disabled_until: null,
+    credential_path: "", windows: [], caps: {}, effective_caps: {}, account_group: "", disabled_until: null,
     disabled: false, usage: [], used_by: [], hosts: [], login_state: "unchecked", login: null, created_at: "", updated_at: "",
     ...extra,
   };
@@ -101,7 +101,8 @@ describe("SubscriptionLoginStatus", () => {
     fireEvent.click(screen.getByRole("button", { name: "Sign in again" }));
     fireEvent.change(await screen.findByLabelText("API key"), { target: { value: "bad" } });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
-    expect((await screen.findByRole("alert")).textContent).toBe("ключ отклонён");
+    expect((await screen.findByRole("alert")).textContent).toBe("Sign-in did not finish; the current credential is unchanged");
+    expect(screen.queryByText("ключ отклонён")).toBeNull();
     expect((screen.getByLabelText("API key") as HTMLInputElement).value).toBe("");
     expect(screen.getByRole("dialog")).toBeTruthy();
   });

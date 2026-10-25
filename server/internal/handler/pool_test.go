@@ -121,3 +121,19 @@ func TestClaimPayloadKeepsRefusedAccountDisabledUntilItsRefusalEnds(t *testing.T
 		t.Fatal("pool edit rewrote the payload of an assignment")
 	}
 }
+
+func TestDaemonFailureRejectsUnknownRefusalCode(t *testing.T) {
+	h := subscriptionTestHandler(t)
+	_, runtimeID := poolFixture(t, h, "subtest-fail-code")
+	dbfx.Exec(t, `UPDATE agent_runtime SET daemon_id='subtest-daemon' WHERE id=$1`, runtimeID)
+	agent := dbfx.Agent(t, "refusal API", runtimeID, nil)
+	issue := dbfx.Issue(t, "refusal API")
+	task := dbfx.Task(t, agent, testutil.Cols{"issue_id": issue, "runtime_id": runtimeID, "status": "running"})
+	req := withURLParam(newDaemonTokenRequest("POST", "/api/daemon/tasks/"+task+"/fail", map[string]any{"error": "translated text", "refusal_code": "future_code"}, testWorkspaceID, "subtest-daemon"), "taskId", task)
+	testutil.Call(t, h.FailTask, req).Want(http.StatusBadRequest)
+	var status string
+	dbfx.QueryRow(t, `SELECT status FROM agent_task_queue WHERE id=$1`, task).Scan(&status)
+	if status != "running" {
+		t.Fatalf("rejected request changed status to %s", status)
+	}
+}
