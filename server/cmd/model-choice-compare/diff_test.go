@@ -122,3 +122,81 @@ func TestReportDropsNamesAndShortensIDs(t *testing.T) {
 		t.Fatalf("id not shortened: %s", got)
 	}
 }
+
+// fullWindow is the accepted change seen on the production copy: the only row
+// is limited by a window at 100 % and the run now waits for its reset.
+func fullWindow() choice {
+	after := baseChoice()
+	until := "2026-10-26T05:34:35Z"
+	after.Reason, after.Position, after.Chosen, after.WaitUntil = "all_unavailable", 0, nil, &until
+	after.Rows[0].State, after.Rows[0].Until, after.Rows[0].ReasonCode, after.Rows[0].Chosen = "limited", &until, "provider_limit", false
+	return after
+}
+
+func TestFullWindowIsAcceptedOnlyWhenEveryDifferenceFollowsFromIt(t *testing.T) {
+	before, after := snap(ctxOf("a", baseChoice()), ctxOf("b", baseChoice())), snap(ctxOf("a", fullWindow()), ctxOf("b", baseChoice()))
+	diffs, _ := compareSnapshots(before, after)
+	// The seven fields per context recorded on the production copy (STT-424).
+	if len(diffs) != 7 {
+		t.Fatalf("diffs=%v", diffs)
+	}
+	if got := fullWindowContexts(before, after, diffs); !got["agent/a"] || len(got) != 1 {
+		t.Fatalf("accepted=%v", got)
+	}
+
+	cases := map[string]func(c *choice){
+		"refusal":            func(c *choice) { c.Rows[0].ReasonCode = "provider_refusal" },
+		"agent cap":          func(c *choice) { c.Rows[0].ReasonCode = "agent_cap" },
+		"offline":            func(c *choice) { c.Rows[0].State, c.Rows[0].ReasonCode = "offline", "offline" },
+		"no reset":           func(c *choice) { c.Rows[0].Until = nil },
+		"other wait":         func(c *choice) { other := "2026-10-27T00:00:00Z"; c.WaitUntil = &other },
+		"changed args":       func(c *choice) { c.Rows[0].CustomArgs = args("--y") },
+		"changed source":     func(c *choice) { c.Source = "agent_profile" },
+		"runs without a row": func(c *choice) { c.Chosen = &option{RuntimeID: "r1", Model: "m"} },
+	}
+	for name, mutate := range cases {
+		changed := fullWindow()
+		mutate(&changed)
+		after := snap(ctxOf("a", changed))
+		diffs, _ := compareSnapshots(snap(ctxOf("a", baseChoice())), after)
+		if got := fullWindowContexts(snap(ctxOf("a", baseChoice())), after, diffs); len(got) != 0 {
+			t.Errorf("%s: accepted %v, diffs=%v", name, got, diffs)
+		}
+	}
+}
+
+func TestFullWindowFallbackToAnAvailableRowIsAccepted(t *testing.T) {
+	second := option{RuntimeID: "r2", Model: "m2", CustomArgs: args()}
+	before := baseChoice()
+	before.Rows = append(before.Rows, row{option: second, State: "available"})
+	after := fullWindow()
+	after.Reason, after.Position, after.WaitUntil = "fallback_row", 2, nil
+	after.Chosen = &second
+	after.Rows = append(after.Rows, row{option: second, State: "available", Chosen: true})
+	b, a := snap(ctxOf("a", before)), snap(ctxOf("a", after))
+	diffs, _ := compareSnapshots(b, a)
+	if got := fullWindowContexts(b, a, diffs); !got["agent/a"] {
+		t.Fatalf("accepted=%v diffs=%v", got, diffs)
+	}
+
+	// Falling back onto a row the original algorithm held back is a change.
+	before.Rows[1].State = "limited"
+	b = snap(ctxOf("a", before))
+	diffs, _ = compareSnapshots(b, a)
+	if got := fullWindowContexts(b, a, diffs); len(got) != 0 {
+		t.Fatalf("accepted=%v diffs=%v", got, diffs)
+	}
+}
+
+func TestReasonCodeIsComparedOnlyWhenBothSnapshotsHaveIt(t *testing.T) {
+	limited := fullWindow()
+	if diffs, _ := compareSnapshots(snap(ctxOf("a", limited)), snap(ctxOf("a", fullWindow()))); len(diffs) != 0 {
+		t.Fatalf("diffs=%v", diffs)
+	}
+	refused := fullWindow()
+	refused.Rows[0].ReasonCode = "provider_refusal"
+	diffs, _ := compareSnapshots(snap(ctxOf("a", limited)), snap(ctxOf("a", refused)))
+	if len(diffs) != 1 || diffs[0].Path != "choice.rows[0].reason_code" {
+		t.Fatalf("diffs=%v", diffs)
+	}
+}

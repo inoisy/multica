@@ -236,17 +236,28 @@ class Release:
                 text = self.run("docker", "exec", name, "pg_dump", "-U", "multica", "-d", "copy", "--schema-only", "--no-owner", "--no-acl")
                 return "\n".join(line for line in text.splitlines() if not line.startswith(("\\restrict ", "\\unrestrict ")))
 
+            def diff(binary, after, key, *accept):
+                # The report is anonymized; keep it in state whatever the verdict.
+                args = ["docker", "exec", "-w", "/tmp/stt420/up", name, "/tmp/stt420/" + binary, "diff", *accept,
+                        "--before", "/tmp/stt420/before.json", "--after", "/tmp/stt420/" + after]
+                result = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=3600)
+                self.data.setdefault("rehearsal", {})[key] = result.stdout.decode()
+                self.save()
+                require(result.returncode == 0, key + " has unaccepted PreviewChoice differences; see state.json")
+
             schema_before = schema()
             snapshot("choice-before", "before.json")
             tool("migrate", "up")
             tool("migrate", "up")
             snapshot("choice-after", "after.json")
-            diff = tool("choice-after", "diff", "--before", "/tmp/stt420/before.json", "--after", "/tmp/stt420/after.json")
+            # The only accepted change: a window at 100 % without the provider's
+            # limit flag is spent (spec 3.4). Every other difference stops here.
+            diff("choice-after", "after.json", "preview_diff", "--accept", "provider-full-window")
             tool("migrate", "down", direction="down")
             snapshot("choice-before", "rollback.json")
-            rollback_diff = tool("choice-before", "diff", "--before", "/tmp/stt420/before.json", "--after", "/tmp/stt420/rollback.json")
+            diff("choice-before", "rollback.json", "rollback_preview_diff")
             require(schema() == schema_before, "copy schema differs after down 612..597")
-            self.data["rehearsal"] = {"time": utc(), "preview_diff": diff, "rollback_preview_diff": rollback_diff, "schema_roundtrip": True}
+            self.data["rehearsal"].update(time=utc(), schema_roundtrip=True)
             self.save()
         finally:
             self.run("docker", "rm", "-f", name)
