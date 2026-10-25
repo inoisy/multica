@@ -221,7 +221,7 @@ func (r *modelAccountsRig) seed() { r.seedWith(true) }
 func (r *modelAccountsRig) seedWith(lossy bool) {
 	r.t.Helper()
 	strong := r.profile("Strong", "opus:high", "sonnet")
-	r.profile("Claude · личный", "haiku")
+	r.profile("Claude", "haiku")
 	r.agent("Claude", strong, "opus|high", "sonnet||[]")
 	r.agent("claude", strong, "haiku", "sonnet||[\"--x\"]")
 	r.agent("Same", strong, "opus|high", "sonnet")
@@ -284,26 +284,25 @@ func TestModelAccountsMigrationsMovePersonalProfiles(t *testing.T) {
 		}
 	}
 
-	// Case-insensitive names: the existing profile took "Claude · личный".
+	// Case-insensitive names: the shared profile took "Claude", so both agents
+	// named Claude get their id prefix. Names carry no language-specific word.
 	names := r.text(`SELECT string_agg(name, '|' ORDER BY name) FROM model_profile WHERE owner_agent_id IS NOT NULL`)
-	for _, want := range []string{"Same · личный", "Dangling · личный"} {
-		if !strings.Contains(names, want) {
+	for _, want := range []string{"Same", "Dangling"} {
+		if !strings.Contains("|"+names+"|", "|"+want+"|") {
 			t.Errorf("personal profile names %q lack %q", names, want)
 		}
+	}
+	if strings.ContainsFunc(names, func(c rune) bool { return c >= 'А' && c <= 'я' }) {
+		t.Errorf("personal profile names %q carry a Russian word", names)
 	}
 	if dup := r.count(`SELECT count(*) FROM (SELECT lower(name) FROM model_profile GROUP BY workspace_id, lower(name) HAVING count(*) > 1) d`); dup != 0 {
 		t.Errorf("%d profile names collide case-insensitively", dup)
 	}
 	for _, name := range []string{"Claude", "claude"} {
 		got := r.text(`SELECT p.name FROM agent a JOIN model_profile p ON p.id = a.model_profile_id WHERE a.id = $1`, r.agents[name])
-		if !strings.Contains(got, "личный") || !strings.Contains(got, "·") {
-			t.Errorf("agent %s points at %q", name, got)
+		if want := name + " · " + r.agents[name][:8]; got != want {
+			t.Errorf("agent %s points at %q, want %q", name, got, want)
 		}
-	}
-	// The suffix is the agent id prefix when the plain name is taken.
-	if got := r.text(`SELECT p.name FROM agent a JOIN model_profile p ON p.id = a.model_profile_id WHERE a.id = $1`, r.agents["Claude"]); !strings.HasSuffix(got, r.agents["Claude"][:8]) && !strings.HasSuffix(got, r.agents["claude"][:8]) {
-		// Exactly one of the two takes the plain name; both end in the id prefix only when taken.
-		t.Logf("names: %s", names)
 	}
 
 	// based_on: the agent's shared profile; a dangling one becomes NULL.

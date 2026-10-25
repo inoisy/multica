@@ -502,6 +502,7 @@ export function ModelProfilesPage() {
               ) : null}
               {editor.fromAgent ? null : (
                 <ModelRowsEditor
+                  compact
                   rows={editor.input.options}
                   onChange={(options) => patch({ options })}
                   runtimes={runtimes}

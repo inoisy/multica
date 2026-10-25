@@ -947,6 +947,14 @@ describe("AgentTranscriptDialog — model and account of the run", () => {
     expect(screen.getByText("unknown")).toBeInTheDocument();
   });
 
+  it("shows the confirmed account of a run on plain agent fields", async () => {
+    renderDialog(items, { task: { ...baseTask, model_choice: null, account_fact: fact } });
+    await userEvent.click(screen.getByRole("button", { name: "Run details" }));
+    expect(screen.getByText("Account")).toBeInTheDocument();
+    expect(screen.getByText(/claude-3 · confirmed by the daemon · pool version 12/)).toBeInTheDocument();
+    expect(screen.queryByText("Choice")).not.toBeInTheDocument();
+  });
+
   it("shows neither row for a run that never chose a model", async () => {
     renderDialog(items, { task: { ...baseTask, branch_name: "agent/j/abc12345" } });
     await userEvent.click(screen.getByRole("button", { name: "Run details" }));

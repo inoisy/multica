@@ -29,6 +29,7 @@ export function ModelRowsEditor({
   disabled,
   single = false,
   baseRows,
+  compact = false,
 }: {
   rows: ModelOptionInput[];
   onChange: (rows: ModelOptionInput[]) => void;
@@ -40,6 +41,8 @@ export function ModelRowsEditor({
   single?: boolean;
   /** Rows of the shared profile this one is a copy of: a row that differs shows what the shared profile has there. */
   baseRows?: ModelRowState[];
+  /** Pickers at the 32px height of the form's Input and Select. */
+  compact?: boolean;
 }) {
   const { t } = useT("agents");
   const [advanced, setAdvanced] = useState<Set<number>>(new Set());
@@ -108,6 +111,7 @@ export function ModelRowsEditor({
               <RuntimePicker
                 variant="field"
                 showLabel={false}
+                compact={compact}
                 value={row.runtime_id}
                 runtimes={runtimes}
                 members={members}
@@ -120,6 +124,7 @@ export function ModelRowsEditor({
               <ModelPicker
                 variant="field"
                 showLabel={false}
+                compact={compact}
                 runtimeId={row.runtime_id}
                 runtimeOnline={online}
                 value={row.model}
@@ -136,6 +141,7 @@ export function ModelRowsEditor({
               value={row.thinking_level}
               canEdit={!disabled}
               onChange={(thinking_level) => patch(index, { thinking_level })}
+              compact={compact}
             />
             {base ? <BaseNote row={row} baseRow={base[index] ?? null} /> : null}
             {advanced.has(index) || (row.custom_args && row.custom_args.length > 0) ? (

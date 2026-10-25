@@ -13,6 +13,9 @@ test("subscription forms and run diagnostics fit both themes and mobile", async 
   const runtime = await api.seedRuntime("Diagnostic runtime");
   const issue = await api.createIssue("Diagnostic run");
   await api.seedCompletedRun(issue.id, runtime);
+  // A run on plain agent fields stores no choice, only the confirmed account.
+  const fieldsIssue = await api.createIssue("Run without a choice");
+  await api.seedCompletedRun(fieldsIssue.id, runtime, { withChoice: false });
   const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
   const headers = { Authorization: `Bearer ${api.getToken()}`, "X-Workspace-ID": ws.id };
   const sub = await request.post(`${apiBase}/api/subscriptions`, { headers, data: { key: `layout-${suffix}`, title: "Layout account", provider: "claude" } });
@@ -66,6 +69,16 @@ test("subscription forms and run diagnostics fit both themes and mobile", async 
         expect(await accountRow.evaluate((element) => getComputedStyle(element).wordBreak)).toBe("normal");
         await page.screenshot({ path: test.info().outputPath(`run-details-${variant}.png`), fullPage: true, animations: "disabled" });
         expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
+
+        await page.goto(`/${ws.slug}/issues/${fieldsIssue.id}`, { waitUntil: "domcontentloaded" });
+        await expect(page.getByRole("heading", { name: "Activity", exact: true })).toBeVisible();
+        if (width === 375) await expect(page.getByRole("button", { name: "Execution log", exact: true })).toHaveCount(0);
+        await page.getByRole("button", { name: "View activity", exact: true }).first().click();
+        await page.getByRole("button", { name: "Open full log", exact: true }).first().click();
+        await page.getByRole("button", { name: "Run details", exact: true }).click();
+        await expect(page.getByText("diagnostic-account · confirmed by the daemon", { exact: false })).toBeVisible();
+        await expect(page.getByText("Choice", { exact: true })).toHaveCount(0);
+        await page.screenshot({ path: test.info().outputPath(`run-details-fields-${variant}.png`), fullPage: true, animations: "disabled" });
       }
     }
     expect(errors).toEqual([]);

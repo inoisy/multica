@@ -79,9 +79,9 @@ function personalModels(over: Partial<AgentModels> = {}): AgentModels {
   const shared = [row(1, "codex", "sol", "available"), row(2, "claude", "opus")];
   const own = [row(1, "codex", "sol", "available", { thinking_level: "xhigh", chosen: true }), row(2, "claude", "opus")];
   return models({
-    mode: "personal", model_profile_id: "pp1", profile_name: "Dev · personal", personal_profile_id: "pp1", base_profile_id: "p1",
+    mode: "personal", model_profile_id: "pp1", profile_name: "Dev", personal_profile_id: "pp1", base_profile_id: "p1",
     base_profile_name: "Strong", matches_base: false, diff_rows: [1], personal_rows: own, profile_rows: shared, own_list: true,
-    options: own, preview: choice({ profile_personal: true, profile_name: "Dev · personal", rows: own }), ...over,
+    options: own, preview: choice({ profile_personal: true, profile_name: "Dev", rows: own }), ...over,
   });
 }
 
@@ -276,7 +276,7 @@ describe("AgentModels", () => {
 
   it("lists the journal with the account of each run", async () => {
     const own = [row(1, "claude", "sonnet", "available", { chosen: true })];
-    const picked = choice({ source: "agent_profile", profile_personal: true, profile_name: "Dev · personal", rows: own });
+    const picked = choice({ source: "agent_profile", profile_personal: true, profile_name: "Dev", rows: own });
     apiMock.getAgentModels.mockResolvedValue(models({
       journal: [entry({ choice: picked, issue_identifier: "STT-9", account_fact: fact }), entry({ task_id: "t2", issue_identifier: "STT-8", choice: picked, account_fact: null })],
     }));
@@ -284,7 +284,7 @@ describe("AgentModels", () => {
     const journal = await screen.findByTestId("agent-models-journal");
     expect(journal.textContent).toContain("STT-9");
     expect(journal.textContent).toContain("claude-3");
-    expect(journal.textContent).toContain("personal profile “Dev · personal”");
+    expect(journal.textContent).toContain("personal profile “Dev”");
     expect(journal.textContent).toContain("unknown");
   });
 

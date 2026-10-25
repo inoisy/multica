@@ -33,6 +33,13 @@ test("profiles route renders its client exports and opens the profile editor", a
         await editor.getByRole("button", { name: "Add model", exact: true }).click();
         await expect(editor.getByText("Primary", { exact: true })).toBeVisible();
         expect(await editor.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+        // Pickers of the rows sit at the height of the form's Input and Select.
+        const height = (name: RegExp | string) =>
+          editor.getByRole(typeof name === "string" ? "combobox" : "button", { name, exact: typeof name === "string" }).first()
+            .evaluate((element) => element.getBoundingClientRect().height);
+        const selectHeight = await height("When everything is on a limit");
+        expect(await editor.getByRole("textbox", { name: "Name", exact: true }).evaluate((element) => element.getBoundingClientRect().height)).toBe(selectHeight);
+        expect(await height(/^Runtime · /)).toBe(selectHeight);
         await page.screenshot({ path: test.info().outputPath(`profile-editor-${variant}.png`), fullPage: true, animations: "disabled" });
         await editor.getByRole("combobox", { name: "When everything is on a limit", exact: true }).click();
         await expect(page.getByRole("option", { name: "wait", exact: true })).toBeVisible();
