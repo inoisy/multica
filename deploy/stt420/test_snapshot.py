@@ -141,7 +141,7 @@ class AcceptanceTest(unittest.TestCase):
 
 class BundleTest(unittest.TestCase):
     def test_incomplete_manifest_and_tampered_binary_are_rejected(self):
-        names = ("source.tar.gz", "deploy.py", "install-cli.py", "snapshot.py", "README.md",
+        names = ("source.tar.gz", "deploy.py", "install.sh", "install-cli.py", "snapshot.py", "README.md",
                  "bin/server", "bin/migrate", "bin/multica", "bin/choice-before", "bin/choice-after")
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

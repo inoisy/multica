@@ -20,7 +20,7 @@ export function emptyPoolTarget(currentWorkspaceId: string): PoolTarget {
 }
 
 export function poolTargetReady(target: PoolTarget): boolean {
-  return target.name.trim().length > 0 && (target.allWorkspaces || target.workspaceIds.length > 0);
+  return target.name.trim().length > 0;
 }
 
 /** Workspaces part of `POST /api/pools`. */

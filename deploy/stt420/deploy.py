@@ -102,7 +102,7 @@ class Release:
 
     def verify_bundle(self):
         require(os.uname().machine == "x86_64", "bundle requires linux/amd64")
-        required = {"source.tar.gz", "deploy.py", "install-cli.py", "snapshot.py", "README.md",
+        required = {"source.tar.gz", "deploy.py", "install.sh", "install-cli.py", "snapshot.py", "README.md",
                     "bin/server", "bin/migrate", "bin/multica", "bin/choice-before", "bin/choice-after"}
         require(set(self.manifest["checksums"]) == required, "incomplete or unexpected bundle files")
         for name, checksum in self.manifest["checksums"].items():
