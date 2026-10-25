@@ -153,7 +153,8 @@ def main():
                 health = json.load(response)
             pid = int(release.run("systemctl", "show", "multica-agents", "-p", "MainPID", "--value"))
             deploy.require(health.get("status") == "running" and health.get("pid") == pid
-                           and health.get("cli_commit") == args.revision, "recorded daemon revision/health drift")
+                           and deploy.sha(Path(f"/proc/{pid}/exe")) == deploy.sha(release.package / "bin/multica"),
+                           "recorded daemon revision/health drift")
             print("CLI_ALREADY_INSTALLED=" + args.revision, flush=True)
         else:
             command = [sys.executable, str(Path(__file__).with_name("install-cli.py")), "--state", str(args.state)]
