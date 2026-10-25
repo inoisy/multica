@@ -10,9 +10,34 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/multica-ai/multica/server/internal/service"
 	"github.com/multica-ai/multica/server/internal/testutil"
 	"github.com/multica-ai/multica/server/internal/util"
 )
+
+func TestComparisonRetainsSubsecondForecastDifferences(t *testing.T) {
+	until := time.Date(2026, 10, 25, 12, 0, 0, 123456789, time.UTC)
+	input := service.ModelChoice{WaitUntil: &until, Rows: []service.ModelRowState{{Until: &until}}}
+	first, err := toChoice(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := until.Format(time.RFC3339Nano)
+	if first.WaitUntil == nil || *first.WaitUntil != want || first.Rows[0].Until == nil || *first.Rows[0].Until != want {
+		t.Fatalf("comparison lost forecast precision: %+v", first)
+	}
+	changed := until.Add(time.Nanosecond)
+	input.WaitUntil = &changed
+	second, err := toChoice(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, _ := json.Marshal(first)
+	b, _ := json.Marshal(second)
+	if string(a) == string(b) {
+		t.Fatal("subsecond algorithm difference was hidden")
+	}
+}
 
 func testPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()

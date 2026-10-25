@@ -49,9 +49,9 @@ func profileDifference(matches *bool, rows []int32) string {
 
 func accountFactLabel(fact *protocol.AccountFact) string {
 	if fact == nil {
-		return "неизвестен"
+		return "unknown"
 	}
-	return fmt.Sprintf("%s (%s), pool %s revision %d — подтверждён демоном", fact.SubscriptionKey, fact.SubscriptionID, fact.PoolID, fact.PoolRevision)
+	return fmt.Sprintf("%s (%s), pool %s revision %d — confirmed by daemon", fact.SubscriptionKey, fact.SubscriptionID, fact.PoolID, fact.PoolRevision)
 }
 
 func taskAccountLabel(task map[string]any) string {

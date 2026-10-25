@@ -1,13 +1,15 @@
 import { useCallback } from "react";
 import { queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "../api";
+import { ApiError, api } from "../api";
+import { PoolRevisionConflictSchema } from "../api/schemas";
 import { runtimeProfileKeys } from "../runtimes/profiles";
 import type {
-  CreateRuntimePoolInput,
+  CreatePoolInput,
   CreateSubscriptionInput,
+  SetPoolGrantsInput,
   StartSubscriptionLoginInput,
   SubscriptionLoginSession,
-  UpdateRuntimeProfileSubscriptionsInput,
+  UpdatePoolInput,
   UpdateSubscriptionInput,
 } from "../types/subscription";
 
@@ -21,6 +23,7 @@ export const subscriptionKeys = {
   all: () => ["subscriptions"] as const,
   list: () => [...subscriptionKeys.all(), "list"] as const,
   discrepancies: () => [...subscriptionKeys.all(), "discrepancies"] as const,
+  pools: () => [...subscriptionKeys.all(), "pools"] as const,
   login: (key: string) => [...subscriptionKeys.all(), "login", key] as const,
   profile: (wsId: string, profileId: string) => [...runtimeProfileKeys.all(wsId), "subscriptions", profileId] as const,
 };
@@ -29,6 +32,15 @@ export function subscriptionListOptions() {
   return queryOptions({
     queryKey: subscriptionKeys.list(),
     queryFn: () => api.listSubscriptions(),
+    refetchInterval: 60_000,
+  });
+}
+
+/** Pools that reach the reader's workspaces, with their accounts and verdicts; the one source of a pool's composition. */
+export function poolListOptions() {
+  return queryOptions({
+    queryKey: subscriptionKeys.pools(),
+    queryFn: () => api.listPools(),
     refetchInterval: 60_000,
   });
 }
@@ -60,12 +72,15 @@ export function runtimeProfileSubscriptionsOptions(wsId: string, profileId: stri
   });
 }
 
-// A subscription or pool edit changes cards (used_by, order) and every
-// workspace's copy of a shared profile, so both families are refreshed.
+// An account, limit or pool edit changes every screen that shows the same
+// verdict: account cards and pools, the environments that spend them, and the
+// forecast of every agent, issue and profile. Running tasks are not touched
+// server-side, so their stored facts stay as they were.
 function invalidateSubscriptions(client: ReturnType<typeof useQueryClient>) {
   return Promise.all([
     client.invalidateQueries({ queryKey: subscriptionKeys.all() }),
     client.invalidateQueries({ queryKey: ["runtime-profiles"] }),
+    client.invalidateQueries({ queryKey: ["model-profiles"] }),
   ]);
 }
 
@@ -93,21 +108,44 @@ export function useDeleteSubscription() {
   });
 }
 
-export function useCreateRuntimePool() {
+export function useCreatePool() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (input: CreateRuntimePoolInput) => api.createRuntimePool(input),
+    mutationFn: (input: CreatePoolInput) => api.createPool(input),
     onSettled: () => invalidateSubscriptions(client),
   });
 }
 
-export function useUpdateRuntimeProfileSubscriptions(wsId: string) {
+/** Account order, spend order, name and reach of a pool; the same mutation from the subscriptions page and from an environment. */
+export function useUpdatePool() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: ({ profileId, input }: { profileId: string; input: UpdateRuntimeProfileSubscriptionsInput }) =>
-      api.updateRuntimeProfileSubscriptions(wsId, profileId, input),
+    mutationFn: ({ id, input }: { id: string; input: UpdatePoolInput }) => api.updatePool(id, input),
     onSettled: () => invalidateSubscriptions(client),
   });
+}
+
+export function useSetPoolGrants() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: SetPoolGrantsInput }) => api.setPoolGrants(id, input),
+    onSettled: () => invalidateSubscriptions(client),
+  });
+}
+
+export function useDeletePool() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.deletePool(id),
+    onSettled: () => invalidateSubscriptions(client),
+  });
+}
+
+/** The pool's current revision when `error` is a stale-revision refusal of a pool edit; null for any other error. */
+export function poolRevisionConflict(error: unknown): number | null {
+  if (!(error instanceof ApiError) || error.status !== 409) return null;
+  const parsed = PoolRevisionConflictSchema.safeParse(error.body);
+  return parsed.success ? parsed.data.current_revision : null;
 }
 
 /**

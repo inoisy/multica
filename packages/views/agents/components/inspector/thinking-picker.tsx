@@ -8,7 +8,7 @@ import {
   PickerItem,
   PropertyPicker,
 } from "../../../issues/components/pickers";
-import { CHIP_CLASS } from "./chip";
+import { CHIP_CLASS, fieldControlSize } from "./chip";
 import { useT } from "../../../i18n";
 import { TooltipHint } from "@multica/ui/components/common/tooltip-hint";
 
@@ -32,6 +32,7 @@ export function ThinkingPicker({
   canEdit = true,
   variant = "chip",
   showLabel = true,
+  compact = false,
   onChange,
 }: {
   /** Persisted thinking_level — "" means "follow local CLI config". */
@@ -45,6 +46,8 @@ export function ThinkingPicker({
   canEdit?: boolean;
   variant?: "chip" | "field";
   showLabel?: boolean;
+  /** Field variant at the 32px height of the kit Input and Select. */
+  compact?: boolean;
   onChange: (next: string) => Promise<void> | void;
 }) {
   const { t } = useT("agents");
@@ -70,7 +73,7 @@ export function ThinkingPicker({
   if (!canEdit) {
     if (variant === "field") {
       const control = (
-        <div className="flex min-h-10 items-center gap-2 rounded-lg border border-input bg-input/50 px-3 text-body text-muted-foreground">
+        <div className={`flex ${fieldControlSize(compact)} items-center gap-2 rounded-lg border border-input bg-input/50 text-body text-muted-foreground`}>
           <Brain className="h-4 w-4 shrink-0" aria-hidden="true" />
           <span className="min-w-0 truncate">{triggerLabel}</span>
         </div>
@@ -109,7 +112,7 @@ export function ThinkingPicker({
           type="button"
           className={
             variant === "field"
-              ? `${showLabel ? "mt-1.5 " : ""}flex min-h-10 w-full min-w-0 items-center gap-2 rounded-lg border border-input bg-transparent px-3 text-left text-body transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50`
+              ? `${showLabel ? "mt-1.5 " : ""}flex ${fieldControlSize(compact)} w-full min-w-0 items-center gap-2 rounded-lg border border-input bg-transparent text-left text-body transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50`
               : CHIP_CLASS
           }
           aria-label={triggerTitle}
