@@ -70,7 +70,10 @@ type row struct {
 	ProfileID string  `json:"profile_id,omitempty"`
 	State     string  `json:"state"`
 	Until     *string `json:"until,omitempty"`
-	Chosen    bool    `json:"chosen"`
+	// ReasonCode is written only by the algorithm after the switch; the
+	// original one has no such field, so it is compared only when both have it.
+	ReasonCode string `json:"reason_code,omitempty"`
+	Chosen     bool   `json:"chosen"`
 }
 
 type choice struct {
