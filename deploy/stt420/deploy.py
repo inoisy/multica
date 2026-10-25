@@ -75,18 +75,21 @@ class Release:
         return data
 
     def wait(self, revision):
+        # Workspace pages live under /{slug}/; a bare /profiles is a reserved
+        # slug and answers 404 in every version, so only /login is probed.
+        last = None
         for _ in range(60):
             try:
                 h = self.health()
-                require(len(h.get("commit", "")) >= 9 and revision.startswith(h["commit"]), "wrong backend revision")
+                require(len(h.get("commit", "")) >= 9 and revision.startswith(h["commit"]),
+                        "wrong backend revision " + str(h.get("commit")))
                 with urllib.request.urlopen(self.web + "/login", timeout=5) as r:
                     require(r.status == 200, "web login failed")
-                with urllib.request.urlopen(self.web + "/profiles", timeout=5) as r:
-                    require(r.status == 200, "web profiles failed")
                 return h
-            except Exception:
+            except Exception as exc:
+                last = exc
                 time.sleep(2)
-        raise RuntimeError("backend/web smoke timeout")
+        raise RuntimeError("backend/web smoke timeout: " + str(last))
 
     def psql(self, query):
         return self.compose("exec", "-T", "postgres", "sh", "-c",
@@ -312,7 +315,8 @@ class Release:
             self.data["phase"] = "installed"
             self.data["deployed_at"] = utc()
             self.save()
-        except BaseException:
+        except BaseException as exc:
+            print("STT420 FAILED, rolling back: " + str(exc), file=sys.stderr, flush=True)
             self.rollback(automatic=True)
             raise
         print("INSTALLED=" + self.manifest["revision"])

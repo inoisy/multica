@@ -6,6 +6,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -89,10 +90,39 @@ def resume(release):
         deploy.require(release.protected() == release.data["protected"], "protected service changed")
         release.data["deployed_at"] = deploy.utc()
         phase(release, "installed")
-    except BaseException:
+    except BaseException as exc:
+        print("STT420 FAILED, rolling back: " + str(exc), file=sys.stderr, flush=True)
         release.rollback(automatic=True)
         raise
     print("INSTALLED=" + release.manifest["revision"], flush=True)
+
+
+def reset_after_rollback(release):
+    """Return a state whose automatic rollback restored 596 to the completed-build phase."""
+    data = release.data
+    deploy.require(data["phase"] in ("migrating", "rolled_back") and data.get("backup"),
+                   "retry needs a state that reached backup and was rolled back")
+    deploy.require(release.versions() == data["backup"]["versions"], "schema is not the pre-release one; inspect before retry")
+    current = {}
+    for service, image in data["old_images"].items():
+        current[service] = release.cid(service)
+        deploy.require(release.inspect(current[service])["Image"] == image, "old image is not running: " + service)
+    release.wait(release.manifest["previous_revision"])
+    deploy.require(release.protected() == data["protected"], "PostgreSQL or daemon changed")
+    attempt = len(data.get("attempts", [])) + 1
+    record = {"phase": data["phase"], "failed_after": data.get("updated_at"), "backup": data.pop("backup"),
+              "rehearsal": data.pop("rehearsal", None), "snapshot_time": data.pop("snapshot_time", None)}
+    # The isolated copy is scratch; the pre-attempt dump is kept beside the new one.
+    shutil.rmtree(release.state / "rehearsal-data", ignore_errors=True)
+    dump = release.state / "database.dump"
+    if dump.exists():
+        record["backup"]["path"] = str(dump.rename(release.state / f"database.attempt-{attempt}.dump"))
+    data.pop("rehearsal_container", None)
+    data.setdefault("attempts", []).append(record)
+    data["old_containers"].update(current)
+    data["phase"] = "building"
+    release.save()
+    print("RESET_AFTER_ROLLBACK=" + str(attempt), flush=True)
 
 
 def main():
@@ -101,6 +131,7 @@ def main():
     parser.add_argument("--revision", required=True)
     parser.add_argument("--update-daemon", action="store_true")
     parser.add_argument("--force-daemon", action="store_true")
+    parser.add_argument("--retry-after-rollback", action="store_true")
     args = parser.parse_args()
     deploy.require(os.geteuid() == 0, "run as root")
     deploy.require(not args.force_daemon or args.update_daemon, "--force-daemon requires --update-daemon")
@@ -112,6 +143,8 @@ def main():
         deploy.require(release.manifest["revision"] == args.revision == release.data["revision"], "release SHA mismatch")
         deploy.require_acceptance(release.package / "acceptance.json", args.revision)
         print("STATE=" + str(release.state), flush=True)
+        if args.retry_after_rollback and release.data["phase"] != "building":
+            reset_after_rollback(release)
         resume(release)
     # The daemon installer takes the same lock and has its own PID/health checks.
     if args.update_daemon:
