@@ -498,11 +498,22 @@ func (s *ModelProfileService) Import(ctx context.Context, workspaceID, actor pgt
 		sort.Strings(ap.DisallowedTools)
 
 		ca := ModelChoiceAgent{ID: ap.AgentID, OwnerID: util.UUIDToString(agent.OwnerID), RuntimeID: ap.Current.RuntimeID, Model: ap.Current.Model,
-			ThinkingLevel: ap.Current.ThinkingLevel, DisallowedTools: ap.DisallowedTools, Options: ap.OwnList}
-		if profile != nil {
+			ThinkingLevel: ap.Current.ThinkingLevel, DisallowedTools: ap.DisallowedTools}
+		profiles := after.Profiles
+		switch {
+		case len(ap.OwnList) > 0:
+			// The own list becomes the agent's personal profile.
+			own := "own:" + ap.AgentID
+			profiles = make(map[string]ModelProfileData, len(after.Profiles)+1)
+			for k, v := range after.Profiles {
+				profiles[k] = v
+			}
+			profiles[own] = ModelProfileData{ID: own, Name: ap.AgentName, OwnerAgentID: ap.AgentID, Options: ap.OwnList}
+			ca.ModelProfileID = own
+		case profile != nil:
 			ca.ModelProfileID = profile.ID
 		}
-		ap.WouldChoose = ChooseModel(ModelChoiceInput{Agent: ca, Profiles: after.Profiles, Runtimes: after.Runtimes}, now)
+		ap.WouldChoose = ChooseModel(ModelChoiceInput{Agent: ca, Profiles: profiles, Runtimes: after.Runtimes}, now)
 		ap.Matches = ap.WouldChoose.Chosen != nil && ap.WouldChoose.Chosen.RuntimeID == ap.Current.RuntimeID &&
 			ap.WouldChoose.Chosen.Model == ap.Current.Model && ap.WouldChoose.Chosen.ThinkingLevel == ap.Current.ThinkingLevel
 		if !ap.Matches {

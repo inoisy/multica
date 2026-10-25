@@ -31,6 +31,17 @@ func choiceWorld() ModelChoiceInput {
 	}
 }
 
+// personal gives the agent a personal profile of the rows and points the agent
+// at it, as the own list used to be set.
+func personal(in *ModelChoiceInput, rows ...ModelOption) {
+	if in.Profiles == nil {
+		in.Profiles = map[string]ModelProfileData{}
+	}
+	id := "personal-" + in.Agent.ID
+	in.Profiles[id] = ModelProfileData{ID: id, Name: "Agent · personal", OwnerAgentID: in.Agent.ID, Options: rows}
+	in.Agent.ModelProfileID = id
+}
+
 func limit(in *ModelChoiceInput, runtime string, until time.Time) {
 	rt := in.Runtimes[runtime]
 	rt.UnavailableUntil = until
@@ -115,10 +126,10 @@ func TestModelOptionListPriority(t *testing.T) {
 		t.Fatalf("agent profile: %+v", c)
 	}
 
-	// An own list wins over the agent's profile; one row pins the model.
-	in.Agent.Options = []ModelOption{{Position: 1, RuntimeID: "rt-claude", Model: "sonnet"}}
-	if c = ChooseModel(in, choiceNow); c.Source != ModelSourceAgentList || c.Chosen.Model != "sonnet" || c.ProfileID != "" {
-		t.Fatalf("own list: %+v", c)
+	// A personal profile is the agent's profile; one row pins the model.
+	personal(&in, ModelOption{Position: 1, RuntimeID: "rt-claude", Model: "sonnet"})
+	if c = ChooseModel(in, choiceNow); c.Source != ModelSourceAgentProfile || !c.ProfilePersonal || c.Chosen.Model != "sonnet" {
+		t.Fatalf("personal profile: %+v", c)
 	}
 
 	// The issue's profile wins over everything for runs of that issue only.
@@ -127,12 +138,11 @@ func TestModelOptionListPriority(t *testing.T) {
 		t.Fatalf("issue profile: %+v", c)
 	}
 	in.IssueID, in.IssueProfileID = "other", ""
-	if c = ChooseModel(in, choiceNow); c.Source != ModelSourceAgentList || c.IssueID != "" {
+	if c = ChooseModel(in, choiceNow); c.Source != ModelSourceAgentProfile || c.IssueID != "" {
 		t.Fatalf("another issue keeps the agent's list: %+v", c)
 	}
 
 	// A profile that no longer exists is skipped, never an error.
-	in.Agent.Options = nil
 	in.Agent.ModelProfileID = "gone"
 	if c = ChooseModel(in, choiceNow); c.Source != ModelSourceAgentFields {
 		t.Fatalf("missing profile: %+v", c)
@@ -191,10 +201,10 @@ func TestModelOptionExhaustedProfileFallsBack(t *testing.T) {
 		t.Fatalf("cycle: %+v", c)
 	}
 
-	// The agent's own list has no exhausted-profile: it waits.
-	in.Agent.Options = []ModelOption{{Position: 1, RuntimeID: "rt-codex"}}
-	if c = ChooseModel(in, choiceNow); !c.Waiting() || c.Source != ModelSourceAgentList {
-		t.Fatalf("own list waits: %+v", c)
+	// A migrated personal profile has no exhausted-profile: it waits.
+	personal(&in, ModelOption{Position: 1, RuntimeID: "rt-codex"})
+	if c = ChooseModel(in, choiceNow); !c.Waiting() || c.Source != ModelSourceAgentProfile || !c.ProfilePersonal {
+		t.Fatalf("personal profile waits: %+v", c)
 	}
 }
 

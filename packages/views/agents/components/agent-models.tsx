@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import type {
   Agent,
   AgentModelChoiceEntry,
+  AgentModels as AgentModelsData,
   AgentRuntime,
   MemberWithUser,
   ModelChoice,
@@ -20,6 +21,7 @@ import {
   modelProfileListOptions,
   modelRowLabel,
   toModelOptionInputs,
+  useAgentPersonalProfile,
   useUpdateAgentModels,
 } from "@multica/core/model-profiles";
 import { Badge } from "@multica/ui/components/ui/badge";
@@ -37,13 +39,17 @@ import {
 import { SettingsCard, SettingsRow, SettingsSection } from "../../settings/components/settings-layout";
 import { useT } from "../../i18n";
 import { AppLink } from "../../navigation";
+import { AccountFactLine } from "../../model-profiles/account-fact";
+import { useAvailabilityText } from "../../model-profiles/availability-text";
 import { ModelRowsEditor } from "../../model-profiles/model-rows-editor";
 import { formatModelTime, useModelText } from "../../model-profiles/model-text";
+import { PersonalRowsList, ProfileDiffBadge } from "../../model-profiles/profile-diff";
+import { ResetPersonalDialog } from "../../model-profiles/reset-personal-dialog";
 
 const NO_PROFILE = "none";
 
-/** Where the agent's model comes from; "fields" — neither profile nor own list: General's runtime and model. */
-type SourceMode = "profile" | "chain" | "one" | "fields";
+/** Where the agent's model comes from; "fields" — no profile at all: General's runtime and model. */
+type SourceMode = AgentModelsData["mode"];
 
 /** A card section whose content spans the card: lists, not a single control. */
 function ListBlock({ label, children, testId }: { label: ReactNode; children: ReactNode; testId?: string }) {
@@ -62,11 +68,12 @@ function rowBadgeVariant(row: ModelRowState): "secondary" | "destructive" | "out
 }
 
 /**
- * Settings → General → Models: the one place an agent's model is set, by
- * one of three sources — a workspace profile, the agent's own chain, or one
- * pinned model (an own chain of one row). The server picks the first
- * available row at every claim, so a save applies from the next run and
- * never touches a run in progress.
+ * Settings → General → Models: the one place an agent's model is set, by one
+ * of three sources — a shared profile, the agent's personal profile (its own
+ * copy of a shared one, compared with it row by row) or one model. Personal
+ * profile and one model are edited with the same row editor as a shared
+ * profile. The server picks the first available row at every claim, so a
+ * save applies from the next run and never touches a run in progress.
  */
 export function AgentModels({
   agent,
@@ -81,19 +88,23 @@ export function AgentModels({
 }) {
   const { t } = useT("agents");
   const text = useModelText();
+  const availability = useAvailabilityText();
   const wsId = useWorkspaceId();
   const paths = useWorkspacePaths();
   const query = useQuery(agentModelsOptions(wsId, agent.id));
   const profiles = useQuery(modelProfileListOptions(wsId));
   const update = useUpdateAgentModels(wsId, agent.id);
+  const personal = useAgentPersonalProfile(wsId, agent.id);
   const [draft, setDraft] = useState<ModelOptionInput[] | null>(null);
   const [pending, setPending] = useState<SourceMode | null>(null);
   const [pickedProfile, setPickedProfile] = useState<string>(NO_PROFILE);
+  const [confirmReset, setConfirmReset] = useState(false);
   const [tool, setTool] = useState("");
 
   useEffect(() => {
     setDraft(null);
     setPending(null);
+    setConfirmReset(false);
     setTool("");
   }, [agent.id]);
 
@@ -103,47 +114,36 @@ export function AgentModels({
   if (!data) return null;
 
   const canEdit = data.can_edit;
-  const busy = update.isPending;
-  const save = (input: Parameters<typeof update.mutateAsync>[0], done?: () => void) =>
-    update.mutateAsync(input).then(
-      () => {
-        toast.success(t(($) => $.models.saved));
-        done?.();
-      },
-      (error: unknown) => toast.error(error instanceof Error ? error.message : String(error)),
-    );
+  const busy = update.isPending || personal.create.isPending || personal.save.isPending || personal.reset.isPending || personal.single.isPending;
+  const fail = (error: unknown) => toast.error(error instanceof Error ? error.message : String(error));
+  const done = (message: string, after?: () => void) => () => {
+    toast.success(message);
+    after?.();
+  };
+  const savedToast = t(($) => $.models.saved);
+  const save = (input: Parameters<typeof update.mutateAsync>[0], after?: () => void) =>
+    update.mutateAsync(input).then(done(savedToast, after), fail);
 
   const profileItems = [
     { value: NO_PROFILE, label: t(($) => $.models.profile_none) },
     ...(profiles.data ?? []).map((p) => ({ value: p.id, label: p.name })),
   ];
   const profileName = (id: string | null) => (profiles.data ?? []).find((p) => p.id === id)?.name ?? "";
-  const ownRows: ModelRowState[] =
-    data.preview.source === "agent_list"
-      ? data.preview.rows
-      : data.options.map((o) => ({ ...o, runtime_name: runtimes.find((r) => r.id === o.runtime_id)?.name ?? "", provider: "", state: "", until: null, chosen: false }));
   // "Now" is the row the last run got; with no run yet, what the next one
   // would take. Runs that wait for a free model are listed under it.
   const current: { choice: ModelChoice; entry: AgentModelChoiceEntry | null } = data.last?.choice
     ? { choice: data.last.choice, entry: data.last }
     : { choice: data.preview, entry: null };
-  // Where the model comes from: the agent's own list (one row pins the model),
-  // else its profile, else the plain runtime/model fields of General.
-  const mode: SourceMode = data.own_list
-    ? data.options.length === 1
-      ? "one"
-      : "chain"
-    : data.model_profile_id
-      ? "profile"
-      : "fields";
+  const mode: SourceMode = data.mode;
   const shown: SourceMode = pending ?? mode;
+  const sharedId = mode === "profile" ? data.model_profile_id : data.base_profile_id;
+  const sharedName = mode === "profile" ? data.profile_name : data.base_profile_name;
   const reset = () => {
     setPending(null);
     setDraft(null);
   };
   const seedRows = (): ModelOptionInput[] => {
-    if (data.own_list) return toModelOptionInputs(data.options);
-    const rows = data.profile_rows.length ? data.profile_rows : data.preview.rows;
+    const rows = data.personal_rows.length ? data.personal_rows : data.profile_rows.length ? data.profile_rows : data.preview.rows;
     if (rows.length) return toModelOptionInputs(rows);
     return agent.runtime_id
       ? [{ runtime_id: agent.runtime_id, model: agent.model ?? "", thinking_level: agent.thinking_level ?? "", custom_args: null }]
@@ -158,10 +158,12 @@ export function AgentModels({
     setPending(next);
     if (next === "profile") {
       setDraft(null);
-      setPickedProfile(data.model_profile_id ?? profiles.data?.[0]?.id ?? NO_PROFILE);
-    } else {
-      const rows = seedRows();
-      setDraft(next === "one" ? rows.slice(0, 1) : rows);
+      setPickedProfile(data.base_profile_id ?? profiles.data?.[0]?.id ?? NO_PROFILE);
+    } else if (next === "personal") {
+      // A copy is made on the server; without a profile to copy the person edits first.
+      setDraft(data.personal_profile_id || sharedId ? null : seedRows());
+    } else if (next === "single") {
+      setDraft(seedRows().slice(0, 1));
     }
   };
   const tools = data.disallowed_tools;
@@ -172,24 +174,57 @@ export function AgentModels({
   };
   const sources: { value: Exclude<SourceMode, "fields">; label: string; hint: string }[] = [
     { value: "profile", label: t(($) => $.models.mode_profile), hint: t(($) => $.models.mode_profile_hint) },
-    { value: "chain", label: t(($) => $.models.mode_chain), hint: t(($) => $.models.mode_chain_hint) },
-    { value: "one", label: t(($) => $.models.mode_single), hint: t(($) => $.models.mode_one_hint) },
+    { value: "personal", label: t(($) => $.models.mode_personal), hint: t(($) => $.models.mode_personal_hint) },
+    { value: "single", label: t(($) => $.models.mode_single), hint: t(($) => $.models.mode_one_hint) },
   ];
+
+  const switchToPersonal = () =>
+    data.personal_profile_id
+      ? personal.save
+          .mutateAsync({ options: toModelOptionInputs(data.personal_rows), from_profile_id: data.base_profile_id })
+          .then(done(savedToast, reset), fail)
+      : personal.create.mutateAsync({ from_profile_id: sharedId }).then(done(savedToast, reset), fail);
+  const savePersonalDraft = () =>
+    draft &&
+    personal.save
+      .mutateAsync({ options: draft, from_profile_id: sharedId })
+      .then(done(savedToast, reset), fail);
+  const saveSingleDraft = () => {
+    const [row] = draft ?? [];
+    return row && personal.single.mutateAsync({ ...row }).then(done(savedToast, reset), fail);
+  };
+  const resetToShared = () =>
+    personal.reset.mutateAsync().then(
+      done(t(($) => $.models.reset_done), () => {
+        setConfirmReset(false);
+        reset();
+      }),
+      fail,
+    );
 
   return (
     <SettingsSection title={t(($) => $.models.title)}>
       <SettingsCard>
         <SettingsRow label={t(($) => $.models.now_label)} size="text" align="start">
           <div className="space-y-0.5 text-body" data-testid="agent-models-now">
-            <p className="font-medium">{text.chosen(current.choice) || "—"}</p>
+            <p className="flex flex-wrap items-center gap-2 font-medium">
+              <span>{text.chosen(current.choice) || "—"}</span>
+              <Badge variant="outline">{current.entry ? t(($) => $.models.fact_badge) : t(($) => $.models.forecast_badge)}</Badge>
+            </p>
             <p className="text-caption text-muted-foreground">
               {text.source(current.choice, current.entry?.issue_identifier)} · {text.reason(current.choice)}
             </p>
             {current.entry ? (
-              <p className="text-caption text-muted-foreground">
-                {current.entry.issue_identifier ? `${current.entry.issue_identifier} · ` : ""}
-                {formatModelTime(current.entry.created_at)}
-              </p>
+              <>
+                <p className="text-caption text-muted-foreground">
+                  {current.entry.issue_identifier ? `${current.entry.issue_identifier} · ` : ""}
+                  {formatModelTime(current.entry.created_at)}
+                </p>
+                <p className="text-caption" data-testid="agent-models-account">
+                  <span className="text-muted-foreground">{t(($) => $.models.account_label)}: </span>
+                  <AccountFactLine fact={current.entry.account_fact} />
+                </p>
+              </>
             ) : (
               <p className="text-caption text-muted-foreground">{t(($) => $.models.now_next_run)}</p>
             )}
@@ -204,6 +239,23 @@ export function AgentModels({
           </div>
         </SettingsRow>
       </SettingsCard>
+
+      {data.runtime_unavailable.length > 0 ? (
+        <SettingsCard>
+          <ListBlock label={t(($) => $.models.unavailable_label)} testId="agent-models-unavailable">
+            <ul className="w-full space-y-1 text-caption">
+              {data.runtime_unavailable.map((block) => (
+                <li key={`${block.runtime_id}-${block.reason_code ?? ""}-${block.until}`} className="flex flex-wrap gap-x-2">
+                  <span className="font-medium">{block.runtime_name}</span>
+                  <span className="text-muted-foreground">
+                    {availability.describe({ blocked: true, reason_code: block.reason_code, until: block.until, until_estimated: block.until_estimated })}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </ListBlock>
+        </SettingsCard>
+      ) : null}
 
       <SettingsCard>
         <ListBlock label={t(($) => $.models.mode_label)} testId="agent-models-source">
@@ -283,7 +335,7 @@ export function AgentModels({
               <Button
                 size="sm"
                 disabled={busy || pickedProfile === NO_PROFILE}
-                onClick={() => void save({ options: [], model_profile_id: pickedProfile }, reset)}
+                onClick={() => void save({ model_profile_id: pickedProfile }, reset)}
               >
                 {t(($) => $.models.switch_to_profile, { name: profileName(pickedProfile) })}
               </Button>
@@ -311,7 +363,11 @@ export function AgentModels({
                       size="sm"
                       variant="ghost"
                       disabled={busy}
-                      onClick={() => void save({ options: toModelOptionInputs([{ ...row, position: 1 }]) })}
+                      onClick={() =>
+                        void personal.single
+                          .mutateAsync({ runtime_id: row.runtime_id, model: row.model, thinking_level: row.thinking_level, custom_args: row.custom_args })
+                          .then(done(savedToast), fail)
+                      }
                     >
                       {t(($) => $.models.pin)}
                     </Button>
@@ -320,39 +376,94 @@ export function AgentModels({
               ))}
             </ol>
           </ListBlock>
+          {data.personal_profile_id ? (
+            <div className="space-y-2 border-t px-4 py-3.5" data-testid="agent-models-personal-unused">
+              <p className="flex flex-wrap items-center gap-2 text-caption text-muted-foreground">
+                <ProfileDiffBadge matchesBase={data.matches_base} diffRows={data.diff_rows} />
+              </p>
+              <p className="text-caption text-muted-foreground">
+                {t(($) => $.models.personal_unused, {
+                  state: data.matches_base ? t(($) => $.models.matches_base) : t(($) => $.models.differs_rows, { rows: data.diff_rows.join(", ") }),
+                })}
+              </p>
+              {canEdit ? (
+                <Button size="sm" variant="outline" disabled={busy} onClick={() => void switchToPersonal()}>
+                  {t(($) => $.models.use_personal)}
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
         </SettingsCard>
       ) : null}
 
-      {(shown === "chain" || shown === "one") && draft === null ? (
+      {shown === "personal" && draft === null ? (
         <SettingsCard>
-          <ListBlock label={shown === "one" ? t(($) => $.models.one_title) : t(($) => $.models.chain_title)}>
+          <ListBlock label={t(($) => $.models.personal_title)} testId="agent-models-personal">
+            <div className="w-full space-y-3">
+              {mode === "personal" ? (
+                <>
+                  <div className="flex flex-wrap items-center gap-2 text-caption">
+                    {data.base_profile_id ? (
+                      <>
+                        <span className="text-muted-foreground">{t(($) => $.models.personal_base)}:</span>
+                        <AppLink href={paths.modelProfiles()} className="font-medium hover:underline">
+                          {data.base_profile_name}
+                        </AppLink>
+                      </>
+                    ) : (
+                      <span className="text-muted-foreground">{t(($) => $.models.personal_base_none)}</span>
+                    )}
+                    <ProfileDiffBadge matchesBase={data.matches_base} diffRows={data.diff_rows} />
+                  </div>
+                  <PersonalRowsList rows={data.personal_rows} baseRows={data.profile_rows} diffRows={data.diff_rows} />
+                  <p className="text-caption text-muted-foreground">{t(($) => $.models.personal_hint)}</p>
+                  {canEdit ? (
+                    <div className="flex flex-wrap gap-2">
+                      <Button size="sm" variant="outline" disabled={busy} onClick={() => setDraft(toModelOptionInputs(data.personal_rows))}>
+                        {t(($) => $.models.edit_personal)}
+                      </Button>
+                      {data.base_profile_id ? (
+                        <Button size="sm" variant="ghost" disabled={busy} onClick={() => setConfirmReset(true)}>
+                          {t(($) => $.models.reset_to_shared)}
+                        </Button>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  <Button size="sm" variant="ghost" disabled={busy} onClick={reset}>
+                    {t(($) => $.models.cancel)}
+                  </Button>
+                  <Button size="sm" disabled={busy} onClick={() => void switchToPersonal()}>
+                    {data.personal_profile_id
+                      ? t(($) => $.models.use_personal)
+                      : t(($) => $.models.create_personal, { name: sharedName })}
+                  </Button>
+                </div>
+              )}
+            </div>
+          </ListBlock>
+        </SettingsCard>
+      ) : null}
+
+      {shown === "single" && draft === null ? (
+        <SettingsCard>
+          <ListBlock label={t(($) => $.models.one_title)}>
             <div className="w-full space-y-2">
               <ol className="space-y-1.5" data-testid="agent-models-own">
-                {ownRows.map((row, index) => (
-                  <li key={index} className="flex flex-wrap items-center gap-2 text-body">
-                    {shown === "chain" ? (
-                      <span className="w-16 shrink-0 text-caption text-muted-foreground">
-                        {index === 0 ? t(($) => $.models.row_primary) : t(($) => $.models.row_n, { n: index + 1 })}
-                      </span>
-                    ) : null}
+                {data.personal_rows.slice(0, 1).map((row) => (
+                  <li key={row.position} className="flex flex-wrap items-center gap-2 text-body">
                     <span className="min-w-0 flex-1 truncate">{modelRowLabel(row)}</span>
                     {row.state ? <Badge variant={rowBadgeVariant(row)}>{text.state(row)}</Badge> : null}
-                    {row.chosen ? <Badge>{t(($) => $.models.current)}</Badge> : null}
                   </li>
                 ))}
               </ol>
-              {shown === "one" ? (
-                <p className="text-caption text-muted-foreground">{t(($) => $.models.one_hint)}</p>
-              ) : null}
+              <p className="text-caption text-muted-foreground">{t(($) => $.models.one_hint)}</p>
               {canEdit ? (
-                <Button size="sm" variant="outline" disabled={busy} onClick={() => setDraft(toModelOptionInputs(data.options))}>
-                  {shown === "one" ? t(($) => $.models.edit_single) : t(($) => $.models.edit_own)}
+                <Button size="sm" variant="outline" disabled={busy} onClick={() => setDraft(toModelOptionInputs(data.personal_rows).slice(0, 1))}>
+                  {t(($) => $.models.edit_single)}
                 </Button>
-              ) : null}
-              {data.model_profile_id ? (
-                <p className="text-caption text-muted-foreground">
-                  {t(($) => $.models.profile_unused, { name: data.profile_name || profileName(data.model_profile_id) })}
-                </p>
               ) : null}
             </div>
           </ListBlock>
@@ -368,20 +479,33 @@ export function AgentModels({
             members={members}
             currentUserId={currentUserId}
             disabled={busy}
-            single={shown === "one"}
+            single={shown === "single"}
+            baseRows={shown === "personal" && sharedId ? data.profile_rows : undefined}
           />
-          {shown === "one" ? <p className="text-caption text-muted-foreground">{t(($) => $.models.one_hint)}</p> : null}
+          {shown === "single" ? <p className="text-caption text-muted-foreground">{t(($) => $.models.one_hint)}</p> : null}
           <div className="flex gap-2">
             <Button size="sm" variant="ghost" disabled={busy} onClick={reset}>
               {t(($) => $.models.cancel)}
             </Button>
-            <Button size="sm" disabled={busy || draft.length === 0} onClick={() => void save({ options: draft }, reset)}>
+            <Button
+              size="sm"
+              disabled={busy || draft.length === 0}
+              onClick={() => void (shown === "single" ? saveSingleDraft() : savePersonalDraft())}
+            >
               {t(($) => $.models.save)}
             </Button>
           </div>
           <p className="text-caption text-muted-foreground">{t(($) => $.models.next_run_hint)}</p>
         </div>
       ) : null}
+
+      <ResetPersonalDialog
+        open={confirmReset}
+        baseName={data.base_profile_name}
+        busy={personal.reset.isPending}
+        onConfirm={() => void resetToShared()}
+        onOpenChange={setConfirmReset}
+      />
 
       <SettingsCard>
         <SettingsRow label={t(($) => $.models.tools_label)} description={t(($) => $.models.tools_hint)} size="select-wide" align="start">
@@ -459,6 +583,9 @@ export function AgentModels({
                       <span>{t(($) => $.models.row_short, { n: entry.position })} · {text.chosen(entry.choice)}</span>
                       <span className="text-muted-foreground">
                         {text.source(entry.choice, entry.issue_identifier)} · {text.reason(entry.choice)}
+                      </span>
+                      <span className="text-muted-foreground">
+                        {t(($) => $.models.account_label)}: <AccountFactLine fact={entry.account_fact} />
                       </span>
                     </>
                   ) : null}

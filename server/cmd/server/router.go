@@ -1601,6 +1601,7 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 
 		r.Get("/tasks/{taskId}/status", h.GetTaskStatus)
 		r.Post("/tasks/{taskId}/start", h.StartTask)
+		r.Post("/tasks/{taskId}/account", h.ConfirmTaskAccount)
 		r.Post("/tasks/{taskId}/supplements/claim", h.ClaimTaskSupplement)
 		r.Post("/tasks/{taskId}/supplements/{commentId}/ack", h.AckTaskSupplement)
 		r.Post("/tasks/{taskId}/wait-local-directory", h.MarkTaskWaitingLocalDirectory)
@@ -1721,6 +1722,17 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 			r.Delete("/{key}/login", h.CancelSubscriptionLogin)
 		})
 		r.Post("/api/runtime-pools", h.CreateRuntimePool)
+		// Pools of accounts: readable by members of any workspace for the
+		// workspaces they are in; every write is gated inside the handler on
+		// MULTICA_INSTANCE_ADMINS.
+		r.Route("/api/pools", func(r chi.Router) {
+			r.Get("/", h.ListPools)
+			r.Post("/", h.CreatePool)
+			r.Get("/{id}", h.GetPool)
+			r.Patch("/{id}", h.UpdatePool)
+			r.Delete("/{id}", h.DeletePool)
+			r.Put("/{id}/grants", h.SetPoolGrants)
+		})
 
 		r.Route("/api/workspaces", func(r chi.Router) {
 			r.Get("/", h.ListWorkspaces)
@@ -2357,6 +2369,13 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 					// tools, and what the server chooses for its next run.
 					r.Get("/models", h.GetAgentModels)
 					r.Put("/models", h.UpdateAgentModels)
+					// Personal profile of the agent: made from a shared one,
+					// edited, or one model only; DELETE returns the agent to the
+					// shared profile it was made from.
+					r.Post("/models/personal", h.CreateAgentPersonalProfile)
+					r.Put("/models/personal", h.SetAgentPersonalProfile)
+					r.Delete("/models/personal", h.ResetAgentPersonalProfile)
+					r.Put("/models/single", h.SetAgentSingleModel)
 				})
 			})
 

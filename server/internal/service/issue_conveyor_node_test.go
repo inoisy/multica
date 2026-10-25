@@ -85,15 +85,15 @@ func TestModelFamily(t *testing.T) {
 func TestChooseModelExcludesFamily(t *testing.T) {
 	now := time.Now()
 	in := ModelChoiceInput{
-		Agent: ModelChoiceAgent{Options: []ModelOption{
-			{Position: 1, RuntimeID: "codex", Model: "gpt-6.1-sol"},
-			{Position: 2, RuntimeID: "claude", Model: "claude-opus-5-5"},
-		}},
+		Agent: ModelChoiceAgent{ID: "agent"},
 		Runtimes: map[string]RuntimeAvailability{
 			"codex":  {Name: "Codex", Provider: "codex", Online: true},
 			"claude": {Name: "Claude", Provider: "claude", Online: true},
 		},
 	}
+	personal(&in,
+		ModelOption{Position: 1, RuntimeID: "codex", Model: "gpt-6.1-sol"},
+		ModelOption{Position: 2, RuntimeID: "claude", Model: "claude-opus-5-5"})
 	if c := ChooseModel(in, now); c.RuntimeID() != "codex" {
 		t.Fatalf("without exclusion chose %q", c.RuntimeID())
 	}
@@ -104,7 +104,7 @@ func TestChooseModelExcludesFamily(t *testing.T) {
 	}
 	// Only the excluded family left: the run waits rather than breaking the rule.
 	in.ExcludeFamily = "anthropic"
-	in.Agent.Options = in.Agent.Options[1:]
+	personal(&in, ModelOption{Position: 2, RuntimeID: "claude", Model: "claude-opus-5-5"})
 	if c := ChooseModel(in, now); !c.Waiting() || !strings.Contains(c.Summary(), "anthropic excluded") {
 		t.Fatalf("a same-family-only list ran: %+v / %s", c, c.Summary())
 	}

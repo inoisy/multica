@@ -3,9 +3,43 @@
 -- dependents in application code.
 
 -- name: ListModelProfiles :many
+-- Every profile of the workspace, personal ones included: the choice reads them all.
 SELECT * FROM model_profile
 WHERE workspace_id = $1
 ORDER BY lower(name), id;
+
+-- name: ListSharedModelProfiles :many
+SELECT * FROM model_profile
+WHERE workspace_id = $1 AND owner_agent_id IS NULL
+ORDER BY lower(name), id;
+
+-- name: ListPersonalModelProfiles :many
+SELECT * FROM model_profile
+WHERE workspace_id = $1 AND owner_agent_id IS NOT NULL
+ORDER BY lower(name), id;
+
+-- name: GetSharedModelProfileInWorkspace :one
+SELECT * FROM model_profile
+WHERE id = $1 AND workspace_id = $2 AND owner_agent_id IS NULL;
+
+-- name: GetPersonalModelProfileOfAgent :one
+SELECT * FROM model_profile
+WHERE owner_agent_id = $1;
+
+-- name: CreatePersonalModelProfile :one
+INSERT INTO model_profile (id, workspace_id, name, description, when_exhausted_profile_id, created_by, owner_agent_id, based_on_profile_id)
+VALUES ($1, $2, $3, '', $4, $5, $6, $7)
+RETURNING *;
+
+-- name: SetPersonalModelProfileBase :exec
+UPDATE model_profile SET based_on_profile_id = sqlc.narg(based_on_profile_id), updated_at = now()
+WHERE id = $1;
+
+-- name: ClearPersonalModelProfileBase :exec
+-- A shared profile is deleted: the personal profiles made from it keep their
+-- rows and their agents, and forget where they came from.
+UPDATE model_profile SET based_on_profile_id = NULL, updated_at = now()
+WHERE workspace_id = $1 AND based_on_profile_id = $2;
 
 -- name: GetModelProfileInWorkspace :one
 SELECT * FROM model_profile
@@ -18,7 +52,7 @@ WHERE workspace_id = $1 AND lower(name) = lower(sqlc.arg(name)::text);
 -- name: LockModelProfilesInWorkspace :many
 -- Serializes profile writes of one workspace so the cycle check of
 -- when_exhausted_profile_id sees a stable graph.
-SELECT id, when_exhausted_profile_id FROM model_profile
+SELECT id, when_exhausted_profile_id, owner_agent_id FROM model_profile
 WHERE workspace_id = $1
 ORDER BY id
 FOR UPDATE;
@@ -52,23 +86,6 @@ DELETE FROM model_profile_option WHERE profile_id = $1;
 
 -- name: InsertModelProfileOption :exec
 INSERT INTO model_profile_option (workspace_id, profile_id, position, runtime_id, model, thinking_level, custom_args)
-VALUES ($1, $2, $3, $4, $5, $6, $7);
-
--- name: ListAgentModelOptions :many
-SELECT * FROM agent_model_option
-WHERE agent_id = $1
-ORDER BY position;
-
--- name: ListAgentModelOptionsByWorkspace :many
-SELECT * FROM agent_model_option
-WHERE workspace_id = $1
-ORDER BY agent_id, position;
-
--- name: DeleteAgentModelOptions :exec
-DELETE FROM agent_model_option WHERE agent_id = $1;
-
--- name: InsertAgentModelOption :exec
-INSERT INTO agent_model_option (workspace_id, agent_id, position, runtime_id, model, thinking_level, custom_args)
 VALUES ($1, $2, $3, $4, $5, $6, $7);
 
 -- name: SetAgentModelProfile :one
@@ -117,7 +134,7 @@ WHERE workspace_id = $1 AND model_profile_id = $2;
 
 -- name: ListActiveRuntimeUnavailable :many
 SELECT * FROM runtime_unavailable
-WHERE workspace_id = $1 AND until > now()
+WHERE workspace_id = sqlc.arg(workspace_id) AND until > sqlc.arg(now)::timestamptz
 ORDER BY runtime_id, until DESC;
 
 -- name: ListActiveRuntimeUnavailableForRuntimes :many
@@ -126,8 +143,24 @@ WHERE runtime_id = ANY(sqlc.arg(runtime_ids)::uuid[]) AND until > now()
 ORDER BY runtime_id, until DESC;
 
 -- name: InsertRuntimeUnavailable :one
-INSERT INTO runtime_unavailable (workspace_id, runtime_id, until, reason, task_id)
-VALUES ($1, $2, $3, $4, $5)
+-- reason_code is the kind of refusal (provider_limit, agent_cap_refusal,
+-- disabled_refusal); subscription_id pins a provider refusal to the account
+-- the run was confirmed to spend.
+INSERT INTO runtime_unavailable (workspace_id, runtime_id, until, reason, task_id, reason_code, subscription_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING *;
+
+-- name: ListActiveLocalRefusals :many
+-- The daemon's own refusals that still hold: on the agent limit or on disabled
+-- accounts. Unknown refusals are never lifted by an operational refresh.
+SELECT * FROM runtime_unavailable
+WHERE until > @now::timestamptz
+  AND reason_code IN ('agent_cap_refusal', 'disabled_refusal')
+ORDER BY runtime_id, until DESC;
+
+-- name: DeleteRuntimeUnavailableByIDs :many
+-- Lifts refusals already chosen by their code.
+DELETE FROM runtime_unavailable WHERE id = ANY(@ids::uuid[])
 RETURNING *;
 
 -- name: DeleteExpiredRuntimeUnavailable :many
@@ -149,7 +182,7 @@ DELETE FROM runtime_unavailable WHERE runtime_unavailable.runtime_id = $1;
 -- name: ListAgentModelChoices :many
 -- The agent's latest model choices, newest first: the journal of the Models
 -- screen.
-SELECT t.id, t.issue_id, t.status, t.runtime_id, t.model_position, t.model_choice, t.created_at, t.dispatched_at,
+SELECT t.id, t.issue_id, t.status, t.runtime_id, t.model_position, t.model_choice, t.account_fact, t.created_at, t.dispatched_at,
        i.number AS issue_number, i.title AS issue_title
 FROM agent_task_queue t
 LEFT JOIN issue i ON i.id = t.issue_id
@@ -184,13 +217,12 @@ WHERE id = sqlc.arg(id) AND status = 'dispatched';
 
 -- name: ListQueuedTasksForModelRouting :many
 -- Unclaimed runs whose model comes from a list: already routed, or of an agent
--- on a profile or own list, or of an issue with a profile.
+-- on a profile (shared or personal), or of an issue with a profile.
 SELECT t.* FROM agent_task_queue t
 WHERE t.status = 'queued'
   AND (
     t.model_choice IS NOT NULL
     OR EXISTS (SELECT 1 FROM agent a WHERE a.id = t.agent_id AND a.model_profile_id IS NOT NULL)
-    OR EXISTS (SELECT 1 FROM agent_model_option o WHERE o.agent_id = t.agent_id)
     OR EXISTS (SELECT 1 FROM issue i WHERE i.id = t.issue_id AND i.model_profile_id IS NOT NULL)
   )
 ORDER BY t.created_at

@@ -67,6 +67,7 @@ import { ProjectFilter, TimeRangeFilter } from "./dashboard-filters";
 import { UsageTrendCard } from "./usage-trend-card";
 import { Leaderboard } from "./leaderboard";
 import { ErrorsTab } from "./errors-tab";
+import { SubscriptionsContent } from "../../subscriptions";
 import { cn } from "@multica/ui/lib/utils";
 
 // Stable references — `data ?? []` would create a new empty array on
@@ -81,7 +82,7 @@ const EMPTY_FAILURE_BY_AGENT: import("@multica/core/types").DashboardFailureByAg
   [];
 const EMPTY_AGENTS: Agent[] = [];
 
-type DashboardTab = "usage" | "errors";
+type DashboardTab = "usage" | "errors" | "subscriptions";
 const TAB_QUERY_KEY = "tab";
 const DEFAULT_TAB: DashboardTab = "usage";
 
@@ -131,9 +132,10 @@ function useDataFreshness(
 /**
  * Workspace + project usage dashboard.
  *
- * Lives at `/{slug}/usage`. Two tabs, split by the question the reader arrived
+ * Lives at `/{slug}/usage`. Tabs are split by the question the reader arrived
  * with rather than by which rollup feeds them: Usage answers "what did this
- * cost", Errors answers "what broke". They used to share one scrolling page,
+ * cost", Errors answers "what broke", Subscriptions shows plan headroom.
+ * Usage and Errors used to share one scrolling page,
  * where the failure breakdown sat below a leaderboard that could itself run to
  * thirty rows, and the only way to chart failures was to hide spend.
  *
@@ -162,7 +164,8 @@ export function DashboardPage() {
   // flipping tabs does not stack up history entries. An unknown ?tab= value
   // falls back to Usage rather than rendering nothing.
   const tabFromUrl = navigation.searchParams.get(TAB_QUERY_KEY);
-  const tab: DashboardTab = tabFromUrl === "errors" ? "errors" : DEFAULT_TAB;
+  const tab: DashboardTab =
+    tabFromUrl === "errors" || tabFromUrl === "subscriptions" ? tabFromUrl : DEFAULT_TAB;
   const handleTabChange = (next: string) => {
     const params = new URLSearchParams(navigation.searchParams);
     if (next === DEFAULT_TAB) params.delete(TAB_QUERY_KEY);
@@ -465,7 +468,7 @@ export function DashboardPage() {
       <CollectionPageHeader
         icon={BarChart3}
         title={t(($) => $.title)}
-        actions={
+        actions={tab === "subscriptions" ? undefined : (
           /* Data freshness cluster: the timestamp and the action that advances
              it stay together. Refresh re-pulls the same scope, so it lives here
              with the page metadata rather than among the scope controls. */
@@ -491,7 +494,7 @@ export function DashboardPage() {
               <RefreshCw className={isRefreshing ? "animate-spin" : undefined} />
             </IconButton>
           </div>
-        }
+        )}
       />
 
       {/* View toolbar, same grammar as the issues surface header: view
@@ -513,15 +516,23 @@ export function DashboardPage() {
             >
               {t(($) => $.errors.title)}
             </TabsTrigger>
+            <TabsTrigger
+              value="subscriptions"
+              className="h-full rounded-none px-2.5 text-label group-data-horizontal/tabs:after:bottom-0"
+            >
+              {t(($) => $.tab_subscriptions)}
+            </TabsTrigger>
           </TabsList>
-          <div className="flex shrink-0 items-center gap-2">
-            <TimeRangeFilter days={days} onChange={setDays} />
-            <ProjectFilter
-              projects={projects}
-              projectValue={projectValue}
-              onProjectChange={setProjectValue}
-            />
-          </div>
+          {tab !== "subscriptions" ? (
+            <div className="flex shrink-0 items-center gap-2">
+              <TimeRangeFilter days={days} onChange={setDays} />
+              <ProjectFilter
+                projects={projects}
+                projectValue={projectValue}
+                onProjectChange={setProjectValue}
+              />
+            </div>
+          ) : null}
         </div>
       </div>
 
@@ -634,6 +645,9 @@ export function DashboardPage() {
                 locales={locales}
               />
             )}
+          </TabsContent>
+          <TabsContent value="subscriptions">
+            <SubscriptionsContent />
           </TabsContent>
         </div>
       </div>

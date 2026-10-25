@@ -7,23 +7,22 @@ import { AppLink } from "../navigation";
 
 /**
  * Pages the fork adds sit under an upstream section instead of the sidebar:
- * model profiles under Agents, subscriptions under Runtimes, the epic stage
+ * model profiles under Agents, the epic stage
  * board under Issues. Each page of a section shows the same switcher in its
  * header, and the sidebar keeps the section's own entry active.
  */
-export type Section = "issues" | "agents" | "runtimes";
+export type Section = "issues" | "agents";
 
-type SectionPage = "issues" | "conveyor" | "agents" | "modelProfiles" | "runtimes" | "subscriptions";
+type SectionPage = "issues" | "conveyor" | "agents" | "modelProfiles";
 
 const SECTION_PAGES: Record<Section, readonly SectionPage[]> = {
   issues: ["issues", "conveyor"],
   agents: ["agents", "modelProfiles"],
-  runtimes: ["runtimes", "subscriptions"],
 };
 
 /**
  * The sidebar entry a fork page belongs to: `/profiles` keeps Agents
- * active, `/subscriptions` Runtimes and `/conveyor` Issues.
+ * active and `/conveyor` Issues.
  */
 export function sectionHrefsFor(p: WorkspacePaths, href: string): string[] {
   for (const pages of Object.values(SECTION_PAGES)) {
@@ -43,7 +42,7 @@ export function SectionTabs({ section, current, count }: { section: Section; cur
   const label = (page: SectionPage) => t(($) => $.section_tabs[page]);
   // Long names lose to the header's actions at phone width; short ones fit.
   const text = (page: SectionPage) => {
-    const short = page === "modelProfiles" || page === "runtimes" ? t(($) => $.section_tabs_short[page]) : null;
+    const short = page === "modelProfiles" ? t(($) => $.section_tabs_short[page]) : null;
     return short ? (
       <>
         <span className="sm:hidden">{short}</span>

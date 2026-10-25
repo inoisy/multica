@@ -689,6 +689,25 @@ describe("DashboardPage — the two questions are separate tabs", () => {
     expect(screen.getByRole("list", { name: "Top offenders" })).toBeInTheDocument();
   });
 
+  it("opens subscriptions in Analytics without project or period filters", async () => {
+    const user = userEvent.setup();
+    renderDashboard("tab=subscriptions");
+
+    expect(screen.getByRole("tab", { name: "Subscriptions" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("heading", { name: "Analytics" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "State" })).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Search accounts and pools")).toBeInTheDocument();
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: "Project" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Period" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "Usage" }));
+    expect(screen.getByRole("button", { name: "Project" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Period" })).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "Subscriptions" }));
+    expect(replaceSpy).toHaveBeenLastCalledWith("/acme/usage?tab=subscriptions");
+  });
+
   it("falls back to Usage for a tab value it does not recognise", () => {
     renderDashboard("tab=nonsense");
 

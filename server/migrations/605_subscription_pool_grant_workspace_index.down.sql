@@ -1,0 +1,1 @@
+DROP INDEX CONCURRENTLY IF EXISTS subscription_pool_grant_workspace_idx;

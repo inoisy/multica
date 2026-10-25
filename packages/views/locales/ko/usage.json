@@ -1,5 +1,6 @@
 {
   "title": "분석",
+  "tab_subscriptions": "구독",
   "tab_usage": "사용량",
   "header": {
     "timezone_and_updated": "{{tz}} · {{time}} 업데이트",
