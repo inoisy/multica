@@ -121,7 +121,7 @@ class Release:
         labels = backend["Config"]["Labels"]
         self.project = labels["com.docker.compose.project"]
         self.workdir = labels["com.docker.compose.project.working_dir"]
-        self.compose_files = labels["com.docker.compose.project.config_files"].split(",")
+        self.compose_files = stack_files(labels["com.docker.compose.project.config_files"])
         require(self.cid("backend") == backend["Id"], "Compose labels point at another stack")
         services = set(self.compose("config", "--services").split())
         require(services == {"backend", "frontend", "postgres"}, "unreviewed services in production stack")
@@ -353,6 +353,14 @@ class Release:
         require(self.protected() == self.data["protected"], "protected service drift after rollback")
         self.data["phase"] = "rolled_back"
         self.save()
+
+
+def stack_files(label):
+    # Containers started by this tool (install or rollback) carry its image
+    # override in their labels; the stack itself is the remaining files.
+    return [f for f in label.split(",")
+            if not (Path(f).name in ("old-images.json", "new-images.json")
+                    and Path(f).parent.name.startswith("multica-stt420."))]
 
 
 def require_acceptance(path, revision):
