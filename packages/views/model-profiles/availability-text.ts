@@ -1,5 +1,5 @@
 import type { AvailabilityVerdict, ReasonCode } from "@multica/core/types";
-import { useT } from "../i18n";
+import { useLocale, useT } from "../i18n";
 import { formatModelTime } from "./format-time";
 
 /** The part of a verdict the interface words: why something cannot run and until when. */
@@ -13,6 +13,7 @@ export type VerdictLike = Pick<AvailabilityVerdict, "reason_code" | "until" | "u
  */
 export function useAvailabilityText() {
   const { t } = useT("agents");
+  const locale = useLocale();
 
   const reason = (code: ReasonCode | null | undefined): string => {
     switch (code) {
@@ -42,7 +43,7 @@ export function useAvailabilityText() {
   /** "until 17:40", "about 17:40, estimate" or "end unknown"; an estimate is never worded as a reset. */
   const until = (verdict: Pick<VerdictLike, "until" | "until_estimated">): string => {
     if (!verdict.until) return t(($) => $.verdict.until_unknown);
-    const time = formatModelTime(verdict.until);
+    const time = formatModelTime(verdict.until, locale);
     return verdict.until_estimated
       ? t(($) => $.verdict.until_estimated, { time })
       : t(($) => $.verdict.until, { time });
@@ -59,7 +60,7 @@ export function useAvailabilityText() {
   /** "available from 17:40" for a blocked verdict, with the estimate marked and an unknown time said so. */
   const availableAt = (verdict: Pick<VerdictLike, "until" | "until_estimated">): string => {
     if (!verdict.until) return t(($) => $.verdict.available_unknown);
-    const time = formatModelTime(verdict.until);
+    const time = formatModelTime(verdict.until, locale);
     return verdict.until_estimated
       ? t(($) => $.verdict.available_at_estimated, { time })
       : t(($) => $.verdict.available_at, { time });

@@ -66,7 +66,6 @@ export function Discrepancies({
                   : t(($) => $.subscriptions.discrepancies.kind_unknown)}
               </span>
               {subject ? <span>{subject}</span> : null}
-              {item.message ? <span className="text-muted-foreground">{item.message}</span> : null}
               {poolId ? (
                 <Button variant="link"
                   type="button"

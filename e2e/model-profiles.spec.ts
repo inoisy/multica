@@ -21,11 +21,11 @@ test("profiles route renders its client exports and opens the profile editor", a
       for (const width of [1440, 375]) {
         const variant = `${colorScheme}-${width}`;
         await page.setViewportSize({ width, height: 1000 });
-        await page.emulateMedia({ colorScheme });
+        await page.emulateMedia({ colorScheme, reducedMotion: "reduce" });
         const response = await page.goto(`/${workspace.slug}/profiles`, { waitUntil: "domcontentloaded" });
         expect(response?.status()).toBe(200);
         await expect(page.getByRole("heading", { name: "Model profiles", exact: true })).toBeVisible();
-        await page.screenshot({ path: test.info().outputPath(`profiles-${variant}.png`), fullPage: true });
+        await page.screenshot({ path: test.info().outputPath(`profiles-${variant}.png`), fullPage: true, animations: "disabled" });
         await page.getByRole("button", { name: "Create profile", exact: true }).click();
         const editor = page.getByRole("dialog", { name: "New profile" });
         await expect(editor).toBeVisible();
@@ -33,10 +33,10 @@ test("profiles route renders its client exports and opens the profile editor", a
         await editor.getByRole("button", { name: "Add model", exact: true }).click();
         await expect(editor.getByText("Primary", { exact: true })).toBeVisible();
         expect(await editor.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
-        await page.screenshot({ path: test.info().outputPath(`profile-editor-${variant}.png`), fullPage: true });
+        await page.screenshot({ path: test.info().outputPath(`profile-editor-${variant}.png`), fullPage: true, animations: "disabled" });
         await editor.getByRole("combobox", { name: "When everything is on a limit", exact: true }).click();
         await expect(page.getByRole("option", { name: "wait", exact: true })).toBeVisible();
-        await page.screenshot({ path: test.info().outputPath(`profile-select-${variant}.png`), fullPage: true });
+        await page.screenshot({ path: test.info().outputPath(`profile-select-${variant}.png`), fullPage: true, animations: "disabled" });
         expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
       }
     }

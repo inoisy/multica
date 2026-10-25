@@ -144,11 +144,11 @@ func TestModelAccountDisplayUsesCodesAndUnknownFact(t *testing.T) {
 	if got := reasonCodeLabel("future_code", "old Russian message"); got != "unknown reason (future_code)" {
 		t.Fatal(got)
 	}
-	if got := accountFactLabel(nil); got != "неизвестен" {
+	if got := accountFactLabel(nil); got != "unknown" {
 		t.Fatal(got)
 	}
 	fact := &protocol.AccountFact{SubscriptionKey: "account-a", SubscriptionID: "id-a", PoolID: "pool-a", PoolRevision: 3}
-	if got := accountFactLabel(fact); !strings.Contains(got, "подтверждён демоном") || !strings.Contains(got, "revision 3") {
+	if got := accountFactLabel(fact); !strings.Contains(got, "confirmed by daemon") || !strings.Contains(got, "revision 3") {
 		t.Fatal(got)
 	}
 	raw := json.RawMessage(fmt.Sprintf(`{"mode":"personal","matches_base":true,"base_profile_name":"Shared","preview":{"reason":"all_unavailable","wait_reason_code":"agent_cap","rows":[]},"last":{"account_fact":%s}}`, mustAccountJSON(t, fact)))

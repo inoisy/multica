@@ -162,7 +162,7 @@ export function SubscriptionsContent() {
                 <span className="text-caption text-muted-foreground">
                   {t(($) => $.subscriptions.order[pool.spend_order])}
                   {" · "}
-                  {pool.all_workspaces ? t(($) => $.subscriptions.new_pool.all_workspaces) : t(($) => $.subscriptions.pool.workspaces_n, { n: pool.workspace_ids.length })}
+                  {pool.all_workspaces ? t(($) => $.subscriptions.new_pool.all_workspaces) : t(($) => $.subscriptions.pool.workspaces_n, { count: pool.workspace_ids.length })}
                 </span>
               </>
             ) : (

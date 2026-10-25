@@ -1325,7 +1325,7 @@
       "no_environments": "이 풀을 사용하는 환경이 아직 없습니다. 워크스페이스에 부여하면 생성됩니다.",
       "not_found": "풀이 보이지 않거나 삭제되었습니다.",
       "of_environment": "풀 “{{name}}”",
-      "workspaces_n": "워크스페이스 {{n}}개"
+      "workspaces_n_other": "워크스페이스 {{count}}개"
     },
     "new_pool": {
       "open": "새 풀",
@@ -1360,7 +1360,7 @@
         "loodsen-ai": "Lotsia 모델 (cisco VPN 필요)"
       },
       "step_name": "이름",
-      "name_placeholder": "예: Claude, 세 번째 구독",
+      "name_placeholder": "Claude 계정",
       "step_login": "로그인",
       "codex_login": "추가하면 계정용 링크와 코드가 여기에 표시됩니다.",
       "claude_login": "브라우저에서 이 Claude 계정에 로그인한 컴퓨터에서 claude setup-token을 실행하고 토큰을 붙여 넣으세요.",
