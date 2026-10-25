@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -61,25 +60,57 @@ type ModelProfileResponse struct {
 	WhenExhaustedProfileID *string                 `json:"when_exhausted_profile_id"`
 	Options                []service.ModelRowState `json:"options"`
 	Agents                 []ModelRefResponse      `json:"agents"`
-	OwnListAgents          []ModelRefResponse      `json:"own_list_agents"`
-	OpenIssues             []ModelRefResponse      `json:"open_issues"`
-	FallbackOf             []ModelRefResponse      `json:"fallback_of"`
-	UpdatedAt              string                  `json:"updated_at"`
+	// OwnListAgents are the agents on a personal profile made from this one,
+	// under the name older clients know them by; PersonalProfiles says more.
+	OwnListAgents []ModelRefResponse `json:"own_list_agents"`
+	// PersonalProfiles are the personal profiles made from this one, each with
+	// whether it still equals this profile and the rows where it differs.
+	PersonalProfiles []PersonalProfileRef `json:"personal_profiles"`
+	OpenIssues       []ModelRefResponse   `json:"open_issues"`
+	FallbackOf       []ModelRefResponse   `json:"fallback_of"`
+	UpdatedAt        string               `json:"updated_at"`
+	// Personal marks a personal profile (kind=personal or kind=all lists);
+	// OwnerAgent is its agent, BasedOn the shared profile it was made from.
+	Personal    bool              `json:"personal"`
+	OwnerAgent  *ModelRefResponse `json:"owner_agent"`
+	BasedOn     *ModelRefResponse `json:"based_on"`
+	MatchesBase *bool             `json:"matches_base"`
+	DiffRows    []int32           `json:"diff_rows"`
+}
+
+// PersonalProfileRef is a personal profile seen from the profile it was made from.
+type PersonalProfileRef struct {
+	ProfileID   string           `json:"profile_id"`
+	Agent       ModelRefResponse `json:"agent"`
+	MatchesBase bool             `json:"matches_base"`
+	DiffRows    []int32          `json:"diff_rows"`
 }
 
 // modelWorkspace is everything the profile pages show, loaded once.
 type modelWorkspace struct {
-	world        service.ModelWorld
-	profiles     []db.ModelProfile
-	agents       []db.Agent
-	ownListAgent map[string]bool
-	issues       []db.ListOpenIssuesWithModelProfileRow
-	prefix       string
+	world    service.ModelWorld
+	profiles []db.ModelProfile
+	agents   []db.Agent
+	issues   []db.ListOpenIssuesWithModelProfileRow
+	prefix   string
+	// personal maps an agent to its personal profile.
+	personal map[string]service.ModelProfileData
 }
 
-func (h *Handler) loadModelWorkspace(ctx context.Context, workspaceID pgtype.UUID, now time.Time) (modelWorkspace, error) {
+func (h *Handler) loadModelWorkspace(r *http.Request, workspaceID pgtype.UUID, now time.Time) (modelWorkspace, error) {
 	var m modelWorkspace
 	var err error
+	ctx := r.Context()
+	wsID := uuidToString(workspaceID)
+	member, err := h.getWorkspaceMember(ctx, requestUserID(r), wsID)
+	if err != nil {
+		return m, err
+	}
+	actorType, actorID := h.resolveActor(r, requestUserID(r), wsID)
+	visible, ok := h.accessibleAgentIDs(ctx, wsID, actorType, actorID, member.Role)
+	if !ok {
+		return m, errors.New("failed to load visible agents")
+	}
 	if m.world, err = service.LoadModelWorld(ctx, h.Queries, workspaceID, now); err != nil {
 		return m, err
 	}
@@ -89,13 +120,29 @@ func (h *Handler) loadModelWorkspace(ctx context.Context, workspaceID pgtype.UUI
 	if m.agents, err = h.Queries.ListAgents(ctx, workspaceID); err != nil {
 		return m, err
 	}
-	own, err := h.Queries.ListAgentModelOptionsByWorkspace(ctx, workspaceID)
-	if err != nil {
-		return m, err
+	agents := m.agents[:0]
+	for _, a := range m.agents {
+		if _, ok := visible[uuidToString(a.ID)]; ok {
+			agents = append(agents, a)
+		}
 	}
-	m.ownListAgent = map[string]bool{}
-	for _, o := range own {
-		m.ownListAgent[util.UUIDToString(o.AgentID)] = true
+	m.agents = agents
+	profiles := m.profiles[:0]
+	for _, p := range m.profiles {
+		if p.OwnerAgentID.Valid {
+			if _, ok := visible[uuidToString(p.OwnerAgentID)]; !ok {
+				delete(m.world.Profiles, uuidToString(p.ID))
+				continue
+			}
+		}
+		profiles = append(profiles, p)
+	}
+	m.profiles = profiles
+	m.personal = map[string]service.ModelProfileData{}
+	for _, p := range m.world.Profiles {
+		if p.Personal() {
+			m.personal[p.OwnerAgentID] = p
+		}
 	}
 	if m.issues, err = h.Queries.ListOpenIssuesWithModelProfile(ctx, db.ListOpenIssuesWithModelProfileParams{WorkspaceID: workspaceID}); err != nil {
 		return m, err
@@ -125,24 +172,52 @@ func (m modelWorkspace) profileRows(profileID, ownerID string, now time.Time) []
 	return rows
 }
 
+func (m modelWorkspace) agentName(id string) string {
+	for _, a := range m.agents {
+		if util.UUIDToString(a.ID) == id {
+			return a.Name
+		}
+	}
+	return ""
+}
+
 func (m modelWorkspace) profileResponse(p db.ModelProfile, now time.Time) ModelProfileResponse {
 	id := util.UUIDToString(p.ID)
 	resp := ModelProfileResponse{
 		ID: id, Name: p.Name, Description: p.Description, WhenExhaustedProfileID: uuidToPtr(p.WhenExhaustedProfileID),
-		Options: m.profileRows(id, "", now), Agents: []ModelRefResponse{}, OwnListAgents: []ModelRefResponse{},
-		OpenIssues: []ModelRefResponse{}, FallbackOf: []ModelRefResponse{}, UpdatedAt: timestampToString(p.UpdatedAt),
+		Options: m.profileRows(id, "", now), Agents: []ModelRefResponse{}, OwnListAgents: []ModelRefResponse{}, PersonalProfiles: []PersonalProfileRef{},
+		OpenIssues: []ModelRefResponse{}, FallbackOf: []ModelRefResponse{}, UpdatedAt: timestampToString(p.UpdatedAt), DiffRows: []int32{},
+	}
+	if p.OwnerAgentID.Valid {
+		owner := util.UUIDToString(p.OwnerAgentID)
+		resp.Personal = true
+		resp.OwnerAgent = &ModelRefResponse{ID: owner, Name: m.agentName(owner)}
+		if p.BasedOnProfileID.Valid {
+			base := util.UUIDToString(p.BasedOnProfileID)
+			resp.BasedOn = &ModelRefResponse{ID: base, Name: m.world.Profiles[base].Name}
+			diff := service.DiffRows(m.world.Profiles[id].Options, m.world.Profiles[base].Options)
+			matches := len(diff) == 0
+			resp.MatchesBase, resp.DiffRows = &matches, append(resp.DiffRows, diff...)
+		}
+		return resp
 	}
 	for _, a := range m.agents {
 		if a.ArchivedAt.Valid || util.UUIDToString(a.ModelProfileID) != id {
 			continue
 		}
-		ref := ModelRefResponse{ID: util.UUIDToString(a.ID), Name: a.Name}
-		if m.ownListAgent[ref.ID] {
-			resp.OwnListAgents = append(resp.OwnListAgents, ref)
-		} else {
-			resp.Agents = append(resp.Agents, ref)
-		}
+		resp.Agents = append(resp.Agents, ModelRefResponse{ID: util.UUIDToString(a.ID), Name: a.Name})
 	}
+	for _, mp := range m.world.Profiles {
+		if !mp.Personal() || mp.BasedOnProfileID != id {
+			continue
+		}
+		ref := ModelRefResponse{ID: mp.OwnerAgentID, Name: m.agentName(mp.OwnerAgentID)}
+		diff := service.DiffRows(mp.Options, m.world.Profiles[id].Options)
+		resp.PersonalProfiles = append(resp.PersonalProfiles, PersonalProfileRef{ProfileID: mp.ID, Agent: ref, MatchesBase: len(diff) == 0, DiffRows: append([]int32{}, diff...)})
+		resp.OwnListAgents = append(resp.OwnListAgents, ref)
+	}
+	sort.Slice(resp.PersonalProfiles, func(i, j int) bool { return resp.PersonalProfiles[i].Agent.Name < resp.PersonalProfiles[j].Agent.Name })
+	sort.Slice(resp.OwnListAgents, func(i, j int) bool { return resp.OwnListAgents[i].Name < resp.OwnListAgents[j].Name })
 	for _, i := range m.issues {
 		if util.UUIDToString(i.ModelProfileID) == id {
 			resp.OpenIssues = append(resp.OpenIssues, ModelRefResponse{ID: util.UUIDToString(i.ID), Name: i.Title, Identifier: service.IssueIdentifier(m.prefix, i.Number)})
@@ -186,13 +261,19 @@ func (h *Handler) ListModelProfiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	now := time.Now()
-	m, err := h.loadModelWorkspace(r.Context(), wsID, now)
+	m, err := h.loadModelWorkspace(r, wsID, now)
 	if err != nil {
 		writeModelProfileError(w, err)
 		return
 	}
+	// Shared profiles by default; kind=personal lists the personal ones,
+	// kind=all both.
+	kind := r.URL.Query().Get("kind")
 	out := make([]ModelProfileResponse, 0, len(m.profiles))
 	for _, p := range m.profiles {
+		if (kind == "personal" && !p.OwnerAgentID.Valid) || (kind != "personal" && kind != "all" && p.OwnerAgentID.Valid) {
+			continue
+		}
 		out = append(out, m.profileResponse(p, now))
 	}
 	writeJSON(w, http.StatusOK, out)
@@ -213,7 +294,7 @@ func (h *Handler) GetModelProfile(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) writeModelProfile(w http.ResponseWriter, r *http.Request, wsID, id pgtype.UUID, status int) {
 	now := time.Now()
-	m, err := h.loadModelWorkspace(r.Context(), wsID, now)
+	m, err := h.loadModelWorkspace(r, wsID, now)
 	if err != nil {
 		writeModelProfileError(w, err)
 		return
@@ -347,7 +428,7 @@ func (h *Handler) PreviewModelProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	now := time.Now()
-	m, err := h.loadModelWorkspace(r.Context(), wsID, now)
+	m, err := h.loadModelWorkspace(r, wsID, now)
 	if err != nil {
 		writeModelProfileError(w, err)
 		return
@@ -443,19 +524,33 @@ type AgentModelChoiceEntry struct {
 	IssueTitle      string               `json:"issue_title,omitempty"`
 	Position        int32                `json:"position"`
 	Choice          *service.ModelChoice `json:"choice"`
+	AccountFact     *service.AccountFact `json:"account_fact,omitempty"`
 	CreatedAt       string               `json:"created_at"`
 }
 
 // AgentModelsResponse is the Models section of an agent.
 type AgentModelsResponse struct {
-	AgentID         string                  `json:"agent_id"`
-	CanEdit         bool                    `json:"can_edit"`
-	ModelProfileID  *string                 `json:"model_profile_id"`
-	ProfileName     string                  `json:"profile_name,omitempty"`
-	ProfileAgents   int                     `json:"profile_agents"`
-	ProfileIssues   int                     `json:"profile_issues"`
+	AgentID        string  `json:"agent_id"`
+	CanEdit        bool    `json:"can_edit"`
+	ModelProfileID *string `json:"model_profile_id"`
+	ProfileName    string  `json:"profile_name,omitempty"`
+	ProfileAgents  int     `json:"profile_agents"`
+	ProfileIssues  int     `json:"profile_issues"`
+	// Mode is how the agent gets its models: "profile" (a shared profile),
+	// "personal" (its own profile of several rows), "single" (its own profile of
+	// one row) or "fields" (no profile: the agent's runtime and model).
+	Mode string `json:"mode"`
+	// PersonalProfileID is the agent's personal profile, even while it is not
+	// the one in use. BaseProfileID/Name is the shared profile it was made from.
+	PersonalProfileID *string `json:"personal_profile_id"`
+	BaseProfileID     *string `json:"base_profile_id"`
+	BaseProfileName   string  `json:"base_profile_name,omitempty"`
+	MatchesBase       *bool   `json:"matches_base"`
+	DiffRows          []int32 `json:"diff_rows"`
+	// OwnList and Options are the personal profile in the older shape.
 	OwnList         bool                    `json:"own_list"`
 	Options         []service.ModelOption   `json:"options"`
+	PersonalRows    []service.ModelRowState `json:"personal_rows"`
 	ProfileRows     []service.ModelRowState `json:"profile_rows"`
 	DisallowedTools []string                `json:"disallowed_tools"`
 	// Preview is what the server would choose for the agent's next run on an
@@ -489,23 +584,35 @@ type ModelRefWithProfile struct {
 	ProfileName string `json:"profile_name"`
 }
 
-// RuntimeUnavailableResponse is one active unavailability record.
+// RuntimeUnavailableResponse is one reason a runtime cannot run now: a refusal
+// stored for it, or the verdict computed from the accounts of its pool.
+// ReasonCode is the interface's code (agent_cap, provider_limit,
+// provider_refusal, login_required, disabled); UntilEstimated: nobody reported
+// a reset and Until is a guess; Computed: nothing is stored for it.
 type RuntimeUnavailableResponse struct {
-	RuntimeID   string  `json:"runtime_id"`
-	RuntimeName string  `json:"runtime_name"`
-	Until       string  `json:"until"`
-	Reason      string  `json:"reason"`
-	TaskID      *string `json:"task_id"`
-	CreatedAt   string  `json:"created_at"`
+	RuntimeID      string  `json:"runtime_id"`
+	RuntimeName    string  `json:"runtime_name"`
+	Until          string  `json:"until"`
+	Reason         string  `json:"reason"`
+	ReasonCode     string  `json:"reason_code"`
+	UntilEstimated bool    `json:"until_estimated"`
+	Computed       bool    `json:"computed"`
+	TaskID         *string `json:"task_id"`
+	CreatedAt      string  `json:"created_at"`
 }
 
 func runtimeUnavailableResponses(world service.ModelWorld) []RuntimeUnavailableResponse {
-	out := make([]RuntimeUnavailableResponse, 0, len(world.Records))
-	for _, rec := range world.Records {
-		out = append(out, RuntimeUnavailableResponse{
-			RuntimeID: util.UUIDToString(rec.RuntimeID), RuntimeName: world.Runtimes[util.UUIDToString(rec.RuntimeID)].Name,
-			Until: timestampToString(rec.Until), Reason: rec.Reason, TaskID: uuidToPtr(rec.TaskID), CreatedAt: timestampToString(rec.CreatedAt),
-		})
+	out := make([]RuntimeUnavailableResponse, 0, len(world.Blocks))
+	for _, b := range world.Blocks {
+		resp := RuntimeUnavailableResponse{
+			RuntimeID: b.RuntimeID, RuntimeName: world.Runtimes[b.RuntimeID].Name,
+			Until: b.Until.UTC().Format(time.RFC3339), Reason: b.Reason, ReasonCode: b.Code,
+			UntilEstimated: b.UntilEstimated, Computed: b.Computed, TaskID: uuidToPtr(b.TaskID),
+		}
+		if b.CreatedAt.Valid {
+			resp.CreatedAt = timestampToString(b.CreatedAt)
+		}
+		out = append(out, resp)
 	}
 	return out
 }
@@ -525,13 +632,22 @@ func (h *Handler) GetAgentModels(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	wsID := uuidToString(agent.WorkspaceID)
+	if _, ok := h.requireWorkspaceMember(w, r, wsID, "workspace not found"); !ok {
+		return
+	}
+	actorType, actorID := h.resolveActor(r, requestUserID(r), wsID)
+	if !h.canAccessPrivateAgent(r.Context(), agent, actorType, actorID, wsID) {
+		writeError(w, http.StatusForbidden, "you do not have access to this agent")
+		return
+	}
 	h.writeAgentModels(w, r, agent)
 }
 
 func (h *Handler) writeAgentModels(w http.ResponseWriter, r *http.Request, agent db.Agent) {
 	ctx := r.Context()
 	now := time.Now()
-	m, err := h.loadModelWorkspace(ctx, agent.WorkspaceID, now)
+	m, err := h.loadModelWorkspace(r, agent.WorkspaceID, now)
 	if err != nil {
 		writeModelProfileError(w, err)
 		return
@@ -543,28 +659,47 @@ func (h *Handler) writeAgentModels(w http.ResponseWriter, r *http.Request, agent
 	}
 	resp := AgentModelsResponse{
 		AgentID: uuidToString(agent.ID), CanEdit: h.canEditAgentQuietly(r, agent), ModelProfileID: uuidToPtr(agent.ModelProfileID),
-		OwnList: len(ca.Options) > 0, Options: ca.Options, DisallowedTools: ca.DisallowedTools,
-		Preview: service.ChooseModel(m.world.Input(ca, pgtype.UUID{}, pgtype.UUID{}), now),
-		Journal: []AgentModelChoiceEntry{}, Issues: []ModelRefWithProfile{}, ProfileRows: []service.ModelRowState{},
+		Mode: "fields", DiffRows: []int32{}, Options: []service.ModelOption{}, PersonalRows: []service.ModelRowState{},
+		DisallowedTools: ca.DisallowedTools,
+		Preview:         service.ChooseModel(m.world.Input(ca, pgtype.UUID{}, pgtype.UUID{}), now),
+		Journal:         []AgentModelChoiceEntry{}, Issues: []ModelRefWithProfile{}, ProfileRows: []service.ModelRowState{},
 		Records: runtimeUnavailableResponses(m.world),
-	}
-	if resp.Options == nil {
-		resp.Options = []service.ModelOption{}
 	}
 	if resp.DisallowedTools == nil {
 		resp.DisallowedTools = []string{}
 	}
+	agentID := util.UUIDToString(agent.ID)
+	if personal, ok := m.personal[agentID]; ok {
+		resp.PersonalProfileID = &personal.ID
+		resp.PersonalRows = m.profileRows(personal.ID, ca.OwnerID, now)
+		if personal.BasedOnProfileID != "" {
+			base := personal.BasedOnProfileID
+			resp.BaseProfileID, resp.BaseProfileName = &base, m.world.Profiles[base].Name
+			diff := service.DiffRows(personal.Options, m.world.Profiles[base].Options)
+			matches := len(diff) == 0
+			resp.MatchesBase, resp.DiffRows = &matches, append(resp.DiffRows, diff...)
+			resp.ProfileRows = m.profileRows(base, ca.OwnerID, now)
+		}
+	}
 	if p, ok := m.world.Profiles[ca.ModelProfileID]; ok && ca.ModelProfileID != "" {
 		resp.ProfileName = p.Name
-		resp.ProfileRows = m.profileRows(p.ID, ca.OwnerID, now)
-		for _, a := range m.agents {
-			if !a.ArchivedAt.Valid && util.UUIDToString(a.ModelProfileID) == p.ID {
-				resp.ProfileAgents++
+		if p.Personal() {
+			resp.Mode, resp.OwnList, resp.Options = "personal", true, p.Options
+			if len(p.Options) == 1 {
+				resp.Mode = "single"
 			}
-		}
-		for _, i := range m.issues {
-			if util.UUIDToString(i.ModelProfileID) == p.ID {
-				resp.ProfileIssues++
+		} else {
+			resp.Mode = "profile"
+			resp.ProfileRows = m.profileRows(p.ID, ca.OwnerID, now)
+			for _, a := range m.agents {
+				if !a.ArchivedAt.Valid && util.UUIDToString(a.ModelProfileID) == p.ID {
+					resp.ProfileAgents++
+				}
+			}
+			for _, i := range m.issues {
+				if util.UUIDToString(i.ModelProfileID) == p.ID {
+					resp.ProfileIssues++
+				}
 			}
 		}
 	}
@@ -585,6 +720,9 @@ func (h *Handler) writeAgentModels(w http.ResponseWriter, r *http.Request, agent
 	}
 	for _, c := range choices {
 		entry := AgentModelChoiceEntry{TaskID: util.UUIDToString(c.ID), Status: c.Status, IssueID: uuidToPtr(c.IssueID), Position: c.ModelPosition.Int32, CreatedAt: timestampToString(c.CreatedAt)}
+		if fact, ok := service.ParseAccountFact(c.AccountFact); ok {
+			entry.AccountFact = &fact
+		}
 		if c.IssueNumber.Valid {
 			entry.IssueIdentifier = service.IssueIdentifier(m.prefix, c.IssueNumber.Int32)
 			entry.IssueTitle = c.IssueTitle.String
@@ -689,6 +827,141 @@ func (h *Handler) UpdateAgentModels(w http.ResponseWriter, r *http.Request) {
 	h.writeAgentModels(w, r, updated)
 }
 
+// PersonalProfileRequest creates or replaces the agent's personal profile.
+type PersonalProfileRequest struct {
+	service.PersonalProfileInput
+}
+
+// SetAgentPersonalProfile handles PUT /api/agents/{id}/models/personal: the
+// rows of the agent's personal profile (made on the first call), from which the
+// agent then runs. from_profile_id names the shared profile it is compared
+// with; without it the profile the agent is on stays the base.
+func (h *Handler) SetAgentPersonalProfile(w http.ResponseWriter, r *http.Request) {
+	agent, ok := h.loadAgentForUser(w, r, chi.URLParam(r, "id"))
+	if !ok {
+		return
+	}
+	if !h.canManageAgent(w, r, agent) {
+		return
+	}
+	var req PersonalProfileRequest
+	if !decodeStrict(w, r, 65536, &req) {
+		return
+	}
+	updated, err := h.modelProfiles().SetPersonalProfile(r.Context(), agent, req.PersonalProfileInput)
+	if err != nil {
+		writeModelProfileError(w, err)
+		return
+	}
+	h.writeAgentModels(w, r, updated)
+}
+
+// CreateAgentPersonalProfile handles POST /api/agents/{id}/models/personal:
+// a personal profile that starts as a copy of a shared one (from_profile_id,
+// else the profile the agent is on) and the agent switches to it.
+func (h *Handler) CreateAgentPersonalProfile(w http.ResponseWriter, r *http.Request) {
+	agent, ok := h.loadAgentForUser(w, r, chi.URLParam(r, "id"))
+	if !ok {
+		return
+	}
+	if !h.canManageAgent(w, r, agent) {
+		return
+	}
+	var req struct {
+		FromProfileID *string `json:"from_profile_id"`
+	}
+	if !decodeStrict(w, r, 4096, &req) {
+		return
+	}
+	var source pgtype.UUID
+	switch {
+	case req.FromProfileID != nil && strings.TrimSpace(*req.FromProfileID) != "":
+		id, ok := parseUUIDOrBadRequest(w, strings.TrimSpace(*req.FromProfileID), "from_profile_id")
+		if !ok {
+			return
+		}
+		source = id
+	default:
+		source = agent.ModelProfileID
+	}
+	if !source.Valid {
+		writeError(w, http.StatusBadRequest, "the agent is on no profile; send from_profile_id or rows to PUT")
+		return
+	}
+	profile, err := h.Queries.GetSharedModelProfileInWorkspace(r.Context(), db.GetSharedModelProfileInWorkspaceParams{ID: source, WorkspaceID: agent.WorkspaceID})
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "from_profile_id is not a shared profile of this workspace")
+		return
+	}
+	rows, err := h.Queries.ListModelProfileOptions(r.Context(), profile.ID)
+	if err != nil {
+		writeModelProfileError(w, err)
+		return
+	}
+	in := service.PersonalProfileInput{FromProfileID: ptrString(uuidToString(profile.ID))}
+	for _, row := range rows {
+		o := service.ModelOptionInput{RuntimeID: uuidToString(row.RuntimeID), Model: row.Model, ThinkingLevel: row.ThinkingLevel}
+		if row.CustomArgs != nil {
+			var args []string
+			_ = json.Unmarshal(row.CustomArgs, &args)
+			if args == nil {
+				args = []string{}
+			}
+			o.CustomArgs = &args
+		}
+		in.Options = append(in.Options, o)
+	}
+	updated, err := h.modelProfiles().SetPersonalProfile(r.Context(), agent, in)
+	if err != nil {
+		writeModelProfileError(w, err)
+		return
+	}
+	h.writeAgentModels(w, r, updated)
+}
+
+func ptrString(s string) *string { return &s }
+
+// SetAgentSingleModel handles PUT /api/agents/{id}/models/single: the agent
+// runs one model; it is a personal profile of one row.
+func (h *Handler) SetAgentSingleModel(w http.ResponseWriter, r *http.Request) {
+	agent, ok := h.loadAgentForUser(w, r, chi.URLParam(r, "id"))
+	if !ok {
+		return
+	}
+	if !h.canManageAgent(w, r, agent) {
+		return
+	}
+	var row service.ModelOptionInput
+	if !decodeStrict(w, r, 4096, &row) {
+		return
+	}
+	updated, err := h.modelProfiles().SetSingleModel(r.Context(), agent, row)
+	if err != nil {
+		writeModelProfileError(w, err)
+		return
+	}
+	h.writeAgentModels(w, r, updated)
+}
+
+// ResetAgentPersonalProfile handles DELETE /api/agents/{id}/models/personal:
+// back to the shared profile the personal one was made from. The personal
+// profile and its rows are deleted in the same transaction.
+func (h *Handler) ResetAgentPersonalProfile(w http.ResponseWriter, r *http.Request) {
+	agent, ok := h.loadAgentForUser(w, r, chi.URLParam(r, "id"))
+	if !ok {
+		return
+	}
+	if !h.canManageAgent(w, r, agent) {
+		return
+	}
+	updated, err := h.modelProfiles().ResetPersonalProfile(r.Context(), agent)
+	if err != nil {
+		writeModelProfileError(w, err)
+		return
+	}
+	h.writeAgentModels(w, r, updated)
+}
+
 // SetIssueModelProfileRequest sets ("<id>") or clears (null) the profile.
 type SetIssueModelProfileRequest struct {
 	ModelProfileID *string `json:"model_profile_id"`
@@ -774,17 +1047,16 @@ type RecheckRuntimeUnavailableResponse struct {
 }
 
 // RecheckRuntimeUnavailable handles POST /api/runtime-unavailable/recheck:
-// re-applies the subscription pools to the latest snapshots now, as a usage
-// report would. A refusal the daemon wrote on the pool's own caps is lifted
-// when a fresh snapshot shows a subscription of the pool usable; a provider's
-// own limit stays. The waiting runs are handed out at once.
+// lifts the daemon's refusals on the pool's own limit that a fresh snapshot
+// has made stale, as a usage report would, and answers with what still holds.
+// A provider's own limit stays. The waiting runs are handed out at once.
 func (h *Handler) RecheckRuntimeUnavailable(w http.ResponseWriter, r *http.Request) {
 	wsID, _, ok := h.modelAdmin(w, r)
 	if !ok {
 		return
 	}
 	ctx := r.Context()
-	lifted := h.refreshSubscriptionAvailability(ctx)
+	lifted := h.afterAccountChange(ctx)
 	if h.TaskService != nil {
 		if _, err := h.TaskService.SweepModelRouting(ctx); err != nil {
 			slog.Warn("runtime unavailable recheck: model routing sweep", "error", err)
@@ -802,7 +1074,7 @@ func (h *Handler) RecheckRuntimeUnavailable(w http.ResponseWriter, r *http.Reque
 		}
 		resp.Lifted = append(resp.Lifted, RuntimeUnavailableResponse{
 			RuntimeID: util.UUIDToString(rec.RuntimeID), RuntimeName: world.Runtimes[util.UUIDToString(rec.RuntimeID)].Name,
-			Until: timestampToString(rec.Until), Reason: rec.Reason, TaskID: uuidToPtr(rec.TaskID), CreatedAt: timestampToString(rec.CreatedAt),
+			Until: timestampToString(rec.Until), Reason: rec.Reason, ReasonCode: service.StoredRefusalCode(rec), TaskID: uuidToPtr(rec.TaskID), CreatedAt: timestampToString(rec.CreatedAt),
 		})
 	}
 	writeJSON(w, http.StatusOK, resp)

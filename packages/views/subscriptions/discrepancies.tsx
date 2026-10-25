@@ -29,18 +29,19 @@ export function Discrepancies({
   wsId: string;
   profiles: RuntimeProfile[];
   subscriptions: Subscription[];
-  onOpenPool: (profileId: string) => void;
+  /** Opens the pool an environment spends. */
+  onOpenPool: (poolId: string) => void;
 }) {
   const { t } = useT("agents");
   if (!items.length) return null;
   const titleOf = (key: string) => subscriptions.find((s) => s.key === key)?.title ?? key;
   return (
     <section
-      className="space-y-2 rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2"
+      className="space-y-2 rounded-md border border-warning/40 bg-warning/10 px-3 py-2"
       aria-labelledby="subscriptions-discrepancies"
     >
       <h2 id="subscriptions-discrepancies" className="flex items-center gap-2 text-body font-medium">
-        <AlertTriangle className="size-4 shrink-0 text-amber-600" aria-hidden="true" />
+        <AlertTriangle className="size-4 shrink-0 text-warning" aria-hidden="true" />
         {t(($) => $.subscriptions.discrepancies.title)}
       </h2>
       <ul className="space-y-1.5 text-caption">
@@ -53,9 +54,9 @@ export function Discrepancies({
           ]
             .filter(Boolean)
             .join(" · ");
-          const pool =
+          const poolId =
             item.runtime_profile_id && (!item.workspace_id || item.workspace_id === wsId)
-              ? profiles.find((p) => p.id === item.runtime_profile_id)
+              ? profiles.find((p) => p.id === item.runtime_profile_id)?.pool_id
               : undefined;
           return (
             <li key={`${item.kind}-${index}`} className="flex flex-wrap items-baseline gap-x-2">
@@ -65,12 +66,11 @@ export function Discrepancies({
                   : t(($) => $.subscriptions.discrepancies.kind_unknown)}
               </span>
               {subject ? <span>{subject}</span> : null}
-              {item.message ? <span className="text-muted-foreground">{item.message}</span> : null}
-              {pool ? (
+              {poolId ? (
                 <Button variant="link"
                   type="button"
                   className="h-auto p-0 underline underline-offset-2"
-                  onClick={() => onOpenPool(pool.id)}
+                  onClick={() => onOpenPool(poolId)}
                 >
                   {t(($) => $.subscriptions.discrepancies.open_pool)}
                 </Button>

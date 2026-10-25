@@ -12,10 +12,10 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/multica-ai/multica/server/internal/cli"
+	"github.com/multica-ai/multica/server/pkg/protocol"
 )
 
-// Model lists of agents: the profile an agent references, its own list (an
-// exception to the profile), and what the server chooses for the next run.
+// Shared and personal model profiles, and the server preview for the next run.
 // The server is the only writer of the model a run uses; these commands edit
 // the lists it chooses from.
 
@@ -44,28 +44,43 @@ type modelOption struct {
 
 type modelRow struct {
 	modelOption
-	RuntimeName string  `json:"runtime_name"`
-	Provider    string  `json:"provider"`
-	State       string  `json:"state"`
-	Until       *string `json:"until"`
-	Chosen      bool    `json:"chosen"`
+	RuntimeName    string  `json:"runtime_name"`
+	Provider       string  `json:"provider"`
+	State          string  `json:"state"`
+	Until          *string `json:"until"`
+	Chosen         bool    `json:"chosen"`
+	ReasonCode     string  `json:"reason_code,omitempty"`
+	UntilEstimated bool    `json:"until_estimated,omitempty"`
 }
 
 type modelChoice struct {
-	Source            string       `json:"source"`
-	ProfileName       string       `json:"profile_name"`
-	Reason            string       `json:"reason"`
-	Position          int32        `json:"position"`
-	Chosen            *modelOption `json:"chosen"`
-	RuntimeName       string       `json:"runtime_name"`
-	ExhaustedProfiles []string     `json:"exhausted_profiles"`
-	WaitUntil         *string      `json:"wait_until"`
-	ExcludedFamily    string       `json:"excluded_family"`
-	Rows              []modelRow   `json:"rows"`
+	Source             string       `json:"source"`
+	ProfileName        string       `json:"profile_name"`
+	Reason             string       `json:"reason"`
+	WaitReasonCode     string       `json:"wait_reason_code,omitempty"`
+	WaitUntilEstimated bool         `json:"wait_until_estimated,omitempty"`
+	Position           int32        `json:"position"`
+	Chosen             *modelOption `json:"chosen"`
+	RuntimeName        string       `json:"runtime_name"`
+	ExhaustedProfiles  []string     `json:"exhausted_profiles"`
+	WaitUntil          *string      `json:"wait_until"`
+	ExcludedFamily     string       `json:"excluded_family"`
+	Rows               []modelRow   `json:"rows"`
 }
 
 type modelProfile struct {
-	ID                     string     `json:"id"`
+	ID               string    `json:"id"`
+	Personal         bool      `json:"personal"`
+	OwnerAgent       *modelRef `json:"owner_agent"`
+	BasedOn          *modelRef `json:"based_on"`
+	MatchesBase      *bool     `json:"matches_base"`
+	DiffRows         []int32   `json:"diff_rows"`
+	PersonalProfiles []struct {
+		ProfileID   string   `json:"profile_id"`
+		Agent       modelRef `json:"agent"`
+		MatchesBase bool     `json:"matches_base"`
+		DiffRows    []int32  `json:"diff_rows"`
+	} `json:"personal_profiles"`
 	Name                   string     `json:"name"`
 	Description            string     `json:"description"`
 	WhenExhaustedProfileID *string    `json:"when_exhausted_profile_id"`
@@ -79,6 +94,11 @@ type modelProfile struct {
 	OpenIssues []struct {
 		Identifier string `json:"identifier"`
 	} `json:"open_issues"`
+}
+
+type modelRef struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
 }
 
 func modelsClient(cmd *cobra.Command) (*cli.APIClient, context.Context, context.CancelFunc, error) {
@@ -110,12 +130,14 @@ func sourceLabel(c modelChoice) string {
 	switch c.Source {
 	case "issue_profile":
 		return fmt.Sprintf("issue profile %q", c.ProfileName)
-	case "agent_list":
-		return "own list"
+	case "agent_list", "agent_personal_profile":
+		return "personal profile"
 	case "agent_profile":
 		return fmt.Sprintf("profile %q", c.ProfileName)
-	default:
+	case "agent_fields", "":
 		return "agent fields"
+	default:
+		return "unknown source (" + c.Source + ")"
 	}
 }
 
@@ -127,9 +149,12 @@ func reasonLabel(c modelChoice) string {
 		var limited []string
 		for _, r := range c.Rows {
 			if r.Position < c.Position && r.State != "available" {
-				s := fmt.Sprintf("row %d %s", r.Position, r.State)
+				s := fmt.Sprintf("row %d %s", r.Position, reasonCodeLabel(r.ReasonCode, r.State))
 				if r.Until != nil {
 					s += " until " + formatLocal(r.Until)
+					if r.UntilEstimated {
+						s += " (estimate)"
+					}
 				}
 				limited = append(limited, s)
 			}
@@ -139,20 +164,29 @@ func reasonLabel(c modelChoice) string {
 		return fmt.Sprintf("every model of %s unavailable — took %q", strings.Join(c.ExhaustedProfiles, ", "), c.ProfileName)
 	case "all_unavailable":
 		if c.WaitUntil != nil {
-			return "every model unavailable until " + formatLocal(c.WaitUntil) + " — the run waits"
+			when := formatLocal(c.WaitUntil)
+			if c.WaitUntilEstimated {
+				when += " (estimate)"
+			}
+			return "every model unavailable until " + when + " — the run waits: " + reasonCodeLabel(c.WaitReasonCode, "unavailable")
 		}
-		return "every model unavailable — the run waits"
-	default:
+		return "every model unavailable — the run waits: " + reasonCodeLabel(c.WaitReasonCode, "unavailable")
+	case "no_models", "":
 		return "no model list and no runtime"
+	default:
+		return "unknown reason (" + c.Reason + ")"
 	}
 }
 
 func printModelRows(rows []modelRow) {
 	table := make([][]string, 0, len(rows))
 	for _, r := range rows {
-		state := r.State
+		state := reasonCodeLabel(r.ReasonCode, r.State)
 		if r.Until != nil {
 			state += " until " + formatLocal(r.Until)
+			if r.UntilEstimated {
+				state += " (estimate)"
+			}
 		}
 		mark := ""
 		if r.Chosen {
@@ -195,8 +229,8 @@ func newAgentModelsCommand() *cobra.Command {
 	}
 	set := &cobra.Command{
 		Use:   "set <agent> <runtime>[:<model>[:<thinking>]]...",
-		Short: "Give the agent its own list (one row pins the model)",
-		Long:  "The own list replaces the agent's profile until `models reset`. Rows are tried in order.",
+		Short: "Set rows of the agent's personal profile (legacy alias)",
+		Long:  "Personal rows are tried in order until `models reset` returns the agent to its shared base.",
 		Args:  cobra.MinimumNArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, ctx, cancel, err := modelsClient(cmd)
@@ -213,7 +247,7 @@ func newAgentModelsCommand() *cobra.Command {
 	}
 	reset := &cobra.Command{
 		Use:   "reset <agent>",
-		Short: "Remove the agent's own list; it runs on its profile again",
+		Short: "Return to the shared base and remove the personal profile",
 		Args:  exactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, ctx, cancel, err := modelsClient(cmd)
@@ -221,7 +255,7 @@ func newAgentModelsCommand() *cobra.Command {
 				return err
 			}
 			defer cancel()
-			return putAgentModels(cmd, ctx, client, args[0], map[string]any{"options": []any{}})
+			return mutatePersonalModels(cmd, ctx, client, args[0], "DELETE", "personal", nil)
 		},
 	}
 	tools := &cobra.Command{
@@ -239,7 +273,64 @@ func newAgentModelsCommand() *cobra.Command {
 			return putAgentModels(cmd, ctx, client, args[0], map[string]any{"disallowed_tools": list})
 		},
 	}
-	for _, c := range []*cobra.Command{profile, set, reset, tools} {
+	personal := &cobra.Command{
+		Use: "personal <agent>", Short: "Copy a shared profile or edit personal rows", Args: exactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, ctx, cancel, err := modelsClient(cmd)
+			if err != nil {
+				return err
+			}
+			defer cancel()
+			body := map[string]any{}
+			if from, _ := cmd.Flags().GetString("from"); from != "" {
+				id, err := resolveModelProfile(ctx, client, from)
+				if err != nil {
+					return err
+				}
+				body["from_profile_id"] = id
+			}
+			specs, _ := cmd.Flags().GetStringArray("row")
+			method := "POST"
+			if len(specs) > 0 {
+				method = "PUT"
+				rows, err := parseModelRows(ctx, client, specs)
+				if err != nil {
+					return err
+				}
+				body["options"] = rows
+			}
+			if cmd.Flags().Changed("when-exhausted") {
+				if method != "PUT" {
+					return fmt.Errorf("--when-exhausted requires --row")
+				}
+				var err error
+				body, err = profileBody(cmd, ctx, client, body)
+				if err != nil {
+					return err
+				}
+			}
+			return mutatePersonalModels(cmd, ctx, client, args[0], method, "personal", body)
+		},
+	}
+	personal.Flags().String("from", "", "Shared profile to copy or compare against")
+	personal.Flags().StringArray("row", nil, "Personal row runtime[:model[:thinking]]; repeat in order")
+	personal.Flags().String("when-exhausted", "", "Shared fallback profile, or off")
+	single := &cobra.Command{
+		Use: "single <agent> <runtime>[:<model>[:<thinking>]]", Short: "Pin one model in a personal profile", Args: exactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, ctx, cancel, err := modelsClient(cmd)
+			if err != nil {
+				return err
+			}
+			defer cancel()
+			rows, err := parseModelRows(ctx, client, args[1:])
+			if err != nil {
+				return err
+			}
+			return mutatePersonalModels(cmd, ctx, client, args[0], "PUT", "single", rows[0])
+		},
+	}
+	for _, c := range []*cobra.Command{profile, personal, single, set, reset, tools} {
 		c.Flags().String("output", "table", "Output format: table or json")
 		models.AddCommand(c)
 	}
@@ -275,6 +366,27 @@ func putAgentModels(cmd *cobra.Command, ctx context.Context, client *cli.APIClie
 	return printAgentModels(cmd, raw)
 }
 
+func mutatePersonalModels(cmd *cobra.Command, ctx context.Context, client *cli.APIClient, agent, method, resource string, body any) error {
+	id, err := resolveAgent(ctx, client, agent)
+	if err != nil {
+		return err
+	}
+	path := "/api/agents/" + url.PathEscape(id) + "/models/" + resource
+	var raw json.RawMessage
+	switch method {
+	case "POST":
+		err = client.PostJSON(ctx, path, body, &raw)
+	case "PUT":
+		err = client.PutJSON(ctx, path, body, &raw)
+	case "DELETE":
+		err = client.DeleteJSONResponse(ctx, path, &raw)
+	}
+	if err != nil {
+		return err
+	}
+	return printAgentModels(cmd, raw)
+}
+
 func printAgentModels(cmd *cobra.Command, raw json.RawMessage) error {
 	if outputJSON(cmd) {
 		var v any
@@ -283,13 +395,19 @@ func printAgentModels(cmd *cobra.Command, raw json.RawMessage) error {
 	}
 	var view struct {
 		ProfileName     string      `json:"profile_name"`
+		Mode            string      `json:"mode"`
+		BaseProfileName string      `json:"base_profile_name"`
+		MatchesBase     *bool       `json:"matches_base"`
+		DiffRows        []int32     `json:"diff_rows"`
+		PersonalRows    []modelRow  `json:"personal_rows"`
 		OwnList         bool        `json:"own_list"`
 		DisallowedTools []string    `json:"disallowed_tools"`
 		Preview         modelChoice `json:"preview"`
 		Last            *struct {
-			IssueIdentifier string       `json:"issue_identifier"`
-			CreatedAt       string       `json:"created_at"`
-			Choice          *modelChoice `json:"choice"`
+			IssueIdentifier string                `json:"issue_identifier"`
+			CreatedAt       string                `json:"created_at"`
+			Choice          *modelChoice          `json:"choice"`
+			AccountFact     *protocol.AccountFact `json:"account_fact"`
 		} `json:"last"`
 		Issues []struct {
 			Identifier  string `json:"identifier"`
@@ -311,8 +429,11 @@ func printAgentModels(cmd *cobra.Command, raw json.RawMessage) error {
 		profile = "—"
 	}
 	fmt.Printf("Profile:    %s", profile)
-	if view.OwnList {
-		fmt.Print(" (own list differs from the profile)")
+	if view.Mode != "" {
+		fmt.Printf(" (%s)", view.Mode)
+	}
+	if view.OwnList || view.Mode == "personal" || view.Mode == "single" {
+		fmt.Printf("; base: %s; %s", view.BaseProfileName, profileDifference(view.MatchesBase, view.DiffRows))
 	}
 	fmt.Println()
 	// Preview knows nothing of route steps: a run of a step chooses from the
@@ -352,6 +473,9 @@ func printAgentModels(cmd *cobra.Command, raw json.RawMessage) error {
 			on = "no issue"
 		}
 		fmt.Printf("Last run:   %s · row %d · %s (%s, %s)\n", sourceLabel(*view.Last.Choice), view.Last.Choice.Position, reasonLabel(*view.Last.Choice), on, formatLocal(&view.Last.CreatedAt))
+	}
+	if view.Last != nil {
+		fmt.Printf("Account:    %s\n", accountFactLabel(view.Last.AccountFact))
 	}
 	if len(view.DisallowedTools) > 0 {
 		fmt.Printf("Disallowed: %s\n", strings.Join(view.DisallowedTools, ", "))
@@ -397,8 +521,12 @@ func parseModelRows(ctx context.Context, client *cli.APIClient, specs []string) 
 }
 
 func resolveModelProfile(ctx context.Context, client *cli.APIClient, input string) (string, error) {
+	return resolveModelProfileKind(ctx, client, input, "shared")
+}
+
+func resolveModelProfileKind(ctx context.Context, client *cli.APIClient, input, kind string) (string, error) {
 	var profiles []modelProfile
-	if err := client.GetJSON(ctx, "/api/model-profiles", &profiles); err != nil {
+	if err := client.GetJSON(ctx, "/api/model-profiles?kind="+url.QueryEscape(kind), &profiles); err != nil {
 		return "", fmt.Errorf("fetch profiles: %w", err)
 	}
 	for _, p := range profiles {
@@ -528,7 +656,7 @@ func printUnavailableRows(list []map[string]any) {
 	rows := make([][]string, 0, len(list))
 	for _, r := range list {
 		until := strVal(r, "until")
-		rows = append(rows, []string{strVal(r, "runtime_name"), formatLocal(&until), strVal(r, "reason")})
+		rows = append(rows, []string{strVal(r, "runtime_name"), formatLocal(&until), reasonCodeLabel(strVal(r, "reason_code"), strVal(r, "reason"))})
 	}
 	cli.PrintTable(os.Stdout, []string{"RUNTIME", "UNTIL", "REASON"}, rows)
 }
@@ -566,7 +694,12 @@ func printProfile(cmd *cobra.Command, p modelProfile) error {
 		return strings.Join(out, ", ")
 	}
 	fmt.Printf("\nAgents:          %s\n", names(len(p.Agents), func(i int) string { return p.Agents[i].Name }))
-	fmt.Printf("Own-list agents: %s\n", names(len(p.OwnListAgents), func(i int) string { return p.OwnListAgents[i].Name }))
+	if p.Personal {
+		fmt.Printf("Comparison: %s\n", profileDifference(p.MatchesBase, p.DiffRows))
+	}
+	for _, personal := range p.PersonalProfiles {
+		fmt.Printf("Personal profile: %s — %s\n", personal.Agent.Name, profileDifference(&personal.MatchesBase, personal.DiffRows))
+	}
 	fmt.Printf("Open issues:     %s\n", names(len(p.OpenIssues), func(i int) string { return p.OpenIssues[i].Identifier }))
 	return nil
 }
@@ -598,8 +731,12 @@ func init() {
 				return err
 			}
 			defer cancel()
+			kind, _ := cmd.Flags().GetString("kind")
+			if kind != "shared" && kind != "personal" {
+				return fmt.Errorf("--kind must be shared or personal")
+			}
 			var profiles []modelProfile
-			if err := client.GetJSON(ctx, "/api/model-profiles", &profiles); err != nil {
+			if err := client.GetJSON(ctx, "/api/model-profiles?kind="+url.QueryEscape(kind), &profiles); err != nil {
 				return err
 			}
 			if outputJSON(cmd) {
@@ -615,12 +752,23 @@ func init() {
 				if p.WhenExhaustedProfileID != nil {
 					exhausted = byID[*p.WhenExhaustedProfileID]
 				}
-				rows = append(rows, []string{p.Name, compactRows(p.Options), exhausted, fmt.Sprint(len(p.Agents)), fmt.Sprint(len(p.OpenIssues))})
+				owner, base, comparison := "", "", ""
+				if p.OwnerAgent != nil {
+					owner = p.OwnerAgent.Name
+				}
+				if p.BasedOn != nil {
+					base = p.BasedOn.Name
+				}
+				if p.Personal {
+					comparison = profileDifference(p.MatchesBase, p.DiffRows)
+				}
+				rows = append(rows, []string{p.Name, compactRows(p.Options), exhausted, owner, base, comparison, fmt.Sprint(len(p.Agents)), fmt.Sprint(len(p.OpenIssues))})
 			}
-			cli.PrintTable(os.Stdout, []string{"NAME", "MODELS", "WHEN EXHAUSTED", "AGENTS", "OPEN ISSUES"}, rows)
+			cli.PrintTable(os.Stdout, []string{"NAME", "MODELS", "WHEN EXHAUSTED", "OWNER", "BASE", "COMPARISON", "AGENTS", "OPEN ISSUES"}, rows)
 			return nil
 		},
 	}
+	list.Flags().String("kind", "shared", "Profile kind: shared or personal")
 	show := &cobra.Command{
 		Use: "show <profile>", Short: "Show a profile, its rows and who references it", Args: exactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -629,7 +777,7 @@ func init() {
 				return err
 			}
 			defer cancel()
-			id, err := resolveModelProfile(ctx, client, args[0])
+			id, err := resolveModelProfileKind(ctx, client, args[0], "all")
 			if err != nil {
 				return err
 			}
@@ -679,7 +827,7 @@ func init() {
 				return err
 			}
 			defer cancel()
-			id, err := resolveModelProfile(ctx, client, args[0])
+			id, err := resolveModelProfileKind(ctx, client, args[0], "all")
 			if err != nil {
 				return err
 			}
@@ -717,7 +865,7 @@ func init() {
 				return err
 			}
 			defer cancel()
-			id, err := resolveModelProfile(ctx, client, args[0])
+			id, err := resolveModelProfileKind(ctx, client, args[0], "all")
 			if err != nil {
 				return err
 			}

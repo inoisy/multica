@@ -1,5 +1,6 @@
 {
   "title": "Аналитика",
+  "tab_subscriptions": "Подписки",
   "tab_usage": "Использование",
   "header": {
     "timezone_and_updated": "{{tz}} · обновлено {{time}}",

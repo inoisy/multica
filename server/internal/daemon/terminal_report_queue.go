@@ -53,6 +53,7 @@ type persistedTerminalTaskReport struct {
 	SessionID             string     `json:"session_id,omitempty"`
 	WorkDir               string     `json:"work_dir,omitempty"`
 	DurableWorkDir        string     `json:"durable_work_dir,omitempty"`
+	RefusalCode           string     `json:"refusal_code,omitempty"`
 	FailureReason         string     `json:"failure_reason,omitempty"`
 	SessionRolloutMissing bool       `json:"session_rollout_missing,omitempty"`
 	RetiredSessionID      string     `json:"retired_session_id,omitempty"`
@@ -145,6 +146,7 @@ func persistedTerminalReport(report terminalTaskReport, createdAt time.Time) (pe
 		WorkDir:               report.workDir,
 		DurableWorkDir:        report.durableWorkDir,
 		FailureReason:         report.failureReason,
+		RefusalCode:           report.refusalCode,
 		SessionRolloutMissing: report.sessionRolloutMissing,
 		RetiredSessionID:      report.retiredSessionID,
 		QuotaResetAt:          timePtr(report.quotaResetAt),
@@ -187,6 +189,7 @@ func (record persistedTerminalTaskReport) terminalReport() (terminalTaskReport, 
 		sessionRolloutMissing: record.SessionRolloutMissing,
 		retiredSessionID:      record.RetiredSessionID,
 		quotaResetAt:          derefTime(record.QuotaResetAt),
+		refusalCode:           record.RefusalCode,
 	}, nil
 }
 

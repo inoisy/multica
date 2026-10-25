@@ -331,7 +331,8 @@ func (s *TaskService) publishIdleNotices(notices []idleNotice) {
 	}
 }
 
-// SweepModelRouting is the scheduler job: lifts expired runtime limits and
+// SweepModelRouting is the scheduler job: lifts expired runtime limits, the
+// daemon's refusals a usable account has made stale, and
 // re-routes every unclaimed model-routed run whose choice changed, so a run
 // that waited is claimed by itself once a model is free, and a run on an
 // offline runtime moves to the next row. Two runs in a row with nothing new
@@ -346,6 +347,9 @@ func (s *TaskService) SweepModelRouting(ctx context.Context) (int, error) {
 	}
 	for _, rec := range expired {
 		slog.Info("model choice: runtime limit lifted", "runtime_id", util.UUIDToString(rec.RuntimeID), "until", rec.Until.Time)
+	}
+	if _, err := LiftStaleRefusals(ctx, s.Queries, time.Now()); err != nil {
+		slog.Warn("model choice: lift stale refusals failed", "error", err)
 	}
 	tasks, err := s.Queries.ListQueuedTasksForModelRouting(ctx, 500)
 	if err != nil {
@@ -373,4 +377,76 @@ func (s *TaskService) SweepModelRouting(ctx context.Context) (int, error) {
 		}
 	}
 	return changed, errors.Join(errs...)
+}
+
+// LiftStaleRefusals deletes the daemon's own refusals (on the agent limit, on
+// disabled accounts) of every runtime whose pool has a usable account at now:
+// the snapshot that shows the account usable is newer than the refusal. A
+// provider's refusal stays until its reset. It returns what it removed.
+func LiftStaleRefusals(ctx context.Context, q *db.Queries, now time.Time) ([]db.RuntimeUnavailable, error) {
+	rows, err := q.ListActiveLocalRefusals(ctx, pgtype.Timestamptz{Time: now, Valid: true})
+	if err != nil {
+		return nil, err
+	}
+	byRuntime := map[string][]db.RuntimeUnavailable{}
+	var order []string
+	for _, rec := range rows {
+		if code := StoredRefusalCode(rec); code != UnavailableAgentCapRefusal && code != UnavailableDisabledRefusal {
+			continue
+		}
+		key := util.UUIDToString(rec.RuntimeID)
+		if _, seen := byRuntime[key]; !seen {
+			order = append(order, key)
+		}
+		byRuntime[key] = append(byRuntime[key], rec)
+	}
+	var lifted []db.RuntimeUnavailable
+	for _, key := range order {
+		verdict, err := runtimePoolVerdict(ctx, q, byRuntime[key][0].RuntimeID, now)
+		if err != nil {
+			return lifted, err
+		}
+		if verdict == nil || !verdict.Usable {
+			continue
+		}
+		ids := make([]pgtype.UUID, len(byRuntime[key]))
+		for i, rec := range byRuntime[key] {
+			ids[i] = rec.ID
+		}
+		deleted, err := q.DeleteRuntimeUnavailableByIDs(ctx, ids)
+		if err != nil {
+			return lifted, err
+		}
+		for _, row := range deleted {
+			slog.Info("model choice: stale refusal lifted", "runtime_id", key, "until", row.Until.Time, "reason_code", StoredRefusalCode(row))
+		}
+		lifted = append(lifted, deleted...)
+	}
+	return lifted, nil
+}
+
+// runtimePoolVerdict is the verdict on the pool a runtime spends, nil when it
+// spends none.
+func runtimePoolVerdict(ctx context.Context, q *db.Queries, runtimeID pgtype.UUID, now time.Time) (*PoolVerdict, error) {
+	rt, err := q.GetAgentRuntime(ctx, runtimeID)
+	if errors.Is(err, pgx.ErrNoRows) || (err == nil && !rt.ProfileID.Valid) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	profile, err := q.GetRuntimeProfile(ctx, rt.ProfileID)
+	if errors.Is(err, pgx.ErrNoRows) || (err == nil && !profile.PoolID.Valid) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	poolID := util.UUIDToString(profile.PoolID)
+	accounts, members, err := poolAccounts(ctx, q, map[string]string{util.UUIDToString(profile.ID): poolID}, now)
+	if err != nil {
+		return nil, err
+	}
+	v := EvaluatePool(poolAccountList(accounts, members[poolID]), rt.DaemonID.String, now)
+	return &v, nil
 }

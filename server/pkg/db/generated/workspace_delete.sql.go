@@ -629,6 +629,9 @@ deleted_model_profile_options AS (
 ),
 deleted_model_profiles AS (
     DELETE FROM model_profile WHERE model_profile.workspace_id = $1
+),
+deleted_pool_grants AS (
+    DELETE FROM subscription_pool_grant WHERE subscription_pool_grant.workspace_id = $1
 )
 DELETE FROM project WHERE project.workspace_id = $1
 `

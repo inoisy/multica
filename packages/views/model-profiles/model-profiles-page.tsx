@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Layers, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import type { ModelProfile, ModelProfileChange, ModelProfileInput } from "@multica/core/types";
+import type { ModelProfile, ModelProfileChange, ModelProfileInput, ModelProfileKind } from "@multica/core/types";
 import { useWorkspaceId } from "@multica/core/hooks";
 import { useWorkspacePaths } from "@multica/core/paths";
 import { useCurrentMember } from "@multica/core/permissions";
@@ -15,6 +15,7 @@ import {
   modelProfileListOptions,
   modelRowLabel,
   toModelOptionInputs,
+  useAgentPersonalProfile,
   useCreateModelProfile,
   useDeleteModelProfile,
   usePreviewModelProfile,
@@ -40,12 +41,15 @@ import {
   SelectValue,
 } from "@multica/ui/components/ui/select";
 import { cn } from "@multica/ui/lib/utils";
+import { useIsMobile } from "@multica/ui/hooks/use-mobile";
 import { CollectionPageHeader, CollectionPageHeaderAction } from "../layout/collection-page";
 import { SectionTabs } from "../layout/section-tabs";
 import { PAGE_GUTTER } from "../layout/page-header";
-import { AppLink } from "../navigation";
+import { AppLink, useNavigation } from "../navigation";
 import { useT } from "../i18n";
 import { ModelRowsEditor } from "./model-rows-editor";
+import { ProfileDiffBadge } from "./profile-diff";
+import { ResetPersonalDialog } from "./reset-personal-dialog";
 
 const WAIT = "wait";
 const EMPTY = "empty";
@@ -69,6 +73,43 @@ function inputOf(profile: ModelProfile): ModelProfileInput {
   };
 }
 
+const KINDS: ModelProfileKind[] = ["all", "shared", "personal"];
+
+/** The kind filter lives in the address: a link and a reload restore the same view. */
+function parseKind(value: string | null): ModelProfileKind {
+  return KINDS.find((kind) => kind === value) ?? "all";
+}
+
+/** "Return to shared" for one agent's personal profile, behind a confirmation. */
+function ResetPersonalButton({ wsId, agent, baseName }: { wsId: string; agent: { id: string; name: string }; baseName: string }) {
+  const { t } = useT("agents");
+  const personal = useAgentPersonalProfile(wsId, agent.id);
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Button size="sm" variant="ghost" onClick={() => setOpen(true)}>
+        {t(($) => $.models.reset_to_shared)}
+        <span className="sr-only">: {agent.name}</span>
+      </Button>
+      <ResetPersonalDialog
+        open={open}
+        baseName={baseName}
+        busy={personal.reset.isPending}
+        onOpenChange={setOpen}
+        onConfirm={() =>
+          void personal.reset.mutateAsync().then(
+            () => {
+              toast.success(t(($) => $.models.reset_done));
+              setOpen(false);
+            },
+            (error: unknown) => toast.error(error instanceof Error ? error.message : String(error)),
+          )
+        }
+      />
+    </>
+  );
+}
+
 /**
  * Profiles of the workspace: ordered model lists that agents and issues
  * reference. An edit reaches every referencing agent and issue from its next
@@ -80,7 +121,11 @@ export function ModelProfilesPage() {
   const paths = useWorkspacePaths();
   const { role, userId } = useCurrentMember(wsId);
   const canManage = role === "owner" || role === "admin";
-  const profiles = useQuery(modelProfileListOptions(wsId));
+  const navigation = useNavigation();
+  const mobile = useIsMobile();
+  const kind = parseKind(navigation.searchParams.get("kind"));
+  const profiles = useQuery(modelProfileListOptions(wsId, "shared"));
+  const personalProfiles = useQuery(modelProfileListOptions(wsId, "personal"));
   const { data: runtimes = [] } = useQuery(runtimeListOptions(wsId));
   const { data: members = [] } = useQuery(memberListOptions(wsId));
   const { data: agents = [] } = useQuery(agentListOptions(wsId));
@@ -93,6 +138,16 @@ export function ModelProfilesPage() {
   const previewing = previewMutation.isPending;
 
   const list = profiles.data ?? [];
+  const personalList = personalProfiles.data ?? [];
+  const showShared = kind !== "personal";
+  const showPersonal = kind !== "shared";
+  const setKind = (next: ModelProfileKind) => {
+    const params = new URLSearchParams(navigation.searchParams);
+    if (next === "all") params.delete("kind");
+    else params.set("kind", next);
+    const query = params.toString();
+    navigation.replace(query ? `${navigation.pathname}?${query}` : navigation.pathname);
+  };
   const nameOf = (id: string | null) => list.find((p) => p.id === id)?.name ?? "";
   const busy = create.isPending || update.isPending || previewing;
 
@@ -147,6 +202,84 @@ export function ModelProfilesPage() {
     { value: EMPTY, label: t(($) => $.model_profiles.from_scratch) },
     ...agents.map((a) => ({ value: a.id, label: a.name })),
   ];
+  const renderRefs = (profile: ModelProfile) => (
+    <>
+      <div>
+        {t(($) => $.model_profiles.refs_agents)}:{" "}
+        {profile.agents.length
+          ? profile.agents.map((a, i) => (
+              <span key={a.id}>
+                {i ? ", " : ""}
+                <AppLink href={paths.agentDetail(a.id)} className="hover:underline">{a.name}</AppLink>
+              </span>
+            ))
+          : "—"}
+      </div>
+      <div>
+        {t(($) => $.model_profiles.refs_issues)}: {renderIssues(profile)}
+      </div>
+      {profile.personal_profiles.length ? (
+        <div className="space-y-1 pt-1" data-testid="personal-of-profile">
+          <div className="text-muted-foreground">{t(($) => $.model_profiles.refs_personal)}</div>
+          {profile.personal_profiles.map((personal) => (
+            <div key={personal.profile_id} className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <AppLink href={paths.agentDetail(personal.agent.id)} className="hover:underline">
+                {personal.agent.name}
+              </AppLink>
+              <ProfileDiffBadge matchesBase={personal.matches_base} diffRows={personal.diff_rows} />
+              {canManage ? <ResetPersonalButton wsId={wsId} agent={personal.agent} baseName={profile.name} /> : null}
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </>
+  );
+  const renderIssues = (profile: ModelProfile) =>
+    profile.open_issues.length
+      ? profile.open_issues.map((issue, i) => (
+          <span key={issue.id}>
+            {i ? ", " : ""}
+            <AppLink href={paths.issueDetail(issue.id)} className="hover:underline">{issue.identifier}</AppLink>
+          </span>
+        ))
+      : "—";
+  const renderActions = (profile: ModelProfile) =>
+    canManage ? (
+      <div className="flex shrink-0 justify-end gap-1">
+        <Button
+          size="icon-sm"
+          variant="ghost"
+          aria-label={t(($) => $.model_profiles.edit, { name: profile.name })}
+          onClick={() => open({ id: profile.id, input: inputOf(profile), fromAgent: "" })}
+        >
+          <Pencil />
+        </Button>
+        <Button
+          size="icon-sm"
+          variant="ghost"
+          aria-label={t(($) => $.model_profiles.delete, { name: profile.name })}
+          disabled={remove.isPending}
+          onClick={() => void del(profile)}
+        >
+          <Trash2 />
+        </Button>
+      </div>
+    ) : null;
+  const renderOwner = (profile: ModelProfile) =>
+    profile.owner_agent ? (
+      <AppLink href={paths.agentDetail(profile.owner_agent.id)} className="break-words font-medium hover:underline">
+        {profile.owner_agent.name}
+      </AppLink>
+    ) : (
+      <span className="font-medium">{profile.name}</span>
+    );
+  const renderPersonalActions = (profile: ModelProfile) =>
+    canManage && profile.owner_agent && profile.based_on ? (
+      <div className="flex shrink-0 justify-end">
+        <ResetPersonalButton wsId={wsId} agent={profile.owner_agent} baseName={profile.based_on.name} />
+      </div>
+    ) : null;
+
   // Editing an existing profile needs the preview first: the save reaches
   // every agent and issue on it.
   const needsPreview = Boolean(editor?.id) && changes === null;
@@ -169,103 +302,145 @@ export function ModelProfilesPage() {
           ) : null
         }
       />
-      <div className={cn("min-h-0 flex-1 overflow-y-auto py-4", PAGE_GUTTER)}>
+      <div className={cn("min-h-0 flex-1 space-y-4 overflow-y-auto py-4", PAGE_GUTTER)}>
+        <div role="group" aria-label={t(($) => $.model_profiles.kind_label)} className="flex w-fit max-w-full flex-wrap gap-1 rounded-lg bg-muted p-0.5">
+          {KINDS.map((value) => (
+            <Button
+              key={value}
+              size="sm"
+              variant={kind === value ? "outline" : "ghost"}
+              aria-pressed={kind === value}
+              onClick={() => setKind(value)}
+            >
+              {t(($) => $.model_profiles.kind[value])}
+            </Button>
+          ))}
+        </div>
         {profiles.isError ? (
           <p className="rounded-md border border-destructive/40 px-3 py-2 text-caption text-destructive">
             {t(($) => $.model_profiles.load_failed)}
           </p>
         ) : null}
-        {profiles.data && list.length === 0 ? (
+        {showShared && profiles.data && list.length === 0 ? (
           <p className="text-caption text-muted-foreground">{t(($) => $.model_profiles.empty)}</p>
         ) : null}
-        {list.length > 0 ? (
-          <div className="overflow-x-auto rounded-lg border">
-            <Table className="w-full text-body" data-testid="model-profiles-table">
-              <TableHeader className="text-left text-caption text-muted-foreground">
-                <TableRow className="border-b">
-                  <TableHead className="px-3 py-2 font-medium">{t(($) => $.model_profiles.col_name)}</TableHead>
-                  <TableHead className="px-3 py-2 font-medium">{t(($) => $.model_profiles.col_models)}</TableHead>
-                  <TableHead className="px-3 py-2 font-medium">{t(($) => $.model_profiles.col_exhausted)}</TableHead>
-                  <TableHead className="px-3 py-2 font-medium">{t(($) => $.model_profiles.col_refs)}</TableHead>
-                  <TableHead className="px-3 py-2" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {list.map((profile) => (
-                  <TableRow key={profile.id} className="border-b align-top last:border-b-0">
-                    <TableCell className="px-3 py-2">
-                      <div className="font-medium">{profile.name}</div>
-                      {profile.description ? (
-                        <div className="text-caption text-muted-foreground">{profile.description}</div>
-                      ) : null}
-                    </TableCell>
-                    <TableCell className="px-3 py-2 font-mono text-caption">{compactModelRows(profile.options) || "—"}</TableCell>
-                    <TableCell className="px-3 py-2 text-caption">
-                      {profile.when_exhausted_profile_id ? nameOf(profile.when_exhausted_profile_id) : t(($) => $.model_profiles.exhausted_wait)}
-                    </TableCell>
-                    <TableCell className="space-y-1 px-3 py-2 text-caption">
-                      <div>
-                        {t(($) => $.model_profiles.refs_agents)}:{" "}
-                        {profile.agents.length
-                          ? profile.agents.map((a, i) => (
-                              <span key={a.id}>
-                                {i ? ", " : ""}
-                                <AppLink href={paths.agentDetail(a.id)} className="hover:underline">{a.name}</AppLink>
-                              </span>
-                            ))
-                          : "—"}
-                      </div>
-                      <div>
-                        {t(($) => $.model_profiles.refs_issues)}:{" "}
-                        {profile.open_issues.length
-                          ? profile.open_issues.map((issue, i) => (
-                              <span key={issue.id}>
-                                {i ? ", " : ""}
-                                <AppLink href={paths.issueDetail(issue.id)} className="hover:underline">{issue.identifier}</AppLink>
-                              </span>
-                            ))
-                          : "—"}
-                      </div>
-                      {profile.own_list_agents.length ? (
-                        <div className="text-muted-foreground">
-                          {t(($) => $.model_profiles.refs_own)}: {profile.own_list_agents.map((a) => a.name).join(", ")}
-                        </div>
-                      ) : null}
-                    </TableCell>
-                    <TableCell className="px-3 py-2">
-                      {canManage ? (
-                        <div className="flex justify-end gap-1">
-                          <Button
-                            size="icon-sm"
-                            variant="ghost"
-                            aria-label={t(($) => $.model_profiles.edit, { name: profile.name })}
-                            onClick={() => open({ id: profile.id, input: inputOf(profile), fromAgent: "" })}
-                          >
-                            <Pencil />
-                          </Button>
-                          <Button
-                            size="icon-sm"
-                            variant="ghost"
-                            aria-label={t(($) => $.model_profiles.delete, { name: profile.name })}
-                            disabled={remove.isPending}
-                            onClick={() => void del(profile)}
-                          >
-                            <Trash2 />
-                          </Button>
-                        </div>
-                      ) : null}
-                    </TableCell>
+        {showShared && list.length > 0 ? (
+          mobile ? (
+            <ul className="space-y-3" data-testid="model-profiles-list">
+              {list.map((profile) => (
+                <li key={profile.id} className="space-y-2 rounded-lg border p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="break-words font-medium">{profile.name}</div>
+                      {profile.description ? <div className="text-caption text-muted-foreground">{profile.description}</div> : null}
+                    </div>
+                    {renderActions(profile)}
+                  </div>
+                  <p className="break-words font-mono text-caption">{compactModelRows(profile.options) || "—"}</p>
+                  <p className="text-caption text-muted-foreground">
+                    {t(($) => $.model_profiles.col_exhausted)}:{" "}
+                    {profile.when_exhausted_profile_id ? nameOf(profile.when_exhausted_profile_id) : t(($) => $.model_profiles.exhausted_wait)}
+                  </p>
+                  <div className="space-y-1 text-caption">{renderRefs(profile)}</div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="overflow-x-auto rounded-lg border">
+              <Table className="w-full text-body" data-testid="model-profiles-table">
+                <TableHeader className="text-left text-caption text-muted-foreground">
+                  <TableRow className="border-b">
+                    <TableHead className="px-3 py-2 font-medium">{t(($) => $.model_profiles.col_name)}</TableHead>
+                    <TableHead className="px-3 py-2 font-medium">{t(($) => $.model_profiles.col_models)}</TableHead>
+                    <TableHead className="px-3 py-2 font-medium">{t(($) => $.model_profiles.col_exhausted)}</TableHead>
+                    <TableHead className="px-3 py-2 font-medium">{t(($) => $.model_profiles.col_refs)}</TableHead>
+                    <TableHead className="px-3 py-2" />
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+                </TableHeader>
+                <TableBody>
+                  {list.map((profile) => (
+                    <TableRow key={profile.id} className="border-b align-top last:border-b-0">
+                      <TableCell className="px-3 py-2">
+                        <div className="font-medium">{profile.name}</div>
+                        {profile.description ? <div className="text-caption text-muted-foreground">{profile.description}</div> : null}
+                      </TableCell>
+                      <TableCell className="px-3 py-2 font-mono text-caption">{compactModelRows(profile.options) || "—"}</TableCell>
+                      <TableCell className="px-3 py-2 text-caption">
+                        {profile.when_exhausted_profile_id ? nameOf(profile.when_exhausted_profile_id) : t(($) => $.model_profiles.exhausted_wait)}
+                      </TableCell>
+                      <TableCell className="space-y-1 whitespace-normal px-3 py-2 text-caption">{renderRefs(profile)}</TableCell>
+                      <TableCell className="px-3 py-2">{renderActions(profile)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )
+        ) : null}
+        {showPersonal ? (
+          <section className="space-y-2" aria-labelledby="personal-profiles-title">
+            <h2 id="personal-profiles-title" className="text-body font-medium">
+              {t(($) => $.model_profiles.personal_title)}
+              <span className="ml-2 text-caption font-normal text-muted-foreground">{personalList.length}</span>
+            </h2>
+            {personalProfiles.data && personalList.length === 0 ? (
+              <p className="text-caption text-muted-foreground">{t(($) => $.model_profiles.personal_empty)}</p>
+            ) : null}
+            {personalList.length > 0 ? (
+              mobile ? (
+                <ul className="space-y-3" data-testid="personal-profiles-list">
+                  {personalList.map((profile) => (
+                    <li key={profile.id} className="space-y-2 rounded-lg border p-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">{renderOwner(profile)}</div>
+                        {renderPersonalActions(profile)}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 text-caption">
+                        <span className="text-muted-foreground">{profile.based_on ? profile.based_on.name : "—"}</span>
+                        <ProfileDiffBadge matchesBase={profile.matches_base} diffRows={profile.diff_rows} />
+                      </div>
+                      <p className="break-words font-mono text-caption">{compactModelRows(profile.options) || "—"}</p>
+                      <div className="text-caption">{renderIssues(profile)}</div>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <div className="overflow-x-auto rounded-lg border">
+                  <Table className="w-full text-body" data-testid="personal-profiles-table">
+                    <TableHeader className="text-left text-caption text-muted-foreground">
+                      <TableRow className="border-b">
+                        <TableHead className="px-3 py-2 font-medium">{t(($) => $.model_profiles.col_agent)}</TableHead>
+                        <TableHead className="px-3 py-2 font-medium">{t(($) => $.model_profiles.col_base)}</TableHead>
+                        <TableHead className="px-3 py-2 font-medium">{t(($) => $.model_profiles.col_models)}</TableHead>
+                        <TableHead className="px-3 py-2 font-medium">{t(($) => $.model_profiles.col_refs)}</TableHead>
+                        <TableHead className="px-3 py-2" />
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {personalList.map((profile) => (
+                        <TableRow key={profile.id} className="border-b align-top last:border-b-0">
+                          <TableCell className="px-3 py-2">{renderOwner(profile)}</TableCell>
+                          <TableCell className="space-y-1 px-3 py-2 text-caption">
+                            <div>{profile.based_on ? profile.based_on.name : "—"}</div>
+                            <ProfileDiffBadge matchesBase={profile.matches_base} diffRows={profile.diff_rows} />
+                          </TableCell>
+                          <TableCell className="px-3 py-2 font-mono text-caption">{compactModelRows(profile.options) || "—"}</TableCell>
+                          <TableCell className="space-y-1 whitespace-normal px-3 py-2 text-caption">{renderIssues(profile)}</TableCell>
+                          <TableCell className="px-3 py-2">{renderPersonalActions(profile)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )
+            ) : null}
+          </section>
         ) : null}
       </div>
 
       <Dialog open={editor !== null} onOpenChange={(next) => !next && !busy && setEditor(null)}>
         {editor ? (
-          <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+          <DialogContent className="max-h-[90vh] grid-cols-[minmax(0,1fr)] overflow-y-auto sm:max-w-2xl">
             <DialogHeader>
               <DialogTitle>
                 {editor.id ? t(($) => $.model_profiles.edit_title) : t(($) => $.model_profiles.create_title)}
@@ -291,7 +466,7 @@ export function ModelProfilesPage() {
                   disabled={busy}
                   onValueChange={(value) => value && patch({ when_exhausted_profile_id: value === WAIT ? null : value })}
                 >
-                  <SelectTrigger className="w-full" aria-label={t(($) => $.model_profiles.col_exhausted)}>
+                  <SelectTrigger className="w-full pr-7" aria-label={t(($) => $.model_profiles.col_exhausted)}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -312,7 +487,7 @@ export function ModelProfilesPage() {
                     disabled={busy}
                     onValueChange={(value) => value && setEditor({ ...editor, fromAgent: value === EMPTY ? "" : value })}
                   >
-                    <SelectTrigger className="w-full" aria-label={t(($) => $.model_profiles.source)}>
+                    <SelectTrigger className="w-full pr-7" aria-label={t(($) => $.model_profiles.source)}>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -327,6 +502,7 @@ export function ModelProfilesPage() {
               ) : null}
               {editor.fromAgent ? null : (
                 <ModelRowsEditor
+                  compact
                   rows={editor.input.options}
                   onChange={(options) => patch({ options })}
                   runtimes={runtimes}

@@ -42,8 +42,11 @@ type RuntimeProfileResponse struct {
 	Visibility     string   `json:"visibility"`
 	CreatedBy      *string  `json:"created_by"`
 	Enabled        bool     `json:"enabled"`
-	// Subscription pool: ordered subscription keys, spend order, and the key
-	// shared by this runtime's copies in other workspaces.
+	// PoolID is the pool of accounts this environment spends. The pool's keys,
+	// spend order and reach are also given under their older names, which
+	// installed clients read: subscriptions, spend_order, share_key and
+	// all_workspaces are computed from the pool.
+	PoolID        *string  `json:"pool_id"`
 	Subscriptions []string `json:"subscriptions"`
 	SpendOrder    string   `json:"spend_order"`
 	ShareKey      *string  `json:"share_key"`
@@ -72,10 +75,9 @@ func runtimeProfileToResponse(p db.RuntimeProfile) RuntimeProfileResponse {
 		Visibility:     p.Visibility,
 		CreatedBy:      uuidToPtr(p.CreatedBy),
 		Enabled:        p.Enabled,
-		Subscriptions:  decodeStringList(p.Subscriptions),
-		SpendOrder:     p.SpendOrder,
-		ShareKey:       textToPtr(p.ShareKey),
-		AllWorkspaces:  p.AllWorkspaces,
+		PoolID:         uuidToPtr(p.PoolID),
+		Subscriptions:  []string{},
+		SpendOrder:     "first",
 		CreatedAt:      timestampToString(p.CreatedAt),
 		UpdatedAt:      timestampToString(p.UpdatedAt),
 	}
@@ -219,7 +221,7 @@ func (h *Handler) CreateRuntimeProfile(w http.ResponseWriter, r *http.Request) {
 		"runtime_profile_id": profileID,
 	})
 
-	writeJSON(w, http.StatusCreated, runtimeProfileToResponse(profile))
+	writeJSON(w, http.StatusCreated, h.runtimeProfileResponse(r.Context(), profile))
 }
 
 // ListRuntimeProfiles returns every runtime profile in the workspace.
@@ -239,11 +241,7 @@ func (h *Handler) ListRuntimeProfiles(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to list runtime profiles")
 		return
 	}
-	resp := make([]RuntimeProfileResponse, len(profiles))
-	for i, p := range profiles {
-		resp[i] = runtimeProfileToResponse(p)
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"runtime_profiles": resp})
+	writeJSON(w, http.StatusOK, map[string]any{"runtime_profiles": h.runtimeProfileResponses(r.Context(), profiles)})
 }
 
 // GetRuntimeProfile returns one runtime profile. Member-gated by the router.
@@ -269,7 +267,7 @@ func (h *Handler) GetRuntimeProfile(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "runtime profile not found")
 		return
 	}
-	writeJSON(w, http.StatusOK, runtimeProfileToResponse(profile))
+	writeJSON(w, http.StatusOK, h.runtimeProfileResponse(r.Context(), profile))
 }
 
 type updateRuntimeProfileRequest struct {
@@ -314,28 +312,37 @@ func (h *Handler) UpdateRuntimeProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// A shared runtime (share_key) is one runtime across workspaces: an edit
-	// here edits every copy, so it takes an instance admin, not just an admin
-	// of this workspace. The same holds for spreading a runtime everywhere.
+	// An environment of a pool is one runtime across the workspaces the pool
+	// reaches: its name, description and on/off switch belong to the pool, so
+	// changing them takes an instance admin, and so does reaching every
+	// workspace. The launch settings (command, fixed args) stay its own.
 	before, err := h.Queries.GetRuntimeProfileForWorkspace(r.Context(), db.GetRuntimeProfileForWorkspaceParams{ID: profileUUID, WorkspaceID: wsUUID})
 	if err != nil {
 		writeError(w, http.StatusNotFound, "runtime profile not found")
 		return
 	}
-	if before.ShareKey.Valid || req.AllWorkspaces != nil {
+	poolWide := before.PoolID.Valid && (req.DisplayName != nil || req.Description != nil || req.Enabled != nil)
+	if poolWide || req.AllWorkspaces != nil {
 		if _, ok := h.requireInstanceAdmin(w, r); !ok {
 			return
 		}
 	}
+	if req.AllWorkspaces != nil && !before.PoolID.Valid {
+		writeError(w, http.StatusBadRequest, "only an environment of a subscription pool can be spread to every workspace")
+		return
+	}
 
 	params := db.UpdateRuntimeProfileParams{ID: profileUUID, WorkspaceID: wsUUID}
+	var name string
 	if req.DisplayName != nil {
-		name := strings.TrimSpace(*req.DisplayName)
+		name = strings.TrimSpace(*req.DisplayName)
 		if name == "" {
 			writeError(w, http.StatusBadRequest, "display_name cannot be empty")
 			return
 		}
-		params.DisplayName = strToText(name)
+		if !before.PoolID.Valid {
+			params.DisplayName = strToText(name)
+		}
 	}
 	if req.CommandName != nil {
 		cmd := strings.TrimSpace(*req.CommandName)
@@ -345,7 +352,7 @@ func (h *Handler) UpdateRuntimeProfile(w http.ResponseWriter, r *http.Request) {
 		}
 		params.CommandName = strToText(cmd)
 	}
-	if req.Description != nil {
+	if req.Description != nil && !before.PoolID.Valid {
 		params.Description = ptrToText(req.Description)
 	}
 	if req.FixedArgs != nil {
@@ -356,7 +363,7 @@ func (h *Handler) UpdateRuntimeProfile(w http.ResponseWriter, r *http.Request) {
 		}
 		params.FixedArgs = fixedArgs
 	}
-	if req.Enabled != nil {
+	if req.Enabled != nil && !before.PoolID.Valid {
 		params.Enabled = pgtype.Bool{Bool: *req.Enabled, Valid: true}
 	}
 
@@ -375,44 +382,38 @@ func (h *Handler) UpdateRuntimeProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.AllWorkspaces != nil {
-		profile, err = h.Queries.SetRuntimeProfileSharing(r.Context(), db.SetRuntimeProfileSharingParams{
-			ShareKey:      uuidToString(profile.ID),
-			AllWorkspaces: *req.AllWorkspaces,
-			ID:            profile.ID,
-		})
-		if err != nil {
-			slog.Error("SetRuntimeProfileSharing failed", "error", err, "profile_id", uuidToString(profileUUID))
-			writeError(w, http.StatusInternalServerError, "failed to update runtime profile")
-			return
-		}
-	}
 	changed := []db.RuntimeProfile{profile}
-	if profile.ShareKey.Valid {
-		copies, err := h.Queries.SyncRuntimeProfileCopies(r.Context(), profile.ID)
-		if err != nil {
-			if isUniqueViolation(err) {
-				writeError(w, http.StatusConflict, "another workspace already has a runtime profile with this display_name")
-				return
+	if before.PoolID.Valid && (poolWide || req.AllWorkspaces != nil) {
+		pools := h.pools()
+		if req.DisplayName != nil || req.Description != nil || req.AllWorkspaces != nil {
+			patch := service.PoolPatch{AllWorkspaces: req.AllWorkspaces}
+			if req.DisplayName != nil {
+				patch.Name = &name
 			}
-			slog.Error("SyncRuntimeProfileCopies failed", "error", err, "profile_id", uuidToString(profileUUID))
-			writeError(w, http.StatusInternalServerError, "failed to update runtime profile copies")
-			return
-		}
-		changed = append(changed, copies...)
-		if profile.AllWorkspaces {
-			spread, err := spreadRuntimeProfileToAllWorkspaces(r.Context(), h.Queries, profile)
+			patch.Description = req.Description
+			res, err := pools.Update(r.Context(), before.PoolID, member.UserID, nil, patch)
 			if err != nil {
-				slog.Error("spreadRuntimeProfileToAllWorkspaces failed", "error", err, "profile_id", uuidToString(profileUUID))
-				writeError(w, http.StatusInternalServerError, "failed to copy runtime profile to every workspace")
+				writePoolError(w, err)
 				return
 			}
-			changed = append(changed, spread...)
+			changed = append(changed, res.Profiles...)
+		}
+		if req.Enabled != nil {
+			switched, err := pools.SetEnabled(r.Context(), before.PoolID, *req.Enabled)
+			if err != nil {
+				writePoolError(w, err)
+				return
+			}
+			changed = append(changed, switched...)
+		}
+		if profile, err = h.Queries.GetRuntimeProfileForWorkspace(r.Context(), db.GetRuntimeProfileForWorkspaceParams{ID: profileUUID, WorkspaceID: wsUUID}); err != nil {
+			writeError(w, http.StatusNotFound, "runtime profile not found")
+			return
 		}
 	}
 	h.publishRuntimeProfilesChanged(changed, uuidToString(member.UserID))
 
-	writeJSON(w, http.StatusOK, runtimeProfileToResponse(profile))
+	writeJSON(w, http.StatusOK, h.runtimeProfileResponse(r.Context(), profile))
 }
 
 // maxNamedBlockingAgents caps how many agents the refusal spells out before it
@@ -677,6 +678,14 @@ func (h *Handler) DeleteRuntimeProfile(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, "failed to delete runtime profile")
 			return
 		}
+		// The workspace no longer has the environment, so it no longer holds the grant.
+		if profile.PoolID.Valid {
+			if err := qtx.DeleteSubscriptionPoolGrant(r.Context(), db.DeleteSubscriptionPoolGrantParams{PoolID: profile.PoolID, WorkspaceID: wsUUID}); err != nil {
+				slog.Error("DeleteSubscriptionPoolGrant failed", "error", err, "profile_id", uuidToString(profileUUID))
+				writeError(w, http.StatusInternalServerError, "failed to delete runtime profile")
+				return
+			}
+		}
 	}
 	if err := tx.Commit(r.Context()); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to commit transaction")
@@ -721,13 +730,9 @@ func (h *Handler) DaemonListRuntimeProfiles(w http.ResponseWriter, r *http.Reque
 		writeError(w, http.StatusInternalServerError, "failed to list runtime profiles")
 		return
 	}
-	resp := make([]RuntimeProfileResponse, len(profiles))
-	for i, p := range profiles {
-		resp[i] = runtimeProfileToResponse(p)
-	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"workspace_id":     workspaceID,
-		"runtime_profiles": resp,
+		"runtime_profiles": h.runtimeProfileResponses(r.Context(), profiles),
 	})
 }
 

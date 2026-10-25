@@ -148,10 +148,6 @@ func profileOptionFromRow(r db.ModelProfileOption) ModelOption {
 	return ModelOption{Position: r.Position, RuntimeID: util.UUIDToString(r.RuntimeID), Model: r.Model, ThinkingLevel: r.ThinkingLevel, CustomArgs: decodeArgs(r.CustomArgs)}
 }
 
-func agentOptionFromRow(r db.AgentModelOption) ModelOption {
-	return ModelOption{Position: r.Position, RuntimeID: util.UUIDToString(r.RuntimeID), Model: r.Model, ThinkingLevel: r.ThinkingLevel, CustomArgs: decodeArgs(r.CustomArgs)}
-}
-
 // checkExhaustedChain refuses a when_exhausted_profile_id that would make the
 // fallback graph cyclic. edges is the current graph with the edit applied.
 func checkExhaustedChain(start string, edges map[string]string) error {
@@ -176,9 +172,10 @@ func (s *ModelProfileService) validateProfileInput(in ModelProfileInput) (name, 
 	return name, description, nil
 }
 
-// SaveProfile creates (id invalid) or replaces a profile and its rows in one
-// transaction. Profile writes of a workspace are serialized so the cycle check
-// sees the graph it guards.
+// SaveProfile creates (id invalid) or replaces a shared profile and its rows in
+// one transaction. Profile writes of a workspace are serialized so the cycle
+// check sees the graph it guards. A personal profile is not written here: only
+// its agent's settings change it.
 func (s *ModelProfileService) SaveProfile(ctx context.Context, workspaceID, id, actor pgtype.UUID, in ModelProfileInput) (db.ModelProfile, error) {
 	name, description, err := s.validateProfileInput(in)
 	if err != nil {
@@ -192,25 +189,22 @@ func (s *ModelProfileService) SaveProfile(ctx context.Context, workspaceID, id, 
 		}
 		edges := map[string]string{}
 		exists := map[string]bool{}
+		shared := map[string]bool{}
 		for _, p := range locked {
-			exists[util.UUIDToString(p.ID)] = true
-			edges[util.UUIDToString(p.ID)] = util.UUIDToString(p.WhenExhaustedProfileID)
+			key := util.UUIDToString(p.ID)
+			exists[key] = true
+			shared[key] = !p.OwnerAgentID.Valid
+			edges[key] = util.UUIDToString(p.WhenExhaustedProfileID)
 		}
-		if id.Valid && !exists[util.UUIDToString(id)] {
+		if id.Valid && (!exists[util.UUIDToString(id)] || !shared[util.UUIDToString(id)]) {
 			return ErrModelProfileNotFound
 		}
 		if !id.Valid {
 			id = dbid.NewV7()
 		}
-		var exhausted pgtype.UUID
-		if in.WhenExhaustedProfileID != nil && strings.TrimSpace(*in.WhenExhaustedProfileID) != "" {
-			exhausted, err = util.ParseUUID(strings.TrimSpace(*in.WhenExhaustedProfileID))
-			if err != nil || !exists[util.UUIDToString(exhausted)] {
-				return invalid("when_exhausted_profile_id is not a profile of this workspace")
-			}
-			if exhausted == id {
-				return invalid("a profile cannot fall back to itself")
-			}
+		exhausted, err := parseExhaustedProfile(in.WhenExhaustedProfileID, id, shared)
+		if err != nil {
+			return err
 		}
 		edges[util.UUIDToString(id)] = util.UUIDToString(exhausted)
 		if err := checkExhaustedChain(util.UUIDToString(id), edges); err != nil {
@@ -231,30 +225,52 @@ func (s *ModelProfileService) SaveProfile(ctx context.Context, workspaceID, id, 
 		if err != nil {
 			return err
 		}
-		if err := q.DeleteModelProfileOptions(ctx, id); err != nil {
-			return err
-		}
-		for _, o := range options {
-			if err := q.InsertModelProfileOption(ctx, db.InsertModelProfileOptionParams{
-				WorkspaceID: workspaceID, ProfileID: id, Position: o.Position, RuntimeID: util.MustParseUUID(o.RuntimeID),
-				Model: o.Model, ThinkingLevel: o.ThinkingLevel, CustomArgs: encodeArgs(o.CustomArgs),
-			}); err != nil {
-				return err
-			}
-		}
-		return nil
+		return replaceProfileOptions(ctx, q, workspaceID, id, options)
 	})
 	return saved, err
 }
 
-// DeleteProfile removes a profile nobody references: no agent, no open issue
-// and no other profile's when-exhausted. Closed issues are detached.
+// parseExhaustedProfile reads when_exhausted_profile_id: it must be a shared
+// profile of the workspace other than the profile itself.
+func parseExhaustedProfile(raw *string, self pgtype.UUID, shared map[string]bool) (pgtype.UUID, error) {
+	if raw == nil || strings.TrimSpace(*raw) == "" {
+		return pgtype.UUID{}, nil
+	}
+	id, err := util.ParseUUID(strings.TrimSpace(*raw))
+	if err != nil || !shared[util.UUIDToString(id)] {
+		return pgtype.UUID{}, invalid("when_exhausted_profile_id is not a shared profile of this workspace")
+	}
+	if id == self {
+		return pgtype.UUID{}, invalid("a profile cannot fall back to itself")
+	}
+	return id, nil
+}
+
+func replaceProfileOptions(ctx context.Context, q *db.Queries, workspaceID, profileID pgtype.UUID, options []ModelOption) error {
+	if err := q.DeleteModelProfileOptions(ctx, profileID); err != nil {
+		return err
+	}
+	for _, o := range options {
+		if err := q.InsertModelProfileOption(ctx, db.InsertModelProfileOptionParams{
+			WorkspaceID: workspaceID, ProfileID: profileID, Position: o.Position, RuntimeID: util.MustParseUUID(o.RuntimeID),
+			Model: o.Model, ThinkingLevel: o.ThinkingLevel, CustomArgs: encodeArgs(o.CustomArgs),
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// DeleteProfile removes a shared profile nobody references: no agent, no open
+// issue and no other profile's when-exhausted. Closed issues are detached.
+// Personal profiles made from it keep their rows and their agents and forget
+// the base.
 func (s *ModelProfileService) DeleteProfile(ctx context.Context, workspaceID, id pgtype.UUID) error {
 	return s.withTx(ctx, func(q *db.Queries) error {
 		if _, err := q.LockModelProfilesInWorkspace(ctx, workspaceID); err != nil {
 			return err
 		}
-		if _, err := q.GetModelProfileInWorkspace(ctx, db.GetModelProfileInWorkspaceParams{ID: id, WorkspaceID: workspaceID}); errors.Is(err, pgx.ErrNoRows) {
+		if _, err := q.GetSharedModelProfileInWorkspace(ctx, db.GetSharedModelProfileInWorkspaceParams{ID: id, WorkspaceID: workspaceID}); errors.Is(err, pgx.ErrNoRows) {
 			return ErrModelProfileNotFound
 		} else if err != nil {
 			return err
@@ -269,6 +285,9 @@ func (s *ModelProfileService) DeleteProfile(ctx context.Context, workspaceID, id
 		if err := q.ClearClosedIssueModelProfiles(ctx, db.ClearClosedIssueModelProfilesParams{WorkspaceID: workspaceID, ModelProfileID: id}); err != nil {
 			return err
 		}
+		if err := q.ClearPersonalModelProfileBase(ctx, db.ClearPersonalModelProfileBaseParams{WorkspaceID: workspaceID, BasedOnProfileID: id}); err != nil {
+			return err
+		}
 		if err := q.DeleteModelProfileOptions(ctx, id); err != nil {
 			return err
 		}
@@ -278,7 +297,13 @@ func (s *ModelProfileService) DeleteProfile(ctx context.Context, workspaceID, id
 }
 
 // AgentModelsInput changes an agent's model settings; nil fields are kept.
-// Options: an empty list removes the agent's own list (back on its profile).
+//
+//   - ModelProfileID / ClearProfile select a shared profile (or none). A
+//     personal profile the agent has is kept, unused, until it is reset.
+//   - Options writes the rows of the agent's personal profile, creating it
+//     from the profile the agent is on; an empty list returns the agent to the
+//     profile its personal one was based on (this is what older clients send
+//     for "no own list").
 type AgentModelsInput struct {
 	ModelProfileID  *string             `json:"model_profile_id"`
 	ClearProfile    bool                `json:"-"`
@@ -290,6 +315,9 @@ type AgentModelsInput struct {
 func (s *ModelProfileService) SaveAgentModels(ctx context.Context, agent db.Agent, in AgentModelsInput) (db.Agent, error) {
 	updated := agent
 	err := s.withTx(ctx, func(q *db.Queries) error {
+		if _, err := q.LockModelProfilesInWorkspace(ctx, agent.WorkspaceID); err != nil {
+			return err
+		}
 		if in.ModelProfileID != nil || in.ClearProfile {
 			var profileID pgtype.UUID
 			if in.ModelProfileID != nil && strings.TrimSpace(*in.ModelProfileID) != "" {
@@ -297,10 +325,14 @@ func (s *ModelProfileService) SaveAgentModels(ctx context.Context, agent db.Agen
 				if err != nil {
 					return invalid("model_profile_id is not a UUID")
 				}
-				if _, err := q.GetModelProfileInWorkspace(ctx, db.GetModelProfileInWorkspaceParams{ID: id, WorkspaceID: agent.WorkspaceID}); errors.Is(err, pgx.ErrNoRows) {
+				p, err := q.GetModelProfileInWorkspace(ctx, db.GetModelProfileInWorkspaceParams{ID: id, WorkspaceID: agent.WorkspaceID})
+				if errors.Is(err, pgx.ErrNoRows) {
 					return invalid("model_profile_id is not a profile of this workspace")
 				} else if err != nil {
 					return err
+				}
+				if p.OwnerAgentID.Valid && p.OwnerAgentID != agent.ID {
+					return invalid("model_profile_id is the personal profile of another agent")
 				}
 				profileID = id
 			}
@@ -311,21 +343,11 @@ func (s *ModelProfileService) SaveAgentModels(ctx context.Context, agent db.Agen
 			updated = a
 		}
 		if in.Options != nil {
-			options, err := normalizeOptions(ctx, q, agent.WorkspaceID, *in.Options, &agent.OwnerID)
+			a, err := s.applyOwnList(ctx, q, updated, *in.Options)
 			if err != nil {
 				return err
 			}
-			if err := q.DeleteAgentModelOptions(ctx, agent.ID); err != nil {
-				return err
-			}
-			for _, o := range options {
-				if err := q.InsertAgentModelOption(ctx, db.InsertAgentModelOptionParams{
-					WorkspaceID: agent.WorkspaceID, AgentID: agent.ID, Position: o.Position, RuntimeID: util.MustParseUUID(o.RuntimeID),
-					Model: o.Model, ThinkingLevel: o.ThinkingLevel, CustomArgs: encodeArgs(o.CustomArgs),
-				}); err != nil {
-					return err
-				}
-			}
+			updated = a
 		}
 		if in.DisallowedTools != nil {
 			if len(*in.DisallowedTools) > maxDisallowedTools {
@@ -347,11 +369,206 @@ func (s *ModelProfileService) SaveAgentModels(ctx context.Context, agent db.Agen
 	return updated, err
 }
 
-// SetIssueProfile sets or clears (invalid id) the issue's profile.
+// applyOwnList is the older client's "own list": rows go to the personal
+// profile, none returns the agent to the shared one.
+func (s *ModelProfileService) applyOwnList(ctx context.Context, q *db.Queries, agent db.Agent, rows []ModelOptionInput) (db.Agent, error) {
+	if len(rows) == 0 {
+		return resetPersonalProfile(ctx, q, agent)
+	}
+	return savePersonalProfile(ctx, q, agent, PersonalProfileInput{Options: rows})
+}
+
+// PersonalProfileInput creates or replaces the personal profile of an agent.
+// FromProfileID, when set, names the shared profile it is made from (and the
+// base it is compared with); otherwise the profile the agent is on stays the
+// base. WhenExhaustedProfileID is kept when nil.
+type PersonalProfileInput struct {
+	Options                []ModelOptionInput `json:"options"`
+	FromProfileID          *string            `json:"from_profile_id"`
+	WhenExhaustedProfileID *string            `json:"when_exhausted_profile_id"`
+}
+
+// SetPersonalProfile writes the agent's personal profile and points the agent
+// at it.
+func (s *ModelProfileService) SetPersonalProfile(ctx context.Context, agent db.Agent, in PersonalProfileInput) (db.Agent, error) {
+	updated := agent
+	err := s.withTx(ctx, func(q *db.Queries) error {
+		if _, err := q.LockModelProfilesInWorkspace(ctx, agent.WorkspaceID); err != nil {
+			return err
+		}
+		a, err := savePersonalProfile(ctx, q, agent, in)
+		updated = a
+		return err
+	})
+	return updated, err
+}
+
+// SetSingleModel is the personal profile of one row: the agent runs that model.
+func (s *ModelProfileService) SetSingleModel(ctx context.Context, agent db.Agent, row ModelOptionInput) (db.Agent, error) {
+	return s.SetPersonalProfile(ctx, agent, PersonalProfileInput{Options: []ModelOptionInput{row}})
+}
+
+// ResetPersonalProfile returns the agent to the shared profile its personal one
+// was based on and deletes the personal profile, in one transaction. An agent
+// without a personal profile is left as it is.
+func (s *ModelProfileService) ResetPersonalProfile(ctx context.Context, agent db.Agent) (db.Agent, error) {
+	updated := agent
+	err := s.withTx(ctx, func(q *db.Queries) error {
+		if _, err := q.LockModelProfilesInWorkspace(ctx, agent.WorkspaceID); err != nil {
+			return err
+		}
+		a, err := resetPersonalProfile(ctx, q, agent)
+		updated = a
+		return err
+	})
+	return updated, err
+}
+
+// personalProfileName is the agent's name, with the start of the agent's id
+// added when the lower-cased name is taken in the workspace. The name carries
+// no "personal" word: clients label personal profiles in their own language.
+func personalProfileName(ctx context.Context, q *db.Queries, agent db.Agent) (string, error) {
+	name := truncateRunes(strings.TrimSpace(agent.Name), 70)
+	_, err := q.GetModelProfileByNameInWorkspace(ctx, db.GetModelProfileByNameInWorkspaceParams{WorkspaceID: agent.WorkspaceID, Name: name})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return name, nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return truncateRunes(strings.TrimSpace(agent.Name), 60) + " · " + util.UUIDToString(agent.ID)[:8], nil
+}
+
+func truncateRunes(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[:n])
+}
+
+func savePersonalProfile(ctx context.Context, q *db.Queries, agent db.Agent, in PersonalProfileInput) (db.Agent, error) {
+	if len(in.Options) == 0 {
+		return agent, invalid("a personal profile needs at least one model")
+	}
+	options, err := normalizeOptions(ctx, q, agent.WorkspaceID, in.Options, &agent.OwnerID)
+	if err != nil {
+		return agent, err
+	}
+	// The base: the profile named, else the shared profile the agent is on,
+	// else the one the personal profile already had.
+	var base pgtype.UUID
+	existing, err := q.GetPersonalModelProfileOfAgent(ctx, agent.ID)
+	hasPersonal := err == nil
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return agent, err
+	}
+	if hasPersonal {
+		base = existing.BasedOnProfileID
+	}
+	switch {
+	case in.FromProfileID != nil && strings.TrimSpace(*in.FromProfileID) != "":
+		id, err := util.ParseUUID(strings.TrimSpace(*in.FromProfileID))
+		if err != nil {
+			return agent, invalid("from_profile_id is not a UUID")
+		}
+		if _, err := q.GetSharedModelProfileInWorkspace(ctx, db.GetSharedModelProfileInWorkspaceParams{ID: id, WorkspaceID: agent.WorkspaceID}); errors.Is(err, pgx.ErrNoRows) {
+			return agent, invalid("from_profile_id is not a shared profile of this workspace")
+		} else if err != nil {
+			return agent, err
+		}
+		base = id
+	case agent.ModelProfileID.Valid && (!hasPersonal || existing.ID != agent.ModelProfileID):
+		if p, err := q.GetSharedModelProfileInWorkspace(ctx, db.GetSharedModelProfileInWorkspaceParams{ID: agent.ModelProfileID, WorkspaceID: agent.WorkspaceID}); err == nil {
+			base = p.ID
+		} else if !errors.Is(err, pgx.ErrNoRows) {
+			return agent, err
+		}
+	}
+
+	var exhausted pgtype.UUID
+	keepExhausted := in.WhenExhaustedProfileID == nil
+	if !keepExhausted {
+		locked, err := q.ListSharedModelProfiles(ctx, agent.WorkspaceID)
+		if err != nil {
+			return agent, err
+		}
+		shared := map[string]bool{}
+		for _, p := range locked {
+			shared[util.UUIDToString(p.ID)] = true
+		}
+		if exhausted, err = parseExhaustedProfile(in.WhenExhaustedProfileID, pgtype.UUID{}, shared); err != nil {
+			return agent, err
+		}
+	} else if hasPersonal {
+		exhausted = existing.WhenExhaustedProfileID
+	}
+
+	id := existing.ID
+	if hasPersonal {
+		if _, err := q.UpdateModelProfile(ctx, db.UpdateModelProfileParams{ID: id, WorkspaceID: agent.WorkspaceID, Name: existing.Name, Description: existing.Description, WhenExhaustedProfileID: exhausted}); err != nil {
+			return agent, err
+		}
+		if err := q.SetPersonalModelProfileBase(ctx, db.SetPersonalModelProfileBaseParams{ID: id, BasedOnProfileID: base}); err != nil {
+			return agent, err
+		}
+	} else {
+		name, err := personalProfileName(ctx, q, agent)
+		if err != nil {
+			return agent, err
+		}
+		id = dbid.NewV7()
+		if _, err := q.CreatePersonalModelProfile(ctx, db.CreatePersonalModelProfileParams{
+			ID: id, WorkspaceID: agent.WorkspaceID, Name: name, WhenExhaustedProfileID: exhausted,
+			OwnerAgentID: agent.ID, BasedOnProfileID: base,
+		}); err != nil {
+			if isUniqueViolation(err) {
+				return agent, ErrModelProfileConflict
+			}
+			return agent, err
+		}
+	}
+	if err := replaceProfileOptions(ctx, q, agent.WorkspaceID, id, options); err != nil {
+		return agent, err
+	}
+	if agent.ModelProfileID == id {
+		return agent, nil
+	}
+	return q.SetAgentModelProfile(ctx, db.SetAgentModelProfileParams{ID: agent.ID, WorkspaceID: agent.WorkspaceID, ModelProfileID: id})
+}
+
+func resetPersonalProfile(ctx context.Context, q *db.Queries, agent db.Agent) (db.Agent, error) {
+	existing, err := q.GetPersonalModelProfileOfAgent(ctx, agent.ID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return agent, nil
+	}
+	if err != nil {
+		return agent, err
+	}
+	updated := agent
+	// The agent goes back to the profile the personal one was made from. When
+	// it already points at something else it stays there.
+	if agent.ModelProfileID == existing.ID {
+		updated, err = q.SetAgentModelProfile(ctx, db.SetAgentModelProfileParams{ID: agent.ID, WorkspaceID: agent.WorkspaceID, ModelProfileID: existing.BasedOnProfileID})
+		if err != nil {
+			return agent, err
+		}
+	}
+	if err := q.DeleteModelProfileOptions(ctx, existing.ID); err != nil {
+		return updated, err
+	}
+	if _, err := q.DeleteModelProfile(ctx, db.DeleteModelProfileParams{ID: existing.ID, WorkspaceID: agent.WorkspaceID}); err != nil {
+		return updated, err
+	}
+	return updated, nil
+}
+
+// SetIssueProfile sets or clears (invalid id) the issue's profile. Only a
+// shared profile may be set: a personal one belongs to its agent.
 func (s *ModelProfileService) SetIssueProfile(ctx context.Context, issue db.Issue, profileID pgtype.UUID) (db.Issue, error) {
 	if profileID.Valid {
-		if _, err := s.Queries.GetModelProfileInWorkspace(ctx, db.GetModelProfileInWorkspaceParams{ID: profileID, WorkspaceID: issue.WorkspaceID}); errors.Is(err, pgx.ErrNoRows) {
-			return db.Issue{}, invalid("model_profile_id is not a profile of this workspace")
+		if _, err := s.Queries.GetSharedModelProfileInWorkspace(ctx, db.GetSharedModelProfileInWorkspaceParams{ID: profileID, WorkspaceID: issue.WorkspaceID}); errors.Is(err, pgx.ErrNoRows) {
+			return db.Issue{}, invalid("model_profile_id is not a shared profile of this workspace")
 		} else if err != nil {
 			return db.Issue{}, err
 		}
@@ -359,12 +576,33 @@ func (s *ModelProfileService) SetIssueProfile(ctx context.Context, issue db.Issu
 	return s.Queries.SetIssueModelProfile(ctx, db.SetIssueModelProfileParams{ID: issue.ID, WorkspaceID: issue.WorkspaceID, ModelProfileID: profileID})
 }
 
+// RuntimeBlock is one reason a runtime cannot run now: a refusal stored when a
+// run failed, or the verdict computed from the accounts of its pool.
+type RuntimeBlock struct {
+	RuntimeID      string
+	Until          time.Time
+	UntilEstimated bool
+	// Code is the reason code the interface shows (the Reason* codes).
+	Code string
+	// StoredCode is the code of the stored refusal; empty for a computed block.
+	StoredCode     string
+	Reason         string
+	TaskID         pgtype.UUID
+	SubscriptionID pgtype.UUID
+	CreatedAt      pgtype.Timestamptz
+	// Computed: the block comes from the accounts, nothing is stored for it.
+	Computed bool
+}
+
 // ModelWorld is the workspace state a choice reads: profiles with their rows,
 // runtimes with their availability. Load it once to choose for many agents.
 type ModelWorld struct {
 	Profiles map[string]ModelProfileData
 	Runtimes map[string]RuntimeAvailability
-	Records  []db.RuntimeUnavailable
+	// Records are the refusals stored for the workspace that still hold; Blocks
+	// are what actually keeps a runtime from running, stored or computed.
+	Records []db.RuntimeUnavailable
+	Blocks  []RuntimeBlock
 }
 
 // runtimeOnline mirrors the claim's freshness rule.
@@ -372,8 +610,9 @@ func runtimeOnline(rt db.AgentRuntime, now time.Time) bool {
 	return rt.Status == "online" && rt.LastSeenAt.Valid && now.Sub(rt.LastSeenAt.Time) <= time.Duration(RuntimeClaimFreshnessSeconds*float64(time.Second))
 }
 
-// LoadModelWorld reads every profile, runtime and active unavailability of a
-// workspace.
+// LoadModelWorld reads every profile and runtime of a workspace and decides
+// at now what keeps each runtime from running: the refusals stored for it and,
+// for an environment with a pool, the state of the pool's accounts.
 func LoadModelWorld(ctx context.Context, q *db.Queries, workspaceID pgtype.UUID, now time.Time) (ModelWorld, error) {
 	w := ModelWorld{Profiles: map[string]ModelProfileData{}, Runtimes: map[string]RuntimeAvailability{}}
 	profiles, err := q.ListModelProfiles(ctx, workspaceID)
@@ -381,7 +620,10 @@ func LoadModelWorld(ctx context.Context, q *db.Queries, workspaceID pgtype.UUID,
 		return w, err
 	}
 	for _, p := range profiles {
-		w.Profiles[util.UUIDToString(p.ID)] = ModelProfileData{ID: util.UUIDToString(p.ID), Name: p.Name, WhenExhaustedProfileID: util.UUIDToString(p.WhenExhaustedProfileID)}
+		w.Profiles[util.UUIDToString(p.ID)] = ModelProfileData{
+			ID: util.UUIDToString(p.ID), Name: p.Name, WhenExhaustedProfileID: util.UUIDToString(p.WhenExhaustedProfileID),
+			OwnerAgentID: util.UUIDToString(p.OwnerAgentID), BasedOnProfileID: util.UUIDToString(p.BasedOnProfileID),
+		}
 	}
 	rows, err := q.ListModelProfileOptionsByWorkspace(ctx, workspaceID)
 	if err != nil {
@@ -398,33 +640,161 @@ func LoadModelWorld(ctx context.Context, q *db.Queries, workspaceID pgtype.UUID,
 	if err != nil {
 		return w, err
 	}
-	for _, rt := range runtimes {
-		w.Runtimes[util.UUIDToString(rt.ID)] = RuntimeAvailability{
-			Name: runtimeDisplayName(rt), Provider: rt.Provider, Online: runtimeOnline(rt, now),
-			Private: rt.Visibility == "private", OwnerID: util.UUIDToString(rt.OwnerID),
-		}
+	poolOf, err := runtimePools(ctx, q, workspaceID)
+	if err != nil {
+		return w, err
 	}
-	records, err := q.ListActiveRuntimeUnavailable(ctx, workspaceID)
+	accounts, members, err := poolAccounts(ctx, q, poolOf, now)
+	if err != nil {
+		return w, err
+	}
+	records, err := q.ListActiveRuntimeUnavailable(ctx, db.ListActiveRuntimeUnavailableParams{WorkspaceID: workspaceID, Now: pgtype.Timestamptz{Time: now, Valid: true}})
 	if err != nil {
 		return w, err
 	}
 	w.Records = records
+	recordsOf := map[string][]db.RuntimeUnavailable{}
 	for _, rec := range records {
-		key := util.UUIDToString(rec.RuntimeID)
-		rt, ok := w.Runtimes[key]
-		if !ok || !rec.Until.Valid || !rec.Until.Time.After(now) {
-			continue
+		recordsOf[util.UUIDToString(rec.RuntimeID)] = append(recordsOf[util.UUIDToString(rec.RuntimeID)], rec)
+	}
+	for _, rt := range runtimes {
+		id := util.UUIDToString(rt.ID)
+		ra := RuntimeAvailability{
+			Name: runtimeDisplayName(rt), Provider: rt.Provider, Online: runtimeOnline(rt, now),
+			Private: rt.Visibility == "private", OwnerID: util.UUIDToString(rt.OwnerID),
 		}
-		if rec.Until.Time.After(rt.UnavailableUntil) {
-			rt.UnavailableUntil, rt.UnavailableWhy = rec.Until.Time, rec.Reason
-			w.Runtimes[key] = rt
+		var pool *PoolVerdict
+		if poolID := poolOf[util.UUIDToString(rt.ProfileID)]; poolID != "" {
+			ra.PoolID = poolID
+			pv := EvaluatePool(poolAccountList(accounts, members[poolID]), rt.DaemonID.String, now)
+			pool = &pv
 		}
+		blocks := runtimeBlocks(id, recordsOf[id], pool, now)
+		w.Blocks = append(w.Blocks, blocks...)
+		if top, ok := longestBlock(blocks); ok {
+			ra.UnavailableUntil, ra.UnavailableWhy = top.Until, top.Reason
+			ra.UnavailableCode, ra.UnavailableEstimated = top.Code, top.UntilEstimated
+		}
+		w.Runtimes[id] = ra
 	}
 	return w, nil
 }
 
-// ChoiceAgent reads the agent's fields and own list for a choice.
-func ChoiceAgent(ctx context.Context, q *db.Queries, agent db.Agent) (ModelChoiceAgent, error) {
+// longestBlock is the block that keeps the runtime closed the longest.
+func longestBlock(blocks []RuntimeBlock) (RuntimeBlock, bool) {
+	var top RuntimeBlock
+	found := false
+	for _, b := range blocks {
+		if !found || b.Until.After(top.Until) {
+			top, found = b, true
+		}
+	}
+	return top, found
+}
+
+// runtimeBlocks lists what keeps one runtime from running at now. Stored
+// refusals of a run count by their code; the daemon's own refusals on the
+// agent limit or on disabled accounts stand only while the pool still has no
+// usable account; the old stored verdicts of the pool are not read; the
+// pool's computed verdict stands in for them.
+func runtimeBlocks(runtimeID string, stored []db.RuntimeUnavailable, pool *PoolVerdict, now time.Time) []RuntimeBlock {
+	var out []RuntimeBlock
+	for _, rec := range stored {
+		if !rec.Until.Valid || !rec.Until.Time.After(now) || rec.SubscriptionID.Valid {
+			continue
+		}
+		code := StoredRefusalCode(rec)
+		b := RuntimeBlock{RuntimeID: runtimeID, Until: rec.Until.Time, StoredCode: code, Reason: rec.Reason, TaskID: rec.TaskID, CreatedAt: rec.CreatedAt}
+		switch code {
+		case UnavailablePoolVerdict:
+			continue
+		case UnavailableAgentCapRefusal:
+			if pool != nil && pool.Usable {
+				continue
+			}
+			b.Code = ReasonAgentCap
+		case UnavailableDisabledRefusal:
+			if pool != nil && pool.Usable {
+				continue
+			}
+			b.Code = ReasonDisabled
+		default:
+			b.Code = ReasonProviderRefusal
+		}
+		out = append(out, b)
+	}
+	if pool != nil && pool.Blocked {
+		out = append(out, RuntimeBlock{
+			RuntimeID: runtimeID, Until: pool.Until, UntilEstimated: !pool.UntilKnown,
+			Code: pool.Code, Reason: pool.Text, Computed: true,
+		})
+	}
+	return out
+}
+
+// runtimePools maps the runtime profiles of a workspace to their pools.
+func runtimePools(ctx context.Context, q *db.Queries, workspaceID pgtype.UUID) (map[string]string, error) {
+	profiles, err := q.ListRuntimeProfiles(ctx, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]string{}
+	for _, p := range profiles {
+		if p.PoolID.Valid {
+			out[util.UUIDToString(p.ID)] = util.UUIDToString(p.PoolID)
+		}
+	}
+	return out, nil
+}
+
+// poolAccounts loads the members of the pools in poolOf and their accounts.
+func poolAccounts(ctx context.Context, q *db.Queries, poolOf map[string]string, now time.Time) (map[string]Account, map[string][]string, error) {
+	seen := map[string]bool{}
+	var poolIDs []pgtype.UUID
+	for _, id := range poolOf {
+		if !seen[id] {
+			seen[id] = true
+			poolIDs = append(poolIDs, util.MustParseUUID(id))
+		}
+	}
+	members := map[string][]string{}
+	if len(poolIDs) == 0 {
+		return map[string]Account{}, members, nil
+	}
+	rows, err := q.ListSubscriptionPoolMembersByPools(ctx, poolIDs)
+	if err != nil {
+		return nil, nil, err
+	}
+	var accountIDs []pgtype.UUID
+	seenAccount := map[string]bool{}
+	for _, m := range rows {
+		pool := util.UUIDToString(m.PoolID)
+		account := util.UUIDToString(m.SubscriptionID)
+		members[pool] = append(members[pool], account)
+		if !seenAccount[account] {
+			seenAccount[account] = true
+			accountIDs = append(accountIDs, m.SubscriptionID)
+		}
+	}
+	accounts, err := LoadAccounts(ctx, q, accountIDs, now)
+	return accounts, members, err
+}
+
+// poolAccountList is the pool's accounts in spend order; a member whose
+// account is gone is skipped.
+func poolAccountList(accounts map[string]Account, ids []string) []Account {
+	out := make([]Account, 0, len(ids))
+	for _, id := range ids {
+		if a, ok := accounts[id]; ok {
+			out = append(out, a)
+		}
+	}
+	return out
+}
+
+// ChoiceAgent reads the agent's fields for a choice. Its list comes from its
+// profile, shared or personal, which the world already holds.
+func ChoiceAgent(_ context.Context, _ *db.Queries, agent db.Agent) (ModelChoiceAgent, error) {
 	a := ModelChoiceAgent{
 		ID: util.UUIDToString(agent.ID), OwnerID: util.UUIDToString(agent.OwnerID), RuntimeID: util.UUIDToString(agent.RuntimeID),
 		Model: agent.Model.String, ThinkingLevel: agent.ThinkingLevel.String, ModelProfileID: util.UUIDToString(agent.ModelProfileID),
@@ -434,13 +804,6 @@ func ChoiceAgent(ctx context.Context, q *db.Queries, agent db.Agent) (ModelChoic
 	}
 	if agent.DisallowedTools != nil {
 		_ = json.Unmarshal(agent.DisallowedTools, &a.DisallowedTools)
-	}
-	rows, err := q.ListAgentModelOptions(ctx, agent.ID)
-	if err != nil {
-		return a, err
-	}
-	for _, r := range rows {
-		a.Options = append(a.Options, agentOptionFromRow(r))
 	}
 	return a, nil
 }
@@ -481,7 +844,7 @@ func previewChoice(ctx context.Context, q *db.Queries, agent db.Agent, issue *db
 		// Acceptance runs no model: no profile or list may move it off the
 		// daemon's accept runtime onto a model runtime (STT-358).
 		issueProfile, route = pgtype.UUID{}, conveyorRunModel{}
-		a.Options, a.ModelProfileID = nil, ""
+		a.ModelProfileID = ""
 	}
 	in := world.Input(a, issueID, issueProfile)
 	in.ExcludeFamily = route.ExcludeFamily

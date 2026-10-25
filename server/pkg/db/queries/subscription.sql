@@ -184,10 +184,6 @@ ORDER BY created_at;
 SELECT id, workspace_id, profile_id FROM agent_runtime
 WHERE profile_id = ANY(@profile_ids::uuid[]);
 
--- name: DeleteRuntimeUnavailableByReasonPrefix :exec
-DELETE FROM runtime_unavailable
-WHERE runtime_id = $1 AND starts_with(reason, @prefix::text);
-
 -- name: ListAgentsOnRuntimeProfiles :many
 -- Active agents bound to runtimes of the given profiles, for discrepancies.
 SELECT a.id, a.name, a.workspace_id, ar.profile_id
@@ -200,12 +196,3 @@ WHERE ar.profile_id = ANY(@profile_ids::uuid[]) AND a.archived_at IS NULL;
 SELECT * FROM runtime_profile
 WHERE share_key IS NOT NULL
 ORDER BY workspace_id, created_at;
-
--- name: DeleteRuntimeLocalRefusals :many
--- Rows a failed run wrote because the daemon refused it on the pool's own
--- agent caps (or every subscription disabled) — not a provider's limit.
--- Lifted once a fresh snapshot shows a subscription of the pool usable.
-DELETE FROM runtime_unavailable
-WHERE runtime_id = $1 AND task_id IS NOT NULL
-  AND (strpos(reason, @caps_witness::text) > 0 OR strpos(reason, @disabled_witness::text) > 0)
-RETURNING *;
