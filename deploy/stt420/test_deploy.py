@@ -143,5 +143,14 @@ class SmokeTest(unittest.TestCase):
         self.assertEqual(urls, [])
 
 
+class StackFilesTest(unittest.TestCase):
+    def test_release_image_overrides_are_not_part_of_the_stack(self):
+        label = ("/opt/multica/docker-compose.selfhost.yml,/opt/multica/override.yml,"
+                 "/var/backups/multica-stt420._ayyu2lc/old-images.json")
+        self.assertEqual(deploy.stack_files(label),
+                         ["/opt/multica/docker-compose.selfhost.yml", "/opt/multica/override.yml"])
+        self.assertEqual(deploy.stack_files("/opt/multica/new-images.json"), ["/opt/multica/new-images.json"])
+
+
 if __name__ == "__main__":
     unittest.main()
