@@ -1,0 +1,16 @@
+[Unit]
+Description=Multica autodeploy webhook receiver (wakes the deploy, never runs it)
+After=network-online.target
+
+[Service]
+User=agents
+ExecStart=/usr/bin/python3 -I /usr/local/lib/multica-autodeploy/hook.py
+Environment=AUTODEPLOY_HOOK_PORT=8977
+Restart=on-failure
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/run/multica-autodeploy
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target
