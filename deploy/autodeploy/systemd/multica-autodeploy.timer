@@ -1,0 +1,10 @@
+[Unit]
+Description=Multica autodeploy fallback check (the webhook is the fast path)
+
+[Timer]
+OnBootSec=10min
+OnUnitActiveSec=30min
+RandomizedDelaySec=2min
+
+[Install]
+WantedBy=timers.target
