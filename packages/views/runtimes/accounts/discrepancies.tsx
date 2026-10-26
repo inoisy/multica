@@ -1,9 +1,10 @@
 "use client";
 
 import { AlertTriangle } from "lucide-react";
-import type { RuntimeProfile, Subscription, SubscriptionDiscrepancy } from "@multica/core/types";
-import { Button } from "@multica/ui/components/ui/button";
-import { useT } from "../i18n";
+import type { Subscription, SubscriptionDiscrepancy } from "@multica/core/types";
+import { AppLink } from "../../navigation";
+import { useT } from "../../i18n";
+import { useEnvironmentHref } from "./pool-environments";
 
 const KNOWN_KINDS = [
   "credential_missing",
@@ -21,18 +22,14 @@ function isKnownKind(kind: string): kind is KnownKind {
 export function Discrepancies({
   items,
   wsId,
-  profiles,
   subscriptions,
-  onOpenPool,
 }: {
   items: SubscriptionDiscrepancy[];
   wsId: string;
-  profiles: RuntimeProfile[];
   subscriptions: Subscription[];
-  /** Opens the pool an environment spends. */
-  onOpenPool: (poolId: string) => void;
 }) {
   const { t } = useT("agents");
+  const hrefOf = useEnvironmentHref();
   if (!items.length) return null;
   const titleOf = (key: string) => subscriptions.find((s) => s.key === key)?.title ?? key;
   return (
@@ -54,10 +51,10 @@ export function Discrepancies({
           ]
             .filter(Boolean)
             .join(" · ");
-          const poolId =
+          const href =
             item.runtime_profile_id && (!item.workspace_id || item.workspace_id === wsId)
-              ? profiles.find((p) => p.id === item.runtime_profile_id)?.pool_id
-              : undefined;
+              ? hrefOf(item.runtime_profile_id)
+              : null;
           return (
             <li key={`${item.kind}-${index}`} className="flex flex-wrap items-baseline gap-x-2">
               <span className="font-medium">
@@ -66,14 +63,10 @@ export function Discrepancies({
                   : t(($) => $.subscriptions.discrepancies.kind_unknown)}
               </span>
               {subject ? <span>{subject}</span> : null}
-              {poolId ? (
-                <Button variant="link"
-                  type="button"
-                  className="h-auto p-0 underline underline-offset-2"
-                  onClick={() => onOpenPool(poolId)}
-                >
+              {href ? (
+                <AppLink href={href} className="underline underline-offset-2">
                   {t(($) => $.subscriptions.discrepancies.open_pool)}
-                </Button>
+                </AppLink>
               ) : null}
             </li>
           );

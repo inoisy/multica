@@ -5,7 +5,7 @@ import { moveItem } from "@multica/core/subscriptions";
 import type { AvailabilityVerdict, Subscription } from "@multica/core/types";
 import { SimpleSelect } from "@multica/ui/components/common/simple-select";
 import { Button } from "@multica/ui/components/ui/button";
-import { useT } from "../i18n";
+import { useT } from "../../i18n";
 import { VerdictBadge } from "./verdict-badge";
 
 /** Subscriptions of a pool in spending order; editable lists move, remove and add. */

@@ -2,7 +2,7 @@
 
 import { RadioGroup, RadioGroupItem } from "@multica/ui/components/ui/radio-group";
 import type { SpendOrder } from "@multica/core/types";
-import { useT } from "../i18n";
+import { useT } from "../../i18n";
 
 const ORDERS: SpendOrder[] = ["first", "balanced"];
 

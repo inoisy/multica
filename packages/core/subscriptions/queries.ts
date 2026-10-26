@@ -1,5 +1,5 @@
 import { useCallback } from "react";
-import { queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
+import { infiniteQueryOptions, queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ApiError, api } from "../api";
 import { PoolRevisionConflictSchema } from "../api/schemas";
 import { runtimeProfileKeys } from "../runtimes/profiles";
@@ -67,11 +67,16 @@ export function subscriptionLoginOptions(key: string, enabled = true) {
 
 export const MANUAL_RUNS_PAGE = 20;
 
-/** The journal of commands run by hand under an account; only an instance admin may read it, so a refusal is not retried. */
-export function manualRunsOptions(key: string, before?: string) {
-  return queryOptions({
-    queryKey: [...subscriptionKeys.manualRuns(key), before ?? "first"] as const,
-    queryFn: () => api.listSubscriptionManualRuns(key, { limit: MANUAL_RUNS_PAGE, before }),
+/**
+ * The journal of commands run by hand under an account, newest first, a page
+ * at a time. Only an instance admin may read it; a refusal is shown, not retried.
+ */
+export function manualRunsOptions(key: string) {
+  return infiniteQueryOptions({
+    queryKey: subscriptionKeys.manualRuns(key),
+    queryFn: ({ pageParam }) => api.listSubscriptionManualRuns(key, { limit: MANUAL_RUNS_PAGE, before: pageParam }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (last) => last.next_before ?? undefined,
     enabled: key.length > 0,
     retry: false,
   });

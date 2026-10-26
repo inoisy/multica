@@ -4,7 +4,7 @@ import { useState } from "react";
 import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
 import type { AgentRuntime, MemberWithUser, ModelOptionInput, ModelRowState } from "@multica/core/types";
 import { isRuntimeUsableForUser } from "@multica/core/runtimes";
-import { modelRowLabel, moveModelOption } from "@multica/core/model-profiles";
+import { moveModelOption } from "@multica/core/model-profiles";
 import { Badge } from "@multica/ui/components/ui/badge";
 import { Button } from "@multica/ui/components/ui/button";
 import { Textarea } from "@multica/ui/components/ui/textarea";
@@ -13,6 +13,7 @@ import { ModelPicker } from "../agents/components/inspector/model-picker";
 import { RuntimePicker } from "../agents/components/inspector/runtime-picker";
 import { ThinkingSettingField } from "../agents/components/inspector/thinking-prop-row";
 import { useT } from "../i18n";
+import { useModelText } from "./model-text";
 
 /**
  * Editable ordered model rows: runtime, then model and thinking level from
@@ -185,6 +186,7 @@ export function ModelRowsEditor({
 /** Under a row of a personal profile: what the shared profile has at the same place. */
 function BaseNote({ row, baseRow }: { row: ModelOptionInput; baseRow: ModelRowState | null }) {
   const { t } = useT("agents");
+  const text = useModelText();
   const same =
     baseRow !== null &&
     baseRow.runtime_id === row.runtime_id &&
@@ -194,7 +196,7 @@ function BaseNote({ row, baseRow }: { row: ModelOptionInput; baseRow: ModelRowSt
   return (
     <div className="flex flex-wrap items-center gap-2 border-t px-4 py-2.5 text-caption text-muted-foreground" data-testid="row-base-note">
       <Badge variant="warning">{t(($) => $.models.row_differs)}</Badge>
-      <span>{baseRow ? t(($) => $.models.row_in_shared, { row: modelRowLabel(baseRow) }) : t(($) => $.models.row_not_in_shared)}</span>
+      <span>{baseRow ? t(($) => $.models.row_in_shared, { row: text.rowLabel(baseRow) }) : t(($) => $.models.row_not_in_shared)}</span>
     </div>
   );
 }

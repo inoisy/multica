@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import type { AvailabilityVerdict } from "@multica/core/types";
 import { cn } from "@multica/ui/lib/utils";
-import { useAvailabilityText } from "../model-profiles";
+import { useAvailabilityText } from "../../model-profiles";
 import { verdictVariant } from "./verdict-badge";
 
 /** How far ahead a lane looks, in hours. */

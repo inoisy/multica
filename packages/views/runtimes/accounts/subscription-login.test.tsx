@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { Subscription } from "@multica/core/types";
-import { renderWithI18n } from "../test/i18n";
+import { renderWithI18n } from "../../test/i18n";
 
 const api = vi.hoisted(() => ({
   startSubscriptionLogin: vi.fn(),

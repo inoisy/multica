@@ -23,7 +23,7 @@ import {
   DialogTrigger,
 } from "@multica/ui/components/ui/dialog";
 import { Input } from "@multica/ui/components/ui/input";
-import { useT } from "../i18n";
+import { useT } from "../../i18n";
 import { loginMethod } from "./subscription-plan";
 
 const STATE_VARIANT: Record<SubscriptionLoginState, "secondary" | "destructive" | "outline"> = {

@@ -1,7 +1,7 @@
 "use client";
 
 import type { ModelRowState } from "@multica/core/types";
-import { modelRowLabel, rowDifferences } from "@multica/core/model-profiles";
+import { rowDifferences } from "@multica/core/model-profiles";
 import { Badge } from "@multica/ui/components/ui/badge";
 import { useT } from "../i18n";
 import { useModelText } from "./model-text";
@@ -52,7 +52,7 @@ export function PersonalRowsList({
                   {position === 1 ? t(($) => $.models.row_primary) : t(($) => $.models.row_n, { n: position })}
                 </span>
               ) : null}
-              <span className="min-w-[10rem] flex-1 break-words">{modelRowLabel(row)}</span>
+              <span className="min-w-[10rem] flex-1 break-words">{text.rowLabel(row)}</span>
               {row.state ? <Badge variant={row.state === "available" ? "secondary" : "outline"}>{text.state(row)}</Badge> : null}
               {row.chosen ? <Badge>{t(($) => $.models.current)}</Badge> : null}
             </div>
@@ -61,7 +61,7 @@ export function PersonalRowsList({
                 <Badge variant="warning">{t(($) => $.models.row_differs)}</Badge>
                 <span>
                   {baseRow
-                    ? t(($) => $.models.row_in_shared, { row: modelRowLabel(baseRow) })
+                    ? t(($) => $.models.row_in_shared, { row: text.rowLabel(baseRow) })
                     : t(($) => $.models.row_not_in_shared)}
                 </span>
               </div>
@@ -70,7 +70,7 @@ export function PersonalRowsList({
         ) : baseRow ? (
           <li key={position} className="flex flex-wrap items-center gap-2 text-caption text-muted-foreground">
             <Badge variant="warning">{t(($) => $.models.row_differs)}</Badge>
-            <span>{t(($) => $.models.row_only_shared, { row: `${position}. ${modelRowLabel(baseRow)}` })}</span>
+            <span>{t(($) => $.models.row_only_shared, { row: `${position}. ${text.rowLabel(baseRow)}` })}</span>
           </li>
         ) : null,
       )}

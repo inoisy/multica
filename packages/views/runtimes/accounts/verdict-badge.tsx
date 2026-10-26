@@ -2,7 +2,7 @@
 
 import type { AvailabilityVerdict } from "@multica/core/types";
 import { Badge } from "@multica/ui/components/ui/badge";
-import { useAvailabilityText } from "../model-profiles";
+import { useAvailabilityText } from "../../model-profiles";
 
 /** The tone of a verdict: usable, held back by the agents' limit, or blocked for a harder reason. */
 export function verdictVariant(verdict: Pick<AvailabilityVerdict, "blocked" | "usable" | "reason_code">): "success" | "warning" | "destructive" | "outline" {

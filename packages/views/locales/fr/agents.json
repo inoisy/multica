@@ -165,7 +165,8 @@
     "runtime_required_toast": "Associez un runtime avant d'exécuter cet agent.",
     "assign_work": "Assigner du travail",
     "more_actions_aria": "Actions de l'agent",
-    "updated": "Mis à jour {{when}}"
+    "updated": "Mis à jour {{when}}",
+    "model_owned_by_profile_toast": "The runtime, model and thinking level of this agent come from its profile. Change them in Models."
   },
   "inspector": {
     "section_profile": "Profil",
@@ -200,7 +201,8 @@
     "description_placeholder": "Que fait cet agent ?",
     "save": "Enregistrer",
     "cancel": "Annuler",
-    "model_routed": "Le modèle de l'exécution est choisi dans la section Modèles ci-dessous."
+    "model_saved_hint": "Row 1 of the saved list. The next run may take another row and the account is chosen at launch: forecast and last run are in Models below.",
+    "model_open_models": "Change in Models"
   },
   "overview": {
     "agent_context": "Agent",
@@ -1070,7 +1072,6 @@
     "profile_none": "No profile",
     "profile_usage": "Editing the profile affects {{agents}} agents and {{issues}} issues.",
     "open_profile": "Open profiles",
-    "now_label": "Now",
     "now_next_run": "What the next run would take",
     "profile_rows": "Models of “{{name}}”",
     "row_primary": "Primary",
@@ -1118,7 +1119,7 @@
     "mode_profile_hint": "une liste partagée par plusieurs agents",
     "mode_single": "Un modèle",
     "mode_one_hint": "exactement ce modèle, sans repli",
-    "mode_fields_hint": "Ni profil ni modèle propre : l'exécution prend le runtime et le modèle des champs ci-dessus.",
+    "mode_fields_hint": "No profile and no own model: a run takes the runtime and model from the agent's own fields.",
     "switch_to_profile": "Utiliser le profil « {{name}} »",
     "one_title": "Modèle de l'agent",
     "one_hint": "Sans repli : si le runtime est à sa limite ou hors ligne, l'exécution attend la réinitialisation et le propriétaire est averti.",
@@ -1155,7 +1156,17 @@
     "reason_waiting_why": "tous les modèles sont indisponibles ({{why}}) — l'exécution attend",
     "reason_fallback_row_why": "ligne {{n}} indisponible ({{why}}) — ligne {{m}} choisie",
     "reset_confirm": "Revenir au commun",
-    "unavailable_label": "Environnements indisponibles"
+    "unavailable_label": "Environnements indisponibles",
+    "model_at_run": "Decided at launch",
+    "setting_label": "Setting",
+    "setting_badge": "saved",
+    "setting_source_profile": "Shared profile “{{name}}”, row 1",
+    "setting_source_personal": "The agent's personal profile, row 1",
+    "setting_source_single": "One model of this agent",
+    "setting_source_fields": "No profile: the agent's own runtime and model",
+    "forecast_label": "Server forecast",
+    "last_label": "Last run",
+    "last_none": "No runs yet"
   },
   "model_profiles": {
     "title": "Profiles",
@@ -1196,7 +1207,8 @@
     "personal_title": "Profils personnels",
     "personal_empty": "Aucun agent n'a de profil personnel.",
     "col_agent": "Agent",
-    "col_base": "Base"
+    "col_base": "Base",
+    "delete_blocked": "Cannot delete: {{agents}} agents, {{issues}} open issues and {{profiles}} profiles use it"
   },
   "conveyor": {
     "title": "Épopées",
@@ -1253,7 +1265,7 @@
     "saved": "Enregistré",
     "bad_percent": "La limite est un pourcentage entier de 0 à 100",
     "credential": "Identifiants sur l'hôte :",
-    "usage_as_of": "chiffres du {{time}}",
+    "usage_as_of": "Quota measured {{time}}",
     "limited_banner": "À la limite des agents : {{titles}}. Les agents passent au modèle suivant de leur profil.",
     "spent_by": "Utilisé par :",
     "spent_by_item": "{{name}} (n° {{position}})",
@@ -1341,7 +1353,6 @@
       "add": "Ajouter un compte",
       "add_placeholder": "Choisir un compte…",
       "spend_title": "Comment utiliser",
-      "edit": "Composition et ordre",
       "revision": "version {{revision}}",
       "moved_on": "Le pool a changé pendant votre édition (version {{revision}}).",
       "take_current": "Prendre le pool actuel",
@@ -1354,18 +1365,20 @@
       "of_environment": "Pool « {{name}} »",
       "workspaces_n_one": "{{count}} espace de travail",
       "workspaces_n_many": "{{count}} espaces de travail",
-      "workspaces_n_other": "{{count}} espaces de travail"
+      "workspaces_n_other": "{{count}} espaces de travail",
+      "accounts_elsewhere": "Limits and sign-in of the accounts are on the Accounts tab.",
+      "open_accounts": "Open Accounts"
     },
     "new_pool": {
-      "open": "Nouveau pool",
-      "title": "Nouveau pool",
+      "open": "Add an environment through accounts",
+      "title": "New environment through accounts",
       "family": "Fonctionne avec",
       "name": "Nom",
       "name_placeholder": "Par exemple, Claude · commun",
       "workspaces": "Espaces de travail",
       "all_workspaces": "Tous les espaces de travail, y compris les nouveaux",
       "submit": "Créer",
-      "done": "Pool « {{name}} » créé"
+      "done": "Environment “{{name}}” created"
     },
     "add": {
       "open": "Ajouter un abonnement",
@@ -1395,15 +1408,6 @@
       "claude_login": "Sur votre ordinateur, connecté à ce compte Claude dans le navigateur, exécutez claude setup-token et collez le jeton.",
       "key_login": "Créez une clé dans le tableau de bord du fournisseur et collez-la ici.",
       "secret_hint": "Transmis au démon et écrit dans le fichier d'identifiants sur l'hôte (mode 600), nulle part ailleurs. Laissez vide pour vous connecter plus tard depuis la carte.",
-      "step_spend": "Pool",
-      "spend_mode": {
-        "existing": "Pool existant",
-        "new": "Nouveau pool",
-        "none": "Pas de pool"
-      },
-      "placement": "Place dans l'ordre",
-      "placement_last": "en dernier",
-      "placement_first": "en premier",
       "step_caps": "Part que les agents peuvent utiliser",
       "no_windows": "Le fournisseur n'a pas de fenêtres de quota — agents jusqu'à la limite du fournisseur.",
       "submit": "Connecter",
@@ -1414,27 +1418,7 @@
       "model": "Modèle",
       "model_hint": "Facultatif. Devient le modèle par défaut pour tous les niveaux.",
       "model_placeholder": "Par exemple, glm-4.6",
-      "steps_label": "Étapes de connexion",
-      "steps": {
-        "account": "Compte et connexion",
-        "pool": "Ajouter à un pool",
-        "usage": "Utilisation"
-      },
-      "step_of": "Étape {{n}} sur {{total}}",
-      "pool_label": "Pool",
-      "pool_none_hint": "Le compte reste connecté et apparaît sous « Sans pool ». Les agents ne l'utilisent pas tant qu'il n'est pas dans un pool.",
-      "no_pool_of_family": "Aucun pool pour {{family}} — créez-en un.",
-      "usage_title": "Où il sera utilisé",
-      "usage_existing": "Le compte rejoint « {{pool}} ».",
-      "usage_envs": "Il est utilisé via les environnements du pool : {{names}}. Aucune ligne de profil à ajouter.",
-      "usage_no_env": "Le pool n'a pas encore d'environnement : les agents n'utiliseront pas le compte tant qu'il n'est pas accordé.",
-      "usage_new": "Un nouveau pool « {{pool}} » est créé avec ce compte.",
-      "usage_new_grant": "Chaque espace de travail accordé reçoit un environnement.",
-      "usage_new_no_grant": "Il n'est accordé à aucun espace de travail : aucun environnement n'est créé.",
-      "usage_running": "Les exécutions en cours gardent leur compte.",
-      "next": "Suivant",
-      "back": "Retour",
-      "stop_here": "Connecter sans pool"
+      "no_pool_note": "The account is not put into a pool here: the pool is composed on the page of the environment that spends it."
     },
     "discrepancies": {
       "title": "Écarts",
@@ -1481,7 +1465,21 @@
       "reset": "Réinitialiser",
       "none": "Aucun résultat pour ces filtres."
     },
-    "counted_once": "compté une fois, affiché plus haut"
+    "counted_once": "compté une fois, affiché plus haut",
+    "view_only": "View only. Accounts are connected and edited in Environments → Accounts.",
+    "open_accounts": "Open Environments → Accounts",
+    "manual": {
+      "title": "Journal of manual runs",
+      "command_hint": "To run the account's CLI by hand, run this on the daemon host as an instance admin:",
+      "copy": "Copy the command",
+      "unfinished": "not finished",
+      "over_cap": "agent limit was exceeded",
+      "machine": "Machine: {{machine}}",
+      "exit_code": "exit code {{code}}",
+      "load_failed": "The journal is unavailable: only an instance admin reads it.",
+      "empty": "No manual runs yet",
+      "more": "Show more"
+    }
   },
   "verdict": {
     "reason": {

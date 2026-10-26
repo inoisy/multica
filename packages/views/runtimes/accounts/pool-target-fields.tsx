@@ -5,7 +5,7 @@ import { workspaceListOptions } from "@multica/core/workspace/queries";
 import type { SpendOrder } from "@multica/core/types";
 import { Checkbox } from "@multica/ui/components/ui/checkbox";
 import { Input } from "@multica/ui/components/ui/input";
-import { useT } from "../i18n";
+import { useT } from "../../i18n";
 import { SpendOrderField } from "./spend-order-field";
 
 export interface PoolTarget {

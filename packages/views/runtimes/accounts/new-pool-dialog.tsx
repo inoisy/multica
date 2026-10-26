@@ -14,7 +14,7 @@ import {
   DialogTitle,
 } from "@multica/ui/components/ui/dialog";
 import { cn } from "@multica/ui/lib/utils";
-import { useT } from "../i18n";
+import { useT } from "../../i18n";
 import { emptyPoolTarget, PoolTargetFields, poolTargetReady, poolTargetScope, type PoolTarget } from "./pool-target-fields";
 import { SubscriptionOrderList } from "./subscription-order-list";
 

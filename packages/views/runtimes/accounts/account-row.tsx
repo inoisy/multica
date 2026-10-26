@@ -5,8 +5,8 @@ import type { SubscriptionAccount } from "@multica/core/subscriptions";
 import type { AvailabilityVerdict, Pool, Subscription } from "@multica/core/types";
 import { Badge } from "@multica/ui/components/ui/badge";
 import { cn } from "@multica/ui/lib/utils";
-import { useT } from "../i18n";
-import { useAvailabilityText } from "../model-profiles";
+import { useT } from "../../i18n";
+import { useAvailabilityText } from "../../model-profiles";
 import { AccountDetail } from "./account-detail";
 import { AvailabilityLane, type LaneHorizon } from "./availability-lane";
 import { UsageMeters } from "./usage-meters";
@@ -29,7 +29,7 @@ export function AccountRow({
   wsId,
   canManage,
   windowName,
-  onOpenPool,
+  journal,
 }: {
   sub: Subscription;
   account: SubscriptionAccount;
@@ -44,7 +44,7 @@ export function AccountRow({
   wsId: string;
   canManage: boolean;
   windowName: (window: string) => string;
-  onOpenPool: (poolId: string) => void;
+  journal: boolean;
 }) {
   const { t } = useT("agents");
   const availability = useAvailabilityText();
@@ -107,7 +107,7 @@ export function AccountRow({
             wsId={wsId}
             canManage={canManage}
             windowName={windowName}
-            onOpenPool={onOpenPool}
+            journal={journal}
           />
         </div>
       ) : null}
