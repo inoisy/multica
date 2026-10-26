@@ -23,7 +23,12 @@ const acceptanceFile = ".multica/acceptance.json"
 type acceptConfig struct {
 	// Base is the branch the commit is merged into; empty means the remote's
 	// default branch.
-	Base     string   `json:"base"`
+	Base string `json:"base"`
+	// Mode is "" (merge here and run Commands, for repositories without CI) or
+	// "ci": the platform merges after its own checks, and acceptance only
+	// confirms the pinned commit reached Base. A "ci" repository is accepted
+	// by merge commit, since a squash or rebase leaves the pinned SHA outside Base.
+	Mode     string   `json:"mode"`
 	Commands []string `json:"commands"`
 	// TimeoutSeconds bounds one attempt of one command; waiting for a busy
 	// shared resource does not count against it.
@@ -49,6 +54,8 @@ const (
 	defaultAcceptTimeout  = 1500 * time.Second
 	defaultAcceptWaitPoll = 60 * time.Second
 	defaultAcceptWaitMax  = 7200 * time.Second
+	defaultAcceptCIWait   = 1800 * time.Second
+	acceptModeCI          = "ci"
 	acceptPushAttempts    = 3
 	defaultAcceptRetries  = 1
 	maxAcceptRetries      = 3
@@ -114,12 +121,19 @@ func runAcceptance(ctx context.Context, spec acceptSpec) acceptOutcome {
 	if err := json.Unmarshal([]byte(raw), &cfg); err != nil {
 		return coordinator(fmt.Sprintf("%s is not valid JSON: %v", acceptanceFile, err))
 	}
-	if len(cfg.Commands) == 0 {
-		return coordinator(acceptanceFile + " lists no commands")
-	}
 	base := strings.TrimSpace(cfg.Base)
 	if base == "" {
 		base = g.defaultBranch(ctx)
+	}
+	switch cfg.Mode {
+	case acceptModeCI:
+		return confirmMergedByCI(ctx, spec, cfg, g, sha, base)
+	case "":
+	default:
+		return coordinator(fmt.Sprintf("%s has unknown mode %q", acceptanceFile, cfg.Mode))
+	}
+	if len(cfg.Commands) == 0 {
+		return coordinator(acceptanceFile + " lists no commands")
 	}
 	guard := defaultDiffGuard
 	if cfg.DiffGuard != nil {
@@ -199,6 +213,40 @@ func runAcceptance(ctx context.Context, spec acceptSpec) acceptOutcome {
 		fmt.Fprintf(spec.Log, "%s moved while checking; checking again on the new base (%d/%d)\n", base, attempt, acceptPushAttempts)
 	}
 	return coordinator(fmt.Sprintf("%s kept moving during %d checks", base, acceptPushAttempts))
+}
+
+// confirmMergedByCI is acceptance for a repository whose platform merges after
+// its own checks: it never merges, pushes or runs commands, it only waits for
+// the pinned commit to appear in the base. A commit that stays outside the base
+// (PR still open, closed unmerged) blocks the step instead of passing it.
+func confirmMergedByCI(ctx context.Context, spec acceptSpec, cfg acceptConfig, g gitIn, sha, base string) acceptOutcome {
+	poll := secondsOr(cfg.WaitPollSeconds, defaultAcceptWaitPoll)
+	waitMax := secondsOr(cfg.WaitMaxSeconds, defaultAcceptCIWait)
+	var waited time.Duration
+	for {
+		if _, err := g.run(ctx, "fetch", "--quiet", "origin", base); err != nil {
+			return coordinator(fmt.Sprintf("fetch of %s failed: %v", base, err))
+		}
+		baseSHA, err := g.run(ctx, "rev-parse", "--verify", "origin/"+base)
+		if err != nil {
+			return coordinator(fmt.Sprintf("base branch %s not found", base))
+		}
+		if _, err := g.run(ctx, "merge-base", "--is-ancestor", sha, baseSHA); err == nil {
+			return acceptOutcome{Outcome: "pass", Base: base, Merged: baseSHA,
+				Checks: []acceptCheck{{Name: "merged by the platform", OK: true}},
+				Reason: fmt.Sprintf("%s is in %s (merged by the platform after its checks)", short(sha), base)}
+		}
+		if waited+poll > waitMax {
+			return acceptOutcome{Outcome: "blocked", Base: base,
+				Checks: []acceptCheck{{Name: "merged by the platform", OK: false}},
+				Reason: fmt.Sprintf("%s is not in %s after %s: the pull request is not merged", short(sha), base, waited)}
+		}
+		fmt.Fprintf(spec.Log, "%s is not in %s yet, waiting %s\n", short(sha), base, poll)
+		if err := spec.Sleep(ctx, poll); err != nil {
+			return coordinator("waiting for the merge was interrupted: " + err.Error())
+		}
+		waited += poll
+	}
 }
 
 // retries is how many times a failed command runs again.

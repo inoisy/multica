@@ -10,6 +10,9 @@
 | [run-owned-qa-resources.md](run-owned-qa-resources.md) | Дополнение к существующей [#8410](https://github.com/multica-ai/multica/issues/8410), со ссылкой на #7457 | Готов к согласованию; не создавать второй issue. Объём локальной реализации STT-430 отдельно выбирает Евгений |
 | [remote-mcp-orchestration.md](remote-mcp-orchestration.md) | Дополнение к существующей [#1351](https://github.com/multica-ai/multica/issues/1351) | Готов к согласованию; не утверждает, что OAuth или живая установка уже реализованы |
 | [verified-operation-approval.md](verified-operation-approval.md) | Вопрос/предложение в открытый [PR #5745](https://github.com/multica-ai/multica/pull/5745) | Готов к согласованию; сначала получить ответ о контракте расширения, не дублировать approval engine |
+| [review-8579-bindings.md](review-8579-bindings.md) | Комментарий-ревью в [PR #8579](https://github.com/multica-ai/multica/pull/8579) | Готов к согласованию (26.10). Цель — ускорить влитие привязок в апстрим вместо переноса их кода к нам |
+| [review-8931-quota-pools.md](review-8931-quota-pools.md) | Комментарий-ревью в [PR #8931](https://github.com/multica-ai/multica/pull/8931) | Готов к согласованию (26.10). Наш опыт пулов: факт аккаунта, пустой пул, один лимит на окно |
+| [review-9530-agent-steer.md](review-9530-agent-steer.md) | Комментарий-ревью в [PR #9530](https://github.com/multica-ai/multica/pull/9530) | Черновик (26.10, STT-452). Перед согласованием дописать итог живой проверки после выкатки PR форка #78. Главное: в CLI нет флага — агентам steer недоступен |
 | [rfc6650-contribution.md](rfc6650-contribution.md) | Дополнение к [RFC #6650](https://github.com/multica-ai/multica/issues/6650) | **Отложено до STT-433** по STT-435. Перед согласованием обновить фактическую готовность; текст не заявляет метрик и поставки ещё не сделанного поведения |
 
 Публикует Евгений либо агент после явного согласия на конкретный текст.
