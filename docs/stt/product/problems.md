@@ -17,6 +17,7 @@
 | Открыто | У встроенного или собственного входа без пула аккаунт запуска неизвестен; нельзя приписывать расход конкретной подписке | [STT-433](https://multica.yakutov.com/stt/issues/STT-433), [контракт account_fact](../../engineering/model-accounts-server-api.md) |
 | Зависимость | Удаление `settings.cli`/`quota_row` требует остановить внешних читателей stt-agents; индекс этого репозитория их не видит | [STT-429](https://multica.yakutov.com/stt/issues/STT-429), [STT-433](https://multica.yakutov.com/stt/issues/STT-433) |
 | Риск интеграции | Номера миграций 564–572 пересекаются с PR апстрима #8931 | [STT-435](https://multica.yakutov.com/stt/issues/STT-435), [PR #8931](https://github.com/multica-ai/multica/pull/8931) |
+| Открыто, проверено в STT-441 | В `ci.yml` есть агрегаты backend/frontend, но effective rules `main` не содержат required_status_checks. Classic protection возвращает 404; ruleset защищает update/creation/deletion/non-fast-forward. `stt.yml` пока отсутствует | [Тема CI](roadmap.md#ci), [команды и факты](roadmap-upstream-check.md). Настройки и workflows этим исследованием не менялись |
 
 Приёмка STT-424 выявляла 500 на `/profiles`, утечку личных профилей, ошибку caps
 с null и неизвестным окном, проблемы форм на 375 px и локализации. Поздние отчёты
