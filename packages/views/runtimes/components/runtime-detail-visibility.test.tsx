@@ -66,6 +66,10 @@ vi.mock("@tanstack/react-query", async () => {
       if (key?.[0] === "workspaces" && key?.[2] === "members") {
         return { data: mockQueryData.members, isLoading: false };
       }
+      // Facts of the environment and the account list load apart from the page.
+      if (key?.[1] === "run-facts" || key?.[1] === "model-usage" || key?.[0] === "subscriptions") {
+        return { data: undefined, isLoading: true };
+      }
       return { data: [], isLoading: false };
     }),
   };
