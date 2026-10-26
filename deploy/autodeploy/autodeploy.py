@@ -31,6 +31,8 @@ DEFAULTS = {
     "image_prefix": "ghcr.io/inoisy/multica-",
     "health_url": "https://multica.yakutov.com/health",
     "health_timeout_s": 240,
+    "compose_workdir": "/opt/multica",
+    "compose_project": "",
     "backend_service": "backend",
     "frontend_service": "frontend",
     "postgres_service": "postgres",
@@ -168,12 +170,18 @@ class Deployer:
     # ---- compose ----------------------------------------------------------
     def compose_context(self):
         """Project, working dir and config files of the running backend container."""
-        cid = subprocess.run(
-            ["docker", "ps", "-q", "--filter", f"label=com.docker.compose.service={self.cfg['backend_service']}"],
-            check=True, text=True, capture_output=True,
-        ).stdout.split()
+        filters = ["--filter", f"label=com.docker.compose.service={self.cfg['backend_service']}",
+                   "--filter", f"label=com.docker.compose.project.working_dir={self.cfg['compose_workdir']}"]
+        if self.cfg.get("compose_project"):
+            filters += ["--filter", f"label=com.docker.compose.project={self.cfg['compose_project']}"]
+        cid = subprocess.run(["docker", "ps", "-q", *filters], check=True, text=True, capture_output=True).stdout.split()
         if len(cid) != 1:
-            raise SystemExit(f"expected one running backend container, found {len(cid)}")
+            seen = subprocess.run(
+                ["docker", "ps", "--filter", f"label=com.docker.compose.service={self.cfg['backend_service']}", "--format",
+                 '{{.Names}} project={{.Label "com.docker.compose.project"}} dir={{.Label "com.docker.compose.project.working_dir"}} image={{.Image}}'],
+                text=True, capture_output=True).stdout.strip()
+            raise SystemExit(f"expected one running backend container in {self.cfg['compose_workdir']}, found {len(cid)}. "
+                             f"Set compose_project in {CONFIG_PATH}. Running backends:\n{seen}")
         labels = json.loads(subprocess.run(["docker", "inspect", cid[0]], check=True, text=True, capture_output=True).stdout)[0]
         lab = labels["Config"]["Labels"]
         files = lab["com.docker.compose.project.config_files"].split(",")
