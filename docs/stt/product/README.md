@@ -1,6 +1,6 @@
 # База продукта Multica
 
-Внутренняя база форка `inoisy/multica`. Срез: 26.10.2026. Код —
+Внутренняя база форка `inoisy/multica`. Рабочая ветка форка с 26.10.2026 — `main` (перемотана с `runtime/0.6.1-live`, которая оставлена указателем на неделю). Срез: 26.10.2026. Код —
 `runtime/0.6.1-live`, `f12d2020efe929ac670ba1bf10be67c8013b65f5`, схема 612.
 Установленный релиз по отчёту STT-424 — `f4cd8d034`; различие этой ветки с релизом
 затрагивает установщик. Это сведения из приёмки, не новый замер прода.
@@ -44,7 +44,7 @@ STT-433 ещё не реализована на индексируемой ве�
 Из корня репозитория:
 
 ```sh
-git fetch origin runtime/0.6.1-live
+git fetch origin main
 python3 tools/product/index.py check
 python3 tools/product/index.py build
 python3 tools/product/index.py find runtime_id --kind query --limit 10
@@ -52,7 +52,7 @@ python3 tools/product/index.py screens /api/pools
 python3 tools/product/index.py trace listPools
 ```
 
-`check` и поиск отказывают при несовпадении SHA с `origin/runtime/0.6.1-live` или
+`check` и поиск отказывают при несовпадении SHA с `origin/main` или
 отпечатка индексируемых файлов с рабочей копией. SHA относится к продуктовому
 срезу; добавление документации и инструментов поверх него не меняет этот SHA.
 Для другой ветки явно передавать `--ref HEAD`. Подробности:
