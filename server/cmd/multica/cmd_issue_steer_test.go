@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -314,9 +315,11 @@ func TestIssueSteerWait(t *testing.T) {
 		{"missing metadata", "", "timed out"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			reads := 0
+			// The handler can still be running after the wait times out, so the
+			// counter is shared across goroutines.
+			var reads atomic.Int32
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				reads++
+				reads.Add(1)
 				// The comment list carries no receipts; only the timeline does.
 				if r.URL.Path != "/api/issues/issue-1/timeline" || r.URL.RawQuery != "" {
 					t.Errorf("wrong receipt read: %s", r.URL)
@@ -335,7 +338,7 @@ func TestIssueSteerWait(t *testing.T) {
 			} else if err != nil || got.Status != "delivered" {
 				t.Fatalf("got=%v err=%v", got, err)
 			}
-			if reads == 0 {
+			if reads.Load() == 0 {
 				t.Fatal("did not poll")
 			}
 		})
