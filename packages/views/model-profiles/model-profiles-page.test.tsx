@@ -30,7 +30,7 @@ vi.mock("@multica/core/runtimes", async (importOriginal) => ({
 vi.mock("@multica/core/workspace/queries", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@multica/core/workspace/queries")>()),
   memberListOptions: () => ({ queryKey: ["members"], queryFn: () => Promise.resolve([]) }),
-  agentListOptions: () => ({ queryKey: ["agents"], queryFn: () => Promise.resolve([{ id: "a1", name: "Dev" }]) }),
+  agentListOptions: () => ({ queryKey: ["agents"], queryFn: () => Promise.resolve([{ id: "a1", name: "Dev" }, { id: "a2", name: "Review" }]) }),
 }));
 vi.mock("@multica/core/paths", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@multica/core/paths")>();
@@ -101,6 +101,26 @@ describe("ModelProfilesPage", () => {
     expect(strongRow.textContent).toContain("differs: rows 1");
     const rows = within(table).getAllByRole("row");
     expect(rows.find((r) => r.textContent?.startsWith("Mid"))?.textContent).toContain("wait");
+  });
+
+  it("does not show the personal profile of an agent the reader cannot see", async () => {
+    const hidden: ModelProfile = {
+      ...personalOfReview, id: "pp9", name: "Secret · personal", owner_agent: { id: "a9", name: "Secret", identifier: "" },
+    };
+    apiMock.listModelProfiles.mockImplementation((kind?: string) =>
+      Promise.resolve(kind === "personal" ? [personalOfReview, hidden] : [{ ...strong, personal_profiles: [...strong.personal_profiles, { profile_id: "pp9", agent: { id: "a9", name: "Secret", identifier: "" }, matches_base: true, diff_rows: [] }] }, mid]),
+    );
+    wrap(<ModelProfilesPage />);
+    const table = await screen.findByTestId("personal-profiles-table");
+    expect(within(table).getByText("Review")).toBeInTheDocument();
+    expect(screen.queryByText("Secret")).toBeNull();
+  });
+
+  it("disables deleting a profile that agents, open issues or other profiles still use", async () => {
+    wrap(<ModelProfilesPage />);
+    const table = await screen.findByTestId("model-profiles-table");
+    expect((within(table).getByRole("button", { name: "Delete Strong" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(within(table).getByRole("button", { name: "Delete Mid" }).hasAttribute("disabled")).toBe(false);
   });
 
   it("lists personal profiles with their base and differing rows, apart from the shared ones", async () => {

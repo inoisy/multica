@@ -5,6 +5,7 @@ import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { Pool, PoolAccount, Subscription } from "@multica/core/types";
 import { renderWithI18n } from "../../test/i18n";
+import { NavigationProvider, type NavigationAdapter } from "../../navigation";
 
 const api = vi.hoisted(() => ({
   listSubscriptions: vi.fn(),
@@ -45,7 +46,15 @@ const pool = (keys: string[], revision: number): Pool => ({
 
 function renderWith(ui: React.ReactElement) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return renderWithI18n(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
+  const navigation: NavigationAdapter = {
+    push: vi.fn(), replace: vi.fn(), back: vi.fn(), pathname: "/acme/runtimes",
+    searchParams: new URLSearchParams(), hash: "", getShareableUrl: (path) => path,
+  };
+  return renderWithI18n(
+    <NavigationProvider value={navigation}>
+      <QueryClientProvider client={client}>{ui}</QueryClientProvider>
+    </NavigationProvider>,
+  );
 }
 
 describe("PoolAccountsSection", () => {

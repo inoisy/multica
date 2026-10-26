@@ -2,13 +2,18 @@ import type { ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { I18nProvider } from "@multica/core/i18n/react";
 import { agentTaskSnapshotOptions } from "@multica/core/agents";
 import { chatSessionsOptions } from "@multica/core/chat/queries";
 import { runtimeProfileListOptions } from "@multica/core/runtimes";
 import { qoderOptions, type QoderConnection } from "@multica/core/runtimes/qoder";
 import { runtimeListOptions } from "@multica/core/runtimes/queries";
+import {
+  poolListOptions,
+  subscriptionDiscrepanciesOptions,
+  subscriptionListOptions,
+} from "@multica/core/subscriptions";
 import type { AgentRuntime } from "@multica/core/types";
 import {
   agentListOptions,
@@ -16,10 +21,13 @@ import {
 } from "@multica/core/workspace/queries";
 import enCommon from "../../locales/en/common.json";
 import enRuntimes from "../../locales/en/runtimes.json";
+import enAgents from "../../locales/en/agents.json";
 import { RuntimesPage } from "./runtimes-page";
 
-const TEST_RESOURCES = { en: { common: enCommon, runtimes: enRuntimes } };
+const TEST_RESOURCES = { en: { common: enCommon, runtimes: enRuntimes, agents: enAgents } };
 const WS = "ws-test";
+
+const navigationState = vi.hoisted(() => ({ search: "", replace: vi.fn() }));
 
 vi.mock("@multica/core/hooks", () => ({ useWorkspaceId: () => "ws-test" }));
 vi.mock("@multica/core/auth", () => ({
@@ -45,7 +53,12 @@ vi.mock("../../navigation", () => ({
     </a>
   ),
   rowLinkInteractiveProps: {},
-  useNavigation: () => ({ push: vi.fn() }),
+  useNavigation: () => ({
+    push: vi.fn(),
+    replace: navigationState.replace,
+    pathname: "/workspace-test/runtimes",
+    searchParams: new URLSearchParams(navigationState.search),
+  }),
   useRowLink: () => () => ({}),
 }));
 
@@ -96,10 +109,12 @@ function renderPage({
   runtimes = [makeRuntime()],
   connection = qoder(),
   desktop = false,
+  instanceAdmin = false,
 }: {
   runtimes?: AgentRuntime[];
   connection?: QoderConnection;
   desktop?: boolean;
+  instanceAdmin?: boolean;
 } = {}) {
   const qc = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
@@ -111,6 +126,9 @@ function renderPage({
   qc.setQueryData(agentTaskSnapshotOptions(WS).queryKey, []);
   qc.setQueryData(chatSessionsOptions(WS).queryKey, []);
   qc.setQueryData(qoderOptions(WS).queryKey, connection);
+  qc.setQueryData(poolListOptions().queryKey, { pools: [], can_manage: instanceAdmin });
+  qc.setQueryData(subscriptionListOptions().queryKey, { subscriptions: [], can_manage: instanceAdmin });
+  qc.setQueryData(subscriptionDiscrepanciesOptions().queryKey, []);
   return render(
     <QueryClientProvider client={qc}>
       <I18nProvider locale="en" resources={TEST_RESOURCES}>
@@ -129,6 +147,38 @@ function renderPage({
 }
 
 describe("RuntimesPage", () => {
+  beforeEach(() => {
+    navigationState.search = "";
+    navigationState.replace.mockClear();
+  });
+
+  it("keeps the machines on the first tab and moves to Accounts through the address", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    expect(screen.getByRole("tab", { name: "Environments" })).toHaveAttribute("aria-selected", "true");
+    await user.click(screen.getByRole("tab", { name: "Accounts" }));
+    expect(navigationState.replace).toHaveBeenCalledWith("/workspace-test/runtimes?tab=accounts");
+  });
+
+  it("opens the Accounts tab from the address and leaves the machine list out of it", async () => {
+    navigationState.search = "tab=accounts";
+    renderPage();
+    expect(screen.getByRole("tab", { name: "Accounts" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.queryByText("Machines")).not.toBeInTheDocument();
+    expect(await screen.findByText(/View only|No subscriptions/i)).toBeInTheDocument();
+  });
+
+  it("offers an environment through accounts only to an instance admin", async () => {
+    const user = userEvent.setup();
+    const first = renderPage();
+    await user.click(screen.getByRole("button", { name: /^Add/ }));
+    expect(within(await screen.findByRole("menu")).queryByText("Add an environment through accounts")).not.toBeInTheDocument();
+    first.unmount();
+    renderPage({ instanceAdmin: true });
+    await user.click(screen.getByRole("button", { name: /^Add/ }));
+    expect(within(await screen.findByRole("menu")).getByText("Add an environment through accounts")).toBeInTheDocument();
+  });
+
   it("lists machines and cloud services in one table", () => {
     renderPage();
 

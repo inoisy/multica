@@ -110,10 +110,16 @@ describe("AgentModels", () => {
     apiMock.getAgentModels.mockResolvedValue(models());
     renderSection();
     expect(await screen.findByText("Models of “Strong”")).toBeTruthy();
-    const now = screen.getByTestId("agent-models-now");
+    // Three different things, each under its own label.
+    const setting = screen.getByTestId("agent-models-setting");
+    expect(setting.textContent).toContain("codex·sol");
+    expect(setting.textContent).toContain("saved");
+    expect(setting.textContent).toContain("Shared profile “Strong”, row 1");
+    const now = screen.getByTestId("agent-models-forecast");
     expect(now.textContent).toContain("claude·opus");
     expect(now.textContent).toContain("forecast");
     expect(now.textContent).toContain("profile “Strong”");
+    expect(screen.getByTestId("agent-models-last").textContent).toContain("No runs yet");
     // The reason is the server's code, not the text of a refusal.
     expect(now.textContent).toMatch(/row 1 unavailable \(Agent limit reached · until .*\) — took row 2/);
     expect(screen.getByText("Editing the profile affects 3 agents and 1 issues.")).toBeTruthy();
@@ -127,7 +133,7 @@ describe("AgentModels", () => {
     expect(account.textContent).toContain("claude-3");
     expect(account.textContent).toContain("confirmed by the daemon");
     expect(account.textContent).toContain("pool version 12 at the time of the run");
-    expect(screen.getByTestId("agent-models-now").textContent).toContain("fact");
+    expect(screen.getByTestId("agent-models-last").textContent).toContain("fact");
     first.unmount();
     apiMock.getAgentModels.mockResolvedValue(models({ last: entry({ account_fact: null }) }));
     renderSection();
@@ -138,7 +144,7 @@ describe("AgentModels", () => {
     const waiting = choice({ reason: "all_unavailable", position: 0, wait_until: "2026-10-19T15:53:00Z", wait_reason_code: "provider_limit", wait_until_estimated: true });
     apiMock.getAgentModels.mockResolvedValue(models({ waiting: [entry({ status: "queued", position: 0, choice: waiting })] }));
     renderSection();
-    const now = await screen.findByTestId("agent-models-now");
+    const now = await screen.findByTestId("agent-models-forecast");
     expect(now.textContent).toMatch(/every model unavailable \(Provider limit · about .*, estimate\) — the run waits/);
     expect(now.textContent).toContain("STT-1");
   });
@@ -147,7 +153,7 @@ describe("AgentModels", () => {
     const waiting = choice({ reason: "all_unavailable", position: 0, wait_until: null, wait_reason_code: "brand_new_reason" });
     apiMock.getAgentModels.mockResolvedValue(models({ waiting: [entry({ status: "queued", position: 0, choice: waiting })] }));
     renderSection();
-    const now = await screen.findByTestId("agent-models-now");
+    const now = await screen.findByTestId("agent-models-forecast");
     expect(now.textContent).toContain("Unavailable · end unknown");
   });
 
@@ -155,10 +161,27 @@ describe("AgentModels", () => {
     const taken = choice({ reason: "fallback_profile", profile_id: "p2", profile_name: "Mid", exhausted_profiles: ["Strong"], rows: [row(1, "glm", "glm", "available", { chosen: true })] });
     apiMock.getAgentModels.mockResolvedValue(models({ preview: taken, last: entry({ choice: taken }) }));
     renderSection();
-    const now = await screen.findByTestId("agent-models-now");
+    const now = await screen.findByTestId("agent-models-forecast");
     expect(now.textContent).toContain("every model of “Strong” on a limit — took “Mid”");
     // The fallback profile's row is not marked current on the agent's own profile.
     expect(screen.queryByText("current")).toBeNull();
+  });
+
+  it("says the model is decided at launch instead of naming the first account's model", async () => {
+    const rows = [row(1, "claude-api", "glm-4.6", "available", { chosen: true, effective_model: "", model_at_run: true })];
+    apiMock.getAgentModels.mockResolvedValue(models({ profile_rows: rows, preview: choice({ rows }) }));
+    renderSection();
+    const setting = await screen.findByTestId("agent-models-setting");
+    expect(setting.textContent).toContain("claude-api·Decided at launch");
+    expect(setting.textContent).not.toContain("glm-4.6");
+    expect(screen.getByTestId("agent-models-forecast").textContent).toContain("claude-api·Decided at launch");
+  });
+
+  it("shows the account's model, not the row's, for an API-key environment", async () => {
+    const rows = [row(1, "claude-api", "sonnet", "available", { chosen: true, effective_model: "glm-4.6" })];
+    apiMock.getAgentModels.mockResolvedValue(models({ profile_rows: rows, preview: choice({ rows }) }));
+    renderSection();
+    expect((await screen.findByTestId("agent-models-setting")).textContent).toContain("claude-api·glm-4.6");
   });
 
   it("lists the runtimes that cannot run now with the server's reason", async () => {
