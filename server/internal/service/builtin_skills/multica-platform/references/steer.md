@@ -1,10 +1,33 @@
 # Add instructions to a running turn
 
+There are two paths. **Agents** use `multica issue comment add --steer`: the
+comment goes into the running turn of each agent it triggers on the issue
+(mention it or reply in its thread). **People** use `multica issue steer`, which
+targets one exact run and accepts only human credentials; agent task tokens
+cannot use it, and must never fall back to another person's credential.
+
+## Agents: `comment add --steer`
+
+```bash
+multica issue comment add MUL-123 --steer --content-file ./correction.md
+```
+
+Steer only to correct the work in progress on the same issue: a wrong
+requirement, a new constraint, a fact the running agent needs now. New work is a
+normal comment or a new issue. The server resolves each triggered agent's
+running turn itself; no run ID is needed. Permissions do not change: you can
+steer only an agent your comment could already trigger.
+
+stderr reports each recipient: `delivered into the running turn of <agent>`, or
+`had no turn to take it; handled as queued|coalesced|deferred`. A recipient
+without a running turn, a runtime that cannot take input, a comment with
+attachments, or a turn that already absorbed 10 steered comments falls back to
+the normal trigger; the comment is never dropped or sent to another turn.
+
+## People: `issue steer`
+
 `steer` adds a historical comment to one exact running turn without cancelling
-or restarting it. The server accepts only human credentials. Agent task tokens
-cannot use it, even on behalf of a person; do not read or fall back to another
-person's credential. An agent can prepare the message and commands for a person
-to execute in their own authenticated terminal.
+or restarting it.
 
 ```bash
 multica issue steer MUL-123 --content-file ./instructions.md --output json

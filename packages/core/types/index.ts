@@ -369,7 +369,6 @@ export type {
 } from "./model-profile";
 export { AGENT_MODEL_MODES, REASON_CODES } from "./model-profile";
 export type { IssueStageDispatch, StageDispatchEpic } from "./stage-dispatch";
-export type { IssueRoute } from "./issue";
 export type {
   AvailabilityVerdict, CreatePoolInput, CreateSubscriptionInput, DeleteSubscriptionResult, Pool, PoolAccount,
   PoolEnvironment, PoolList, PoolRevisionConflict, RuntimeProfileSubscriptions, SetPoolGrantsInput, UpdatePoolInput, SpendOrder, StartSubscriptionLoginInput, Subscription, SubscriptionAuth,

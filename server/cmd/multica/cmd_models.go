@@ -413,13 +413,6 @@ func printAgentModels(cmd *cobra.Command, raw json.RawMessage) error {
 			Identifier  string `json:"identifier"`
 			ProfileName string `json:"profile_name"`
 		} `json:"issues"`
-		RouteRuns []struct {
-			IssueIdentifier string       `json:"issue_identifier"`
-			Step            string       `json:"step"`
-			ProfileName     string       `json:"profile_name"`
-			Cross           string       `json:"cross"`
-			Choice          *modelChoice `json:"choice"`
-		} `json:"route_runs"`
 	}
 	if err := json.Unmarshal(raw, &view); err != nil {
 		return err
@@ -436,37 +429,7 @@ func printAgentModels(cmd *cobra.Command, raw json.RawMessage) error {
 		fmt.Printf("; base: %s; %s", view.BaseProfileName, profileDifference(view.MatchesBase, view.DiffRows))
 	}
 	fmt.Println()
-	// Preview knows nothing of route steps: a run of a step chooses from the
-	// step's profile and may have a model family ruled out (cross).
-	nextLabel := "Next run:  "
-	if len(view.RouteRuns) > 0 {
-		nextLabel = "Off-route: "
-	}
-	fmt.Printf("%s %s · %s\n", nextLabel, sourceLabel(view.Preview), reasonLabel(view.Preview))
-	for _, rr := range view.RouteRuns {
-		if rr.Choice == nil {
-			continue
-		}
-		step := rr.Step
-		var opts []string
-		if rr.ProfileName != "" {
-			opts = append(opts, "profile="+rr.ProfileName)
-		}
-		if rr.Cross != "" {
-			opts = append(opts, "cross="+rr.Cross)
-		}
-		if len(opts) > 0 {
-			step += "[" + strings.Join(opts, ";") + "]"
-		}
-		line := fmt.Sprintf("Route run:  %s step %s · %s · %s", rr.IssueIdentifier, step, sourceLabel(*rr.Choice), reasonLabel(*rr.Choice))
-		if rr.Choice.Chosen != nil {
-			line += fmt.Sprintf(" → %s %s", rr.Choice.RuntimeName, rr.Choice.Chosen.Model)
-		}
-		if rr.Choice.ExcludedFamily != "" {
-			line += " (family " + rr.Choice.ExcludedFamily + " ruled out)"
-		}
-		fmt.Println(line)
-	}
+	fmt.Printf("Next run:   %s · %s\n", sourceLabel(view.Preview), reasonLabel(view.Preview))
 	if view.Last != nil && view.Last.Choice != nil {
 		on := view.Last.IssueIdentifier
 		if on == "" {

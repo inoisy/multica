@@ -91,8 +91,7 @@
   },
   "detail_tabs": {
     "members": "成员",
-    "instructions": "指引",
-    "route": "路线"
+    "instructions": "指引"
   },
   "details": {
     "leader": "队长",
@@ -111,9 +110,7 @@
     "leader_updated": "队长已更新",
     "leader_update_failed": "更新队长失败",
     "archive_failed": "归档小队失败",
-    "instructions_saved": "指引已保存",
-    "route_saved": "路线已保存",
-    "route_save_failed": "保存路线失败"
+    "instructions_saved": "指引已保存"
   },
   "profile_card": {
     "unavailable": "小队不可用",
@@ -143,11 +140,5 @@
     "filter_label": "筛选",
     "filter_active_count_other": "{{count}} 项筛选",
     "clear_filters": "清除筛选"
-  },
-  "route_tab": {
-    "description": "分配给此小组的事项会在服务器上按此路线推进：每一步自动开始，只有在退回、停止或结束时才会唤醒负责人。",
-    "placeholder": "dev:Backend,qa:Tester,review:Reviewer,accept:Acceptor,close:Lead",
-    "rules": "步骤格式为 step:Agent，用逗号分隔，以 close:<协调者> 结尾。qa 在 dev 之后；accept 只出现一次，紧挨 close 之前且在 review 之后，负责合并已接受的提交。",
-    "clear_button": "关闭"
   }
 }

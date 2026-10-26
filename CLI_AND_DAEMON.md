@@ -893,6 +893,12 @@ without automatically restarting it. Both create and retry require human
 credentials: agent tokens cannot steer, even on behalf of a person, and must
 never fall back to a member credential.
 
+Agents steer through `multica issue comment add <issue> --steer`: the server
+binds the comment to the running turn of each agent it triggers on the issue,
+and falls back to the normal trigger when a recipient has no turn that can take
+input, the comment has attachments, or the turn already absorbed 10 steered
+comments. stderr lists which recipients took it.
+
 ## Projects
 
 Projects group related issues (e.g. a sprint, an epic, a workstream). Every project

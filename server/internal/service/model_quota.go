@@ -208,3 +208,12 @@ func markRuntimeUnavailable(ctx context.Context, q *db.Queries, t db.AgentTaskQu
 	}
 	return err
 }
+
+// clip trims s to at most n runes, marking a cut with an ellipsis.
+func clip(s string, n int) string {
+	r := []rune(strings.TrimSpace(s))
+	if len(r) <= n {
+		return string(r)
+	}
+	return string(r[:n]) + "…"
+}

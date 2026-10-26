@@ -870,12 +870,6 @@ func (w ModelWorld) Input(agent ModelChoiceAgent, issueID, issueProfileID pgtype
 // PreviewChoice is what the server would choose for the agent's next run on
 // the issue (or on no issue) now.
 func PreviewChoice(ctx context.Context, q *db.Queries, agent db.Agent, issue *db.Issue, now time.Time) (ModelChoice, error) {
-	return previewChoice(ctx, q, agent, issue, conveyorRunModel{}, now)
-}
-
-// previewChoice is PreviewChoice for a run of a route step: the node's
-// profile wins over the issue's, and the node may rule out a model family.
-func previewChoice(ctx context.Context, q *db.Queries, agent db.Agent, issue *db.Issue, route conveyorRunModel, now time.Time) (ModelChoice, error) {
 	world, err := LoadModelWorld(ctx, q, agent.WorkspaceID, now)
 	if err != nil {
 		return ModelChoice{}, err
@@ -888,16 +882,11 @@ func previewChoice(ctx context.Context, q *db.Queries, agent db.Agent, issue *db
 	if issue != nil {
 		issueID, issueProfile = issue.ID, issue.ModelProfileID
 	}
-	if route.ProfileID.Valid {
-		issueProfile = route.ProfileID
-	}
 	if isAcceptCarrier(agent) {
 		// Acceptance runs no model: no profile or list may move it off the
 		// daemon's accept runtime onto a model runtime (STT-358).
-		issueProfile, route = pgtype.UUID{}, conveyorRunModel{}
+		issueProfile = pgtype.UUID{}
 		a.ModelProfileID = ""
 	}
-	in := world.Input(a, issueID, issueProfile)
-	in.ExcludeFamily = route.ExcludeFamily
-	return ChooseModel(in, now), nil
+	return ChooseModel(world.Input(a, issueID, issueProfile), now), nil
 }
