@@ -685,9 +685,6 @@ deleted_packages AS (
 DELETE FROM plugin_installation WHERE id IN (SELECT id FROM installations);
 
 -- name: DeleteWorkspaceAgents :exec
-WITH deleted_agent_model_options AS (
-    DELETE FROM agent_model_option WHERE agent_model_option.workspace_id = $1
-)
 DELETE FROM agent WHERE agent.workspace_id = $1;
 
 -- name: DeleteWorkspaceRuntimesAndProjects :exec

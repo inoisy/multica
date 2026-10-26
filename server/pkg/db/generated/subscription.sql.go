@@ -42,80 +42,12 @@ func (q *Queries) CloseSubscriptionManualRun(ctx context.Context, arg CloseSubsc
 	return i, err
 }
 
-const createSharedRuntimeProfile = `-- name: CreateSharedRuntimeProfile :one
-INSERT INTO runtime_profile (
-    workspace_id, display_name, protocol_family, command_name, description,
-    fixed_args, visibility, created_by, enabled, runtime_type,
-    subscriptions, spend_order, share_key, all_workspaces
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-ON CONFLICT DO NOTHING
-RETURNING id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, subscriptions, spend_order, share_key, all_workspaces, pool_id
-`
-
-type CreateSharedRuntimeProfileParams struct {
-	WorkspaceID    pgtype.UUID `json:"workspace_id"`
-	DisplayName    string      `json:"display_name"`
-	ProtocolFamily string      `json:"protocol_family"`
-	CommandName    string      `json:"command_name"`
-	Description    pgtype.Text `json:"description"`
-	FixedArgs      []byte      `json:"fixed_args"`
-	Visibility     string      `json:"visibility"`
-	CreatedBy      pgtype.UUID `json:"created_by"`
-	Enabled        bool        `json:"enabled"`
-	RuntimeType    string      `json:"runtime_type"`
-	Subscriptions  []byte      `json:"subscriptions"`
-	SpendOrder     string      `json:"spend_order"`
-	ShareKey       pgtype.Text `json:"share_key"`
-	AllWorkspaces  bool        `json:"all_workspaces"`
-}
-
-func (q *Queries) CreateSharedRuntimeProfile(ctx context.Context, arg CreateSharedRuntimeProfileParams) (RuntimeProfile, error) {
-	row := q.db.QueryRow(ctx, createSharedRuntimeProfile,
-		arg.WorkspaceID,
-		arg.DisplayName,
-		arg.ProtocolFamily,
-		arg.CommandName,
-		arg.Description,
-		arg.FixedArgs,
-		arg.Visibility,
-		arg.CreatedBy,
-		arg.Enabled,
-		arg.RuntimeType,
-		arg.Subscriptions,
-		arg.SpendOrder,
-		arg.ShareKey,
-		arg.AllWorkspaces,
-	)
-	var i RuntimeProfile
-	err := row.Scan(
-		&i.ID,
-		&i.WorkspaceID,
-		&i.DisplayName,
-		&i.ProtocolFamily,
-		&i.CommandName,
-		&i.Description,
-		&i.FixedArgs,
-		&i.Visibility,
-		&i.CreatedBy,
-		&i.Enabled,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.RuntimeType,
-		&i.Subscriptions,
-		&i.SpendOrder,
-		&i.ShareKey,
-		&i.AllWorkspaces,
-		&i.PoolID,
-	)
-	return i, err
-}
-
 const createSubscription = `-- name: CreateSubscription :one
 INSERT INTO subscription (
     key, provider, title, owner_note, auth, credential_path,
-    windows, caps, reserve, settings, account_group, disabled_until, created_by
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-RETURNING id, key, provider, title, owner_note, auth, credential_path, windows, caps, reserve, settings, account_group, disabled_until, created_by, created_at, updated_at
+    windows, caps, settings, account_group, disabled_until, created_by
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+RETURNING id, key, provider, title, owner_note, auth, credential_path, windows, caps, settings, account_group, disabled_until, created_by, created_at, updated_at
 `
 
 type CreateSubscriptionParams struct {
@@ -127,7 +59,6 @@ type CreateSubscriptionParams struct {
 	CredentialPath string             `json:"credential_path"`
 	Windows        []byte             `json:"windows"`
 	Caps           []byte             `json:"caps"`
-	Reserve        int32              `json:"reserve"`
 	Settings       []byte             `json:"settings"`
 	AccountGroup   string             `json:"account_group"`
 	DisabledUntil  pgtype.Timestamptz `json:"disabled_until"`
@@ -144,7 +75,6 @@ func (q *Queries) CreateSubscription(ctx context.Context, arg CreateSubscription
 		arg.CredentialPath,
 		arg.Windows,
 		arg.Caps,
-		arg.Reserve,
 		arg.Settings,
 		arg.AccountGroup,
 		arg.DisabledUntil,
@@ -161,7 +91,6 @@ func (q *Queries) CreateSubscription(ctx context.Context, arg CreateSubscription
 		&i.CredentialPath,
 		&i.Windows,
 		&i.Caps,
-		&i.Reserve,
 		&i.Settings,
 		&i.AccountGroup,
 		&i.DisabledUntil,
@@ -314,7 +243,7 @@ func (q *Queries) DeleteSubscriptionUsage(ctx context.Context, subscriptionID pg
 }
 
 const getSubscriptionByKey = `-- name: GetSubscriptionByKey :one
-SELECT id, key, provider, title, owner_note, auth, credential_path, windows, caps, reserve, settings, account_group, disabled_until, created_by, created_at, updated_at FROM subscription
+SELECT id, key, provider, title, owner_note, auth, credential_path, windows, caps, settings, account_group, disabled_until, created_by, created_at, updated_at FROM subscription
 WHERE key = $1
 `
 
@@ -331,7 +260,6 @@ func (q *Queries) GetSubscriptionByKey(ctx context.Context, key string) (Subscri
 		&i.CredentialPath,
 		&i.Windows,
 		&i.Caps,
-		&i.Reserve,
 		&i.Settings,
 		&i.AccountGroup,
 		&i.DisabledUntil,
@@ -467,97 +395,6 @@ func (q *Queries) ListAllWorkspaceIDs(ctx context.Context) ([]pgtype.UUID, error
 	return items, nil
 }
 
-const listAllWorkspaceRuntimeProfiles = `-- name: ListAllWorkspaceRuntimeProfiles :many
-SELECT DISTINCT ON (share_key) id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, subscriptions, spend_order, share_key, all_workspaces, pool_id FROM runtime_profile
-WHERE all_workspaces = true AND share_key IS NOT NULL
-ORDER BY share_key, created_at ASC
-`
-
-// One template per share_key among profiles marked for every workspace.
-func (q *Queries) ListAllWorkspaceRuntimeProfiles(ctx context.Context) ([]RuntimeProfile, error) {
-	rows, err := q.db.Query(ctx, listAllWorkspaceRuntimeProfiles)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []RuntimeProfile{}
-	for rows.Next() {
-		var i RuntimeProfile
-		if err := rows.Scan(
-			&i.ID,
-			&i.WorkspaceID,
-			&i.DisplayName,
-			&i.ProtocolFamily,
-			&i.CommandName,
-			&i.Description,
-			&i.FixedArgs,
-			&i.Visibility,
-			&i.CreatedBy,
-			&i.Enabled,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.RuntimeType,
-			&i.Subscriptions,
-			&i.SpendOrder,
-			&i.ShareKey,
-			&i.AllWorkspaces,
-			&i.PoolID,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listEnabledRuntimeProfilesWithSubscriptionsForWorkspace = `-- name: ListEnabledRuntimeProfilesWithSubscriptionsForWorkspace :many
-SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, subscriptions, spend_order, share_key, all_workspaces, pool_id FROM runtime_profile
-WHERE workspace_id = $1 AND enabled = true AND jsonb_array_length(subscriptions) > 0
-ORDER BY created_at
-`
-
-func (q *Queries) ListEnabledRuntimeProfilesWithSubscriptionsForWorkspace(ctx context.Context, workspaceID pgtype.UUID) ([]RuntimeProfile, error) {
-	rows, err := q.db.Query(ctx, listEnabledRuntimeProfilesWithSubscriptionsForWorkspace, workspaceID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []RuntimeProfile{}
-	for rows.Next() {
-		var i RuntimeProfile
-		if err := rows.Scan(
-			&i.ID,
-			&i.WorkspaceID,
-			&i.DisplayName,
-			&i.ProtocolFamily,
-			&i.CommandName,
-			&i.Description,
-			&i.FixedArgs,
-			&i.Visibility,
-			&i.CreatedBy,
-			&i.Enabled,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.RuntimeType,
-			&i.Subscriptions,
-			&i.SpendOrder,
-			&i.ShareKey,
-			&i.AllWorkspaces,
-			&i.PoolID,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listLatestSubscriptionUsage = `-- name: ListLatestSubscriptionUsage :many
 SELECT DISTINCT ON (subscription_id, window_key) id, subscription_id, window_key, used_percent, resets_at, limit_reached, source, observed_at
 FROM subscription_usage
@@ -583,189 +420,6 @@ func (q *Queries) ListLatestSubscriptionUsage(ctx context.Context) ([]Subscripti
 			&i.LimitReached,
 			&i.Source,
 			&i.ObservedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listRuntimeProfilesByShareKey = `-- name: ListRuntimeProfilesByShareKey :many
-SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, subscriptions, spend_order, share_key, all_workspaces, pool_id FROM runtime_profile
-WHERE share_key = $1
-ORDER BY created_at ASC
-`
-
-func (q *Queries) ListRuntimeProfilesByShareKey(ctx context.Context, shareKey pgtype.Text) ([]RuntimeProfile, error) {
-	rows, err := q.db.Query(ctx, listRuntimeProfilesByShareKey, shareKey)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []RuntimeProfile{}
-	for rows.Next() {
-		var i RuntimeProfile
-		if err := rows.Scan(
-			&i.ID,
-			&i.WorkspaceID,
-			&i.DisplayName,
-			&i.ProtocolFamily,
-			&i.CommandName,
-			&i.Description,
-			&i.FixedArgs,
-			&i.Visibility,
-			&i.CreatedBy,
-			&i.Enabled,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.RuntimeType,
-			&i.Subscriptions,
-			&i.SpendOrder,
-			&i.ShareKey,
-			&i.AllWorkspaces,
-			&i.PoolID,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listRuntimeProfilesUsingSubscription = `-- name: ListRuntimeProfilesUsingSubscription :many
-SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, subscriptions, spend_order, share_key, all_workspaces, pool_id FROM runtime_profile
-WHERE subscriptions ? $1::text
-ORDER BY workspace_id, created_at
-`
-
-// Profiles that spend a subscription, across every workspace. Callers filter
-// the result down to the workspaces the reader belongs to.
-func (q *Queries) ListRuntimeProfilesUsingSubscription(ctx context.Context, key string) ([]RuntimeProfile, error) {
-	rows, err := q.db.Query(ctx, listRuntimeProfilesUsingSubscription, key)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []RuntimeProfile{}
-	for rows.Next() {
-		var i RuntimeProfile
-		if err := rows.Scan(
-			&i.ID,
-			&i.WorkspaceID,
-			&i.DisplayName,
-			&i.ProtocolFamily,
-			&i.CommandName,
-			&i.Description,
-			&i.FixedArgs,
-			&i.Visibility,
-			&i.CreatedBy,
-			&i.Enabled,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.RuntimeType,
-			&i.Subscriptions,
-			&i.SpendOrder,
-			&i.ShareKey,
-			&i.AllWorkspaces,
-			&i.PoolID,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listRuntimeProfilesWithSubscriptions = `-- name: ListRuntimeProfilesWithSubscriptions :many
-SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, subscriptions, spend_order, share_key, all_workspaces, pool_id FROM runtime_profile
-WHERE jsonb_array_length(subscriptions) > 0
-ORDER BY workspace_id, created_at
-`
-
-func (q *Queries) ListRuntimeProfilesWithSubscriptions(ctx context.Context) ([]RuntimeProfile, error) {
-	rows, err := q.db.Query(ctx, listRuntimeProfilesWithSubscriptions)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []RuntimeProfile{}
-	for rows.Next() {
-		var i RuntimeProfile
-		if err := rows.Scan(
-			&i.ID,
-			&i.WorkspaceID,
-			&i.DisplayName,
-			&i.ProtocolFamily,
-			&i.CommandName,
-			&i.Description,
-			&i.FixedArgs,
-			&i.Visibility,
-			&i.CreatedBy,
-			&i.Enabled,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.RuntimeType,
-			&i.Subscriptions,
-			&i.SpendOrder,
-			&i.ShareKey,
-			&i.AllWorkspaces,
-			&i.PoolID,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listSharedRuntimeProfiles = `-- name: ListSharedRuntimeProfiles :many
-SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, subscriptions, spend_order, share_key, all_workspaces, pool_id FROM runtime_profile
-WHERE share_key IS NOT NULL
-ORDER BY workspace_id, created_at
-`
-
-// Subscription pools: profiles created as one runtime across workspaces.
-func (q *Queries) ListSharedRuntimeProfiles(ctx context.Context) ([]RuntimeProfile, error) {
-	rows, err := q.db.Query(ctx, listSharedRuntimeProfiles)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []RuntimeProfile{}
-	for rows.Next() {
-		var i RuntimeProfile
-		if err := rows.Scan(
-			&i.ID,
-			&i.WorkspaceID,
-			&i.DisplayName,
-			&i.ProtocolFamily,
-			&i.CommandName,
-			&i.Description,
-			&i.FixedArgs,
-			&i.Visibility,
-			&i.CreatedBy,
-			&i.Enabled,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.RuntimeType,
-			&i.Subscriptions,
-			&i.SpendOrder,
-			&i.ShareKey,
-			&i.AllWorkspaces,
-			&i.PoolID,
 		); err != nil {
 			return nil, err
 		}
@@ -914,13 +568,13 @@ func (q *Queries) ListSubscriptionUsageSince(ctx context.Context, arg ListSubscr
 
 const listSubscriptions = `-- name: ListSubscriptions :many
 
-SELECT id, key, provider, title, owner_note, auth, credential_path, windows, caps, reserve, settings, account_group, disabled_until, created_by, created_at, updated_at FROM subscription
+SELECT id, key, provider, title, owner_note, auth, credential_path, windows, caps, settings, account_group, disabled_until, created_by, created_at, updated_at FROM subscription
 ORDER BY provider ASC, created_at ASC
 `
 
-// Instance-level subscriptions (migration 589). Integrity between
-// runtime_profile.subscriptions, subscription and subscription_usage is
-// enforced in the application layer — there are no DB FKs.
+// Instance-level subscriptions (migration 589). Integrity between the pools,
+// subscription and subscription_usage is enforced in the application layer —
+// there are no DB FKs.
 func (q *Queries) ListSubscriptions(ctx context.Context) ([]Subscription, error) {
 	rows, err := q.db.Query(ctx, listSubscriptions)
 	if err != nil {
@@ -940,7 +594,6 @@ func (q *Queries) ListSubscriptions(ctx context.Context) ([]Subscription, error)
 			&i.CredentialPath,
 			&i.Windows,
 			&i.Caps,
-			&i.Reserve,
 			&i.Settings,
 			&i.AccountGroup,
 			&i.DisabledUntil,
@@ -959,7 +612,7 @@ func (q *Queries) ListSubscriptions(ctx context.Context) ([]Subscription, error)
 }
 
 const listSubscriptionsByKeys = `-- name: ListSubscriptionsByKeys :many
-SELECT id, key, provider, title, owner_note, auth, credential_path, windows, caps, reserve, settings, account_group, disabled_until, created_by, created_at, updated_at FROM subscription
+SELECT id, key, provider, title, owner_note, auth, credential_path, windows, caps, settings, account_group, disabled_until, created_by, created_at, updated_at FROM subscription
 WHERE key = ANY($1::text[])
 `
 
@@ -982,231 +635,12 @@ func (q *Queries) ListSubscriptionsByKeys(ctx context.Context, keys []string) ([
 			&i.CredentialPath,
 			&i.Windows,
 			&i.Caps,
-			&i.Reserve,
 			&i.Settings,
 			&i.AccountGroup,
 			&i.DisabledUntil,
 			&i.CreatedBy,
 			&i.CreatedAt,
 			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const removeSubscriptionFromRuntimeProfiles = `-- name: RemoveSubscriptionFromRuntimeProfiles :many
-UPDATE runtime_profile
-SET subscriptions = COALESCE((
-        SELECT jsonb_agg(elem ORDER BY ord)
-        FROM jsonb_array_elements_text(subscriptions) WITH ORDINALITY AS t(elem, ord)
-        WHERE elem <> $1::text
-    ), '[]'::jsonb),
-    updated_at = now()
-WHERE subscriptions ? $1::text
-RETURNING id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, subscriptions, spend_order, share_key, all_workspaces, pool_id
-`
-
-// Drops one key from every profile's ordered list, keeping the order of the rest.
-func (q *Queries) RemoveSubscriptionFromRuntimeProfiles(ctx context.Context, key string) ([]RuntimeProfile, error) {
-	rows, err := q.db.Query(ctx, removeSubscriptionFromRuntimeProfiles, key)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []RuntimeProfile{}
-	for rows.Next() {
-		var i RuntimeProfile
-		if err := rows.Scan(
-			&i.ID,
-			&i.WorkspaceID,
-			&i.DisplayName,
-			&i.ProtocolFamily,
-			&i.CommandName,
-			&i.Description,
-			&i.FixedArgs,
-			&i.Visibility,
-			&i.CreatedBy,
-			&i.Enabled,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.RuntimeType,
-			&i.Subscriptions,
-			&i.SpendOrder,
-			&i.ShareKey,
-			&i.AllWorkspaces,
-			&i.PoolID,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const setRuntimeProfileSharing = `-- name: SetRuntimeProfileSharing :one
-UPDATE runtime_profile
-SET share_key      = COALESCE(share_key, $1::text),
-    all_workspaces = $2::bool,
-    updated_at     = now()
-WHERE id = $3
-RETURNING id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, subscriptions, spend_order, share_key, all_workspaces, pool_id
-`
-
-type SetRuntimeProfileSharingParams struct {
-	ShareKey      string      `json:"share_key"`
-	AllWorkspaces bool        `json:"all_workspaces"`
-	ID            pgtype.UUID `json:"id"`
-}
-
-// Gives a profile a share_key (kept if it already has one) and sets whether
-// every workspace carries a copy.
-func (q *Queries) SetRuntimeProfileSharing(ctx context.Context, arg SetRuntimeProfileSharingParams) (RuntimeProfile, error) {
-	row := q.db.QueryRow(ctx, setRuntimeProfileSharing, arg.ShareKey, arg.AllWorkspaces, arg.ID)
-	var i RuntimeProfile
-	err := row.Scan(
-		&i.ID,
-		&i.WorkspaceID,
-		&i.DisplayName,
-		&i.ProtocolFamily,
-		&i.CommandName,
-		&i.Description,
-		&i.FixedArgs,
-		&i.Visibility,
-		&i.CreatedBy,
-		&i.Enabled,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.RuntimeType,
-		&i.Subscriptions,
-		&i.SpendOrder,
-		&i.ShareKey,
-		&i.AllWorkspaces,
-		&i.PoolID,
-	)
-	return i, err
-}
-
-const setRuntimeProfileSubscriptions = `-- name: SetRuntimeProfileSubscriptions :many
-UPDATE runtime_profile rp
-SET subscriptions = $1::jsonb,
-    spend_order   = $2::text,
-    updated_at    = now()
-WHERE rp.id = $3
-   OR ($4::text <> '' AND rp.share_key = $4::text)
-RETURNING id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, subscriptions, spend_order, share_key, all_workspaces, pool_id
-`
-
-type SetRuntimeProfileSubscriptionsParams struct {
-	Subscriptions []byte      `json:"subscriptions"`
-	SpendOrder    string      `json:"spend_order"`
-	ID            pgtype.UUID `json:"id"`
-	ShareKey      string      `json:"share_key"`
-}
-
-// Sets the subscriptions and spend order of a profile and of every copy that
-// shares its share_key, in every workspace.
-func (q *Queries) SetRuntimeProfileSubscriptions(ctx context.Context, arg SetRuntimeProfileSubscriptionsParams) ([]RuntimeProfile, error) {
-	rows, err := q.db.Query(ctx, setRuntimeProfileSubscriptions,
-		arg.Subscriptions,
-		arg.SpendOrder,
-		arg.ID,
-		arg.ShareKey,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []RuntimeProfile{}
-	for rows.Next() {
-		var i RuntimeProfile
-		if err := rows.Scan(
-			&i.ID,
-			&i.WorkspaceID,
-			&i.DisplayName,
-			&i.ProtocolFamily,
-			&i.CommandName,
-			&i.Description,
-			&i.FixedArgs,
-			&i.Visibility,
-			&i.CreatedBy,
-			&i.Enabled,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.RuntimeType,
-			&i.Subscriptions,
-			&i.SpendOrder,
-			&i.ShareKey,
-			&i.AllWorkspaces,
-			&i.PoolID,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const syncRuntimeProfileCopies = `-- name: SyncRuntimeProfileCopies :many
-UPDATE runtime_profile rp
-SET display_name   = src.display_name,
-    command_name   = src.command_name,
-    description    = src.description,
-    fixed_args     = src.fixed_args,
-    enabled        = src.enabled,
-    subscriptions  = src.subscriptions,
-    spend_order    = src.spend_order,
-    all_workspaces = src.all_workspaces,
-    updated_at     = now()
-FROM runtime_profile src
-WHERE src.id = $1
-  AND src.share_key IS NOT NULL
-  AND rp.share_key = src.share_key
-  AND rp.id <> src.id
-RETURNING rp.id, rp.workspace_id, rp.display_name, rp.protocol_family, rp.command_name, rp.description, rp.fixed_args, rp.visibility, rp.created_by, rp.enabled, rp.created_at, rp.updated_at, rp.runtime_type, rp.subscriptions, rp.spend_order, rp.share_key, rp.all_workspaces, rp.pool_id
-`
-
-// Copies the editable fields of one profile onto every other copy with the
-// same share_key.
-func (q *Queries) SyncRuntimeProfileCopies(ctx context.Context, id pgtype.UUID) ([]RuntimeProfile, error) {
-	rows, err := q.db.Query(ctx, syncRuntimeProfileCopies, id)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []RuntimeProfile{}
-	for rows.Next() {
-		var i RuntimeProfile
-		if err := rows.Scan(
-			&i.ID,
-			&i.WorkspaceID,
-			&i.DisplayName,
-			&i.ProtocolFamily,
-			&i.CommandName,
-			&i.Description,
-			&i.FixedArgs,
-			&i.Visibility,
-			&i.CreatedBy,
-			&i.Enabled,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.RuntimeType,
-			&i.Subscriptions,
-			&i.SpendOrder,
-			&i.ShareKey,
-			&i.AllWorkspaces,
-			&i.PoolID,
 		); err != nil {
 			return nil, err
 		}
@@ -1226,14 +660,13 @@ SET title           = COALESCE($1, title),
     credential_path = COALESCE($4, credential_path),
     windows         = COALESCE($5, windows),
     caps            = COALESCE($6, caps),
-    reserve         = COALESCE($7, reserve),
-    settings        = COALESCE($8, settings),
-    account_group   = COALESCE($9, account_group),
-    disabled_until  = CASE WHEN $10::bool THEN NULL
-                           ELSE COALESCE($11, disabled_until) END,
+    settings        = COALESCE($7, settings),
+    account_group   = COALESCE($8, account_group),
+    disabled_until  = CASE WHEN $9::bool THEN NULL
+                           ELSE COALESCE($10, disabled_until) END,
     updated_at      = now()
-WHERE key = $12
-RETURNING id, key, provider, title, owner_note, auth, credential_path, windows, caps, reserve, settings, account_group, disabled_until, created_by, created_at, updated_at
+WHERE key = $11
+RETURNING id, key, provider, title, owner_note, auth, credential_path, windows, caps, settings, account_group, disabled_until, created_by, created_at, updated_at
 `
 
 type UpdateSubscriptionParams struct {
@@ -1243,7 +676,6 @@ type UpdateSubscriptionParams struct {
 	CredentialPath pgtype.Text        `json:"credential_path"`
 	Windows        []byte             `json:"windows"`
 	Caps           []byte             `json:"caps"`
-	Reserve        pgtype.Int4        `json:"reserve"`
 	Settings       []byte             `json:"settings"`
 	AccountGroup   pgtype.Text        `json:"account_group"`
 	ClearDisabled  bool               `json:"clear_disabled"`
@@ -1261,7 +693,6 @@ func (q *Queries) UpdateSubscription(ctx context.Context, arg UpdateSubscription
 		arg.CredentialPath,
 		arg.Windows,
 		arg.Caps,
-		arg.Reserve,
 		arg.Settings,
 		arg.AccountGroup,
 		arg.ClearDisabled,
@@ -1279,7 +710,6 @@ func (q *Queries) UpdateSubscription(ctx context.Context, arg UpdateSubscription
 		&i.CredentialPath,
 		&i.Windows,
 		&i.Caps,
-		&i.Reserve,
 		&i.Settings,
 		&i.AccountGroup,
 		&i.DisabledUntil,

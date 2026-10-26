@@ -218,8 +218,6 @@ RETURNING *;
 -- A deleted runtime leaves no model rows or unavailability behind.
 WITH deleted_profile_rows AS (
  DELETE FROM model_profile_option WHERE model_profile_option.runtime_id = $1
-), deleted_agent_rows AS (
- DELETE FROM agent_model_option WHERE agent_model_option.runtime_id = $1
 )
 DELETE FROM runtime_unavailable WHERE runtime_unavailable.runtime_id = $1;
 
@@ -239,8 +237,6 @@ LIMIT $2;
 -- follow the runtime instead of disappearing with it.
 WITH moved_profile_rows AS (
  UPDATE model_profile_option SET runtime_id = sqlc.arg(new_runtime_id) WHERE model_profile_option.runtime_id = sqlc.arg(old_runtime_id)
-), moved_agent_rows AS (
- UPDATE agent_model_option SET runtime_id = sqlc.arg(new_runtime_id) WHERE agent_model_option.runtime_id = sqlc.arg(old_runtime_id)
 )
 UPDATE runtime_unavailable SET runtime_id = sqlc.arg(new_runtime_id) WHERE runtime_unavailable.runtime_id = sqlc.arg(old_runtime_id);
 

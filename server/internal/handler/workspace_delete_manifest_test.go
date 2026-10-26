@@ -81,7 +81,6 @@ var workspaceDeletionManifest = map[string]workspaceDeleteAction{
 	"issue_workflow_artifact":            workspaceDelete,
 	"model_profile":                      workspaceDelete,
 	"model_profile_option":               workspaceDelete,
-	"agent_model_option":                 workspaceDelete,
 	"runtime_unavailable":                workspaceDelete,
 	"model_idle_episode":                 workspaceDelete,
 	"issue_view":                         workspaceDelete,
@@ -140,8 +139,6 @@ var workspaceDeletionManifest = map[string]workspaceDeleteAction{
 	"subscription_host_state":            workspaceDeleteKeep, // Daemon hosts' view of instance-level credentials.
 	"subscription_manual_run":            workspaceDeleteKeep, // Journal of an instance admin's manual runs on instance-level subscriptions.
 	"subscription_usage":                 workspaceDeleteKeep, // Usage of instance-level subscriptions.
-	"subscription_limit_backup":          workspaceDeleteKeep, // Saved limits of instance-level subscriptions, kept for the rollback.
-	"model_truth_backup":                 workspaceDeleteKeep, // Originals of the agent fields, profiles and account groups migration 613 changed, kept for the rollback.
 	"subscription_pool":                  workspaceDeleteKeep, // Instance-level pools of accounts, shared by every workspace.
 	"subscription_pool_member":           workspaceDeleteKeep, // Accounts of an instance-level pool.
 	"subscription_pool_grant":            workspaceDelete,

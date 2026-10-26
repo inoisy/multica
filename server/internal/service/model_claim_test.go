@@ -51,7 +51,7 @@ func newModelClaimRig(t *testing.T) *modelClaimRig {
 		}
 		r.rt[name] = fx.EnvironmentRuntime(t, "models-"+name, testutil.Cols{"provider": provider, "visibility": "public"})
 	}
-	for _, table := range []string{"runtime_unavailable", "model_profile_option", "model_profile", "agent_model_option", "model_idle_episode", "inbox_item"} {
+	for _, table := range []string{"runtime_unavailable", "model_profile_option", "model_profile", "model_idle_episode", "inbox_item"} {
 		fx.Cleanup(t, "DELETE FROM "+table+" WHERE workspace_id=$1", ws)
 	}
 	fx.Cleanup(t, "DELETE FROM agent_task_queue WHERE agent_id IN (SELECT id FROM agent WHERE workspace_id=$1)", ws)
@@ -473,7 +473,6 @@ func TestQuotaOnRouteStepRetriesUnderTheSameAction(t *testing.T) {
 	}
 	spare := r.f.EnvironmentRuntime(t, "models route spare", testutil.Cols{"provider": "claude", "visibility": "public"})
 	r.f.Cleanup(t, "DELETE FROM runtime_unavailable WHERE workspace_id=$1", r.f.WorkspaceID)
-	r.f.Cleanup(t, "DELETE FROM agent_model_option WHERE agent_id=$1", dev.ID)
 	profiles := &ModelProfileService{Queries: r.f.q, TxStarter: r.f.Pool}
 	rows := []ModelOptionInput{{RuntimeID: util.UUIDToString(dev.RuntimeID), Model: "sol"}, {RuntimeID: spare, Model: "opus"}}
 	if _, err := profiles.SaveAgentModels(r.ctx, dev, AgentModelsInput{Options: &rows}); err != nil {

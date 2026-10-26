@@ -746,8 +746,7 @@ func longestBlock(blocks []RuntimeBlock) (RuntimeBlock, bool) {
 // runtimeBlocks lists what keeps one runtime from running at now. Stored
 // refusals of a run count by their code; the daemon's own refusals on the
 // agent limit or on disabled accounts stand only while the pool still has no
-// usable account; the old stored verdicts of the pool are not read; the
-// pool's computed verdict stands in for them.
+// usable account; the pool's computed verdict is added.
 func runtimeBlocks(runtimeID string, stored []db.RuntimeUnavailable, pool *PoolVerdict, now time.Time) []RuntimeBlock {
 	var out []RuntimeBlock
 	for _, rec := range stored {
@@ -757,8 +756,6 @@ func runtimeBlocks(runtimeID string, stored []db.RuntimeUnavailable, pool *PoolV
 		code := StoredRefusalCode(rec)
 		b := RuntimeBlock{RuntimeID: runtimeID, Until: rec.Until.Time, StoredCode: code, Reason: rec.Reason, TaskID: rec.TaskID, CreatedAt: rec.CreatedAt}
 		switch code {
-		case UnavailablePoolVerdict:
-			continue
 		case UnavailableAgentCapRefusal:
 			if pool != nil && pool.Usable {
 				continue
