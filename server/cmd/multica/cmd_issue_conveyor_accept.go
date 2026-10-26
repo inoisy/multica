@@ -12,20 +12,29 @@ import (
 	"github.com/multica-ai/multica/server/internal/cli"
 )
 
-// newIssueConveyorAcceptCommand builds `multica issue conveyor accept`.
-func newIssueConveyorAcceptCommand() *cobra.Command {
+// newWorkflowAcceptCommand builds `multica workflow accept`, the command the
+// daemon's accept runtime runs for a Workflow acceptance step.
+func newWorkflowAcceptCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "accept [issue-id]",
-		Short: "Run an accept step: check the accepted commit on top of the base and merge it",
-		Long: "Runs inside the accept step's run (the daemon's accept runtime starts it). It checks out the repository\n" +
-			"of the commit the route accepted, merges that commit onto the current base branch, runs the commands of\n" +
-			acceptanceFile + " from the commit, pushes exactly the checked merge, and hands the outcome in as\n" +
-			"the step's result. Without a live route it serves a project Workflow's acceptance step: it merges the\n" +
-			"commit the previous step pinned (`issue status --commit`), posts the report as a comment and moves the\n" +
-			"issue to the next step, back, or to blocked. The issue defaults to MULTICA_ISSUE_ID.",
+		Short: "Run an acceptance step: check the pinned commit on top of the base and merge it",
+		Long: "Runs inside the acceptance step's run (the daemon's accept runtime starts it). It checks out the\n" +
+			"repository of the commit the previous step pinned (`issue status --commit`), merges it onto the current\n" +
+			"base branch, runs the commands of " + acceptanceFile + " from the commit, pushes exactly the checked\n" +
+			"merge, posts the report as a comment and moves the issue to the next step, back, or to blocked.\n" +
+			"An issue still on a legacy route hands the outcome in as the route step's result instead.\n" +
+			"The issue defaults to MULTICA_ISSUE_ID.",
 		Args: cobra.MaximumNArgs(1),
-		RunE: runIssueConveyorAccept,
+		RunE: runAccept,
 	}
+}
+
+// newIssueConveyorAcceptCommand keeps `multica issue conveyor accept` for one
+// release, for daemons and scripts that still call the old name.
+func newIssueConveyorAcceptCommand() *cobra.Command {
+	cmd := newWorkflowAcceptCommand()
+	cmd.Deprecated = "use `multica workflow accept`"
+	return cmd
 }
 
 // acceptRouteView is the part of GET /conveyor the accept step reads.
@@ -66,7 +75,7 @@ type acceptResultBody struct {
 	} `json:"artifact"`
 }
 
-func runIssueConveyorAccept(cmd *cobra.Command, args []string) error {
+func runAccept(cmd *cobra.Command, args []string) error {
 	issueInput := strings.TrimSpace(os.Getenv("MULTICA_ISSUE_ID"))
 	if len(args) == 1 {
 		issueInput = args[0]
