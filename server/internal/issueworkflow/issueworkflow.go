@@ -301,7 +301,7 @@ func (d Definition) HandsOffAnywhere() bool {
 }
 
 // ControlsExecution distinguishes an adopted workflow from the passive Default
-// catalog used by legacy routes. A task must have one execution owner.
+// catalog: only an adopted workflow hands the issue from step to step.
 func (d Definition) ControlsExecution() bool { return !d.IsDefault || d.HandsOffAnywhere() }
 
 // NextStatus is where a step's handler moves the issue when done: the step's

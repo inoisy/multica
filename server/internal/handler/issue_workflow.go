@@ -757,13 +757,6 @@ func (h *Handler) UpdateIssueWorkflow(w http.ResponseWriter, r *http.Request) {
 		writeErrorCode(w, status, "invalid_handoff", msg)
 		return
 	}
-	if (issueworkflow.Definition{IsDefault: current.IsDefault, Steps: steps}).ControlsExecution() {
-		for _, p := range projects {
-			if !requireLegacyRoutesFinished(w, ctx, qtx, wsUUID, p.ID) {
-				return
-			}
-		}
-	}
 
 	// Default accepts every status, so editing it never moves issues; issues
 	// on a status it drops stay there and show under hidden columns.
@@ -1025,9 +1018,6 @@ func (h *Handler) SetProjectWorkflow(w http.ResponseWriter, r *http.Request) {
 			target = &def
 		}
 	}
-	if target != nil && target.ControlsExecution() && !requireLegacyRoutesFinished(w, ctx, qtx, wsUUID, project.ID) {
-		return
-	}
 	catalog, err := h.workflowStatusCatalog(ctx, qtx, wsUUID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to load issue statuses")
@@ -1176,9 +1166,6 @@ func (h *Handler) SetIssueWorkflowHandoff(w http.ResponseWriter, r *http.Request
 		if s.StatusKey == step.StatusKey {
 			def.Steps[i] = step
 		}
-	}
-	if def.ControlsExecution() && !copyFor.Valid && !requireLegacyRoutesFinished(w, ctx, qtx, wsUUID, pgtype.UUID{}) {
-		return
 	}
 	raw, err := issueworkflow.EncodeSteps(def.Steps)
 	if err != nil {

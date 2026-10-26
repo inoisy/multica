@@ -374,7 +374,6 @@ export type {
 } from "./runtime-model";
 export { SELECTION_STATES } from "./runtime-model";
 export type { IssueStageDispatch, StageDispatchEpic } from "./stage-dispatch";
-export type { IssueRoute } from "./issue";
 export type {
   AvailabilityVerdict, CreatePoolInput, CreateSubscriptionInput, DeleteSubscriptionResult, Pool, PoolAccount,
   PoolEnvironment, PoolList, PoolRevisionConflict, RuntimeProfileSubscriptions, SetPoolGrantsInput, UpdatePoolInput, SpendOrder, StartSubscriptionLoginInput, Subscription, SubscriptionAuth,

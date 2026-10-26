@@ -1235,11 +1235,10 @@
     "card": {
       "running": "running",
       "cancelled": "cancelled",
-      "review": "parcours terminé, attend la clôture",
+      "review": "en revue",
       "success": "done",
       "held": "waits for the customer",
       "blocked": "chez le coordinateur",
-      "quota": "attend le fournisseur",
       "failed": "run failed",
       "created": "waits for its stage",
       "queued": "queued"

@@ -18,6 +18,28 @@ server: hook.py touches /run/multica-autodeploy/trigger ─▶ multica-autodeplo
         7. result posted to the log issue
 ```
 
+## multica-tasks MCP
+
+With `"mcp_service": "multica-tasks-mcp"` in `config.json` the release also carries the MCP container
+(compose file `mcp_addon_file`, default `/opt/multica/docker-compose.mcp.yml`, owned by root). Its image is
+pinned in the released commit itself, `deploy/autodeploy/mcp-image`: one line
+`ghcr.io/inoisy/multica-tasks-mcp:<40-hex sha>` or `@sha256:<digest>`; floating tags abort the run before
+anything is touched. With MCP enabled, a missing pin also aborts before any changes.
+A pin-only commit is under `deploy/**`, ignored by the STT push trigger. After merging that pin PR,
+run the existing image workflow (`gh workflow run stt.yml --repo inoisy/multica --ref main`), verify its `headSha`
+equals the accepted pin release SHA, and require green CI and STT before enabling MCP. If main moved,
+review the new SHA before switching. Subsequent releases retain the pin file.
+
+- Switch: pull and `up --no-deps` of backend, frontend and MCP.
+- Health: `/health` reports the sha, and the MCP container runs the pinned image, is healthy and answers
+  `mcp_health_url`. A failing MCP rolls back all images, the same as a failing platform.
+- Rollback (automatic and `multica-autodeploy rollback`) restores `previous_images`; if the MCP was not part
+  of the previous release its container is stopped. A partial compose start also triggers rollback.
+- First activation also works when the platform already runs the target commit: a missing or outdated MCP
+  is reconciled. An already healthy release does not overwrite rollback state.
+- Pause the deploy timer/path before configuring MCP and stop the old `multica-tasks-mcp.service` before
+  the first live run: both bind `127.0.0.1:8101`. The operator restarts the old unit if first activation fails.
+
 Why migrations must be additive: rollback is "start the previous images". That only works when the old
 code runs on the new schema. Removals (like STT-433 migration 615) ship separately and are applied by an
 operator with `sudo multica-autodeploy run --allow-destructive <sha>`.

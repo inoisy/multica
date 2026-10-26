@@ -1262,17 +1262,6 @@ func (s *IssueWakeupService) dispatch(ctx context.Context, prev db.IssueWakeup) 
 		return commit()
 	}
 	if !taskExists {
-		// The agent's own rule, waiting for a run whose ending the route of the
-		// issue has already decided: the route wakes whoever must act next, so
-		// this firing would only start a second run to find nothing to do.
-		coveredBy, covered, err := (&IssueConveyorService{Tasks: s.Tasks}).CoversWakeup(ctx, q, w, receipts)
-		if err != nil {
-			return err
-		}
-		if covered {
-			(&IssueConveyorService{Tasks: s.Tasks}).NoteSuperseded(ctx, q, w.IssueID, w.SourceTaskID, coveredBy, "own_wakeup", map[string]any{"wakeup_id": util.UUIDToString(w.ID)})
-			return closeWithoutRun(wakeupOutcomeSuperseded, map[string]any{"covered_by": coveredBy})
-		}
 		self, err := acknowledgedBySelf(ctx, q, w, w.AgentID, issue.ID, receipts)
 		if err != nil {
 			return err

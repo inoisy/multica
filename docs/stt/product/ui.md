@@ -15,6 +15,16 @@ Workspace — контекст пути. Общие web/desktop-экраны н�
 [ru/layout.json](../../../packages/views/locales/ru/layout.json),
 [ru/agents.json](../../../packages/views/locales/ru/agents.json),
 [ru/runtimes.json](../../../packages/views/locales/ru/runtimes.json).
+
+У «Задач» есть отдельная вкладка «Эпики» (`/conveyor`). По коду на 26.10 она
+показывает только задачи с включённой выдачей стадий команде и позволяет менять
+эту выдачу. Та же настройка доступна в карточке задачи: два пути управления.
+Это подтверждено по коду, а не новой съёмкой прода. В
+[STT-455](https://multica.yakutov.com/stt/issues/STT-455) вынесена проработка
+сценариев и макета: рекомендация — стадии у родительской задачи и обзор через
+обычные задачи/проект; выбор автора ещё не получен. Подробности и апстрим —
+[сверка 26.10](reviews/2026-10-26-task-audit.md#страница-эпики).
+
 «Подписки» сейчас открываются на `/{slug}/usage?tab=subscriptions`, старый
 `/{slug}/subscriptions` перенаправляет туда. Источники:
 [SubscriptionsPage](../../../packages/views/subscriptions/subscriptions-page.tsx),

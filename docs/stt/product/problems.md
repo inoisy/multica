@@ -6,6 +6,8 @@
 
 | Состояние | Проблема и доказательство | Следующее место работы |
 | --- | --- | --- |
+| Проработка | «Эпики» показывает только включённый stage-dispatch и дублирует контрол карточки задачи; название и место не объясняют назначение | [STT-455](https://multica.yakutov.com/stt/issues/STT-455), [кодовые доказательства и границы](reviews/2026-10-26-task-audit.md#страница-эпики). Перенос/удаление вкладки ещё не согласован |
+| Требует решения автора | MCP нельзя включить в общий откат одним compose: autodeploy перечисляет backend/frontend; минимальные изменения сервисов/образов/health ограничены постановкой | [STT-454](https://multica.yakutov.com/stt/issues/STT-454), [подготовленные PR и блокер](reviews/2026-10-26-task-audit.md#открытый-вопрос-stt-454) |
 | Открыто | Поля агента и строки профиля — два входа настройки. `UpdateAgent` пишет runtime/model; `SetAgentModelProfile` меняет только ссылку. В STT-433 зафиксировано ручное выравнивание 12 агентов | [STT-433](https://multica.yakutov.com/stt/issues/STT-433), [agent.sql](../../../server/pkg/db/queries/agent.sql), [model_profile.sql](../../../server/pkg/db/queries/model_profile.sql) |
 | Уточнено до разработки | `reason_code` уже NOT NULL с 607; очистка требует непустого enum CHECK. API-key `DropModel` делает модель аккаунта приоритетнее непустой строки. Действующий `subscription_pool.all_workspaces` не относится к удаляемому наследию | [Разбор STT-433 с первичными доказательствами](reviews/stt-433.md) |
 | Требует решения автора | `subscription_usage` хранит замеры квоты, отдельного журнала ручных команд нет. Требование `subscription run` нельзя считать покрытым этими замерами | [Вопрос и варианты STT-433](reviews/stt-433.md#единственный-вопрос-по-продукту) |
@@ -17,7 +19,7 @@
 | Открыто | У встроенного или собственного входа без пула аккаунт запуска неизвестен; нельзя приписывать расход конкретной подписке | [STT-433](https://multica.yakutov.com/stt/issues/STT-433), [контракт account_fact](../../engineering/model-accounts-server-api.md) |
 | Зависимость | Удаление `settings.cli`/`quota_row` требует остановить внешних читателей stt-agents; индекс этого репозитория их не видит | [STT-429](https://multica.yakutov.com/stt/issues/STT-429), [STT-433](https://multica.yakutov.com/stt/issues/STT-433) |
 | Риск интеграции | Номера миграций 564–572 пересекаются с PR апстрима #8931 | [STT-435](https://multica.yakutov.com/stt/issues/STT-435), [PR #8931](https://github.com/multica-ai/multica/pull/8931) |
-| Открыто, проверено в STT-441 | В `ci.yml` есть агрегаты backend/frontend, но effective rules `main` не содержат required_status_checks. Classic protection возвращает 404; ruleset защищает update/creation/deletion/non-fast-forward. `stt.yml` пока отсутствует | [Тема CI](roadmap.md#ci), [команды и факты](roadmap-upstream-check.md). Настройки и workflows этим исследованием не менялись |
+| Исправлено 26.10 | При STT-441 обязательных checks ещё не было. Позже включены `backend`, `frontend`, `commit-signatures`; повторное чтение branch protection 26.10 подтвердило этот список, `enforce_admins=false` | [Решение о CI](decisions.md), [тема CI](roadmap.md#ci). Старый замер в [журнале](roadmap-upstream-check.md) остаётся историей |
 
 Приёмка STT-424 выявляла 500 на `/profiles`, утечку личных профилей, ошибку caps
 с null и неизвестным окном, проблемы форм на 375 px и локализации. Поздние отчёты
