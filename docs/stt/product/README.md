@@ -43,6 +43,7 @@ STT-433 ещё не реализована на индексируемой ве�
 | [ui.md](ui.md) | Навигация, контролы, визуальные источники |
 | [upstream.md](upstream.md) | RFC и открытые реализации апстрима |
 | [roadmap.md](roadmap.md) | Темы, порядок, зависимости и путь относительно апстрима |
+| [market.md](market.md) | Рынок, аналоги и MON-1: гипотезы, не решения |
 | [roadmap-inventory.md](roadmap-inventory.md) | Все открытые задачи: в теме или явно вне продукта |
 | [roadmap-upstream-check.md](roadmap-upstream-check.md) | Запросы и фактические статусы проверки апстрима |
 | [upstream-requests/README.md](upstream-requests/README.md) | Неопубликованные английские черновики и условия отправки |
