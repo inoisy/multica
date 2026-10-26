@@ -138,6 +138,7 @@ var workspaceDeletionManifest = map[string]workspaceDeleteAction{
 	"squad_member":                       workspaceDelete,
 	"subscription":                       workspaceDeleteKeep, // Instance-level provider accounts, shared by every workspace.
 	"subscription_host_state":            workspaceDeleteKeep, // Daemon hosts' view of instance-level credentials.
+	"subscription_manual_run":            workspaceDeleteKeep, // Journal of an instance admin's manual runs on instance-level subscriptions.
 	"subscription_usage":                 workspaceDeleteKeep, // Usage of instance-level subscriptions.
 	"subscription_limit_backup":          workspaceDeleteKeep, // Saved limits of instance-level subscriptions, kept for the rollback.
 	"model_truth_backup":                 workspaceDeleteKeep, // Originals of the agent fields, profiles and account groups migration 613 changed, kept for the rollback.
