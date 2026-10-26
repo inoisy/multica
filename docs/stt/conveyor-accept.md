@@ -1,5 +1,10 @@
 # Шаг `accept`: приёмка и слияние маршрутом multica
 
+> **26.10.2026 (STT-429): старый маршрут удалён.** Команды `multica issue conveyor enable/pause/resume/disable/get/events/result`,
+> эндпоинты `/api/issues/{id}/conveyor*`, автозапуск по шаблону сквада и ретраи маршрута сняты. Приёмку выполняет шаг
+> Workflow с обработчиком `accept` — `multica workflow accept` (`issue conveyor accept` — алиас на один релиз). Таблицы
+> `issue_conveyor`, `issue_conveyor_event` и `route`/`step` в metadata закрытых задач остаются архивом. Ниже — история.
+
 Этап 1 ТЗ `tz-conveyor-in-multica.md`. Шаг маршрута `accept` проверяет коммит, который прошли dev и проверяющие шаги (qa, review),
 поверх текущей базовой ветки и вливает ровно проверенный merge-коммит прямым push. Выполняет его демон multica
 без модели.

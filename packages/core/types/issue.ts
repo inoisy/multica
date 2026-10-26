@@ -167,15 +167,6 @@ export interface IssueDuplicateOf {
   status: IssueStatus;
 }
 
-// IssueRoute is where an issue stands on its server route: the step (dev, qa,
-// review, accept, close), the route status, the round, and why it waits.
-export interface IssueRoute {
-  step: string;
-  status: string;
-  round: number;
-  waiting_reason?: string;
-}
-
 export interface Issue {
   id: string;
   workspace_id: string;
@@ -217,8 +208,6 @@ export interface Issue {
   // parent assignee is woken when a stage closes while a later one waits;
   // see server/internal/service/issue_wakeup_system.go.
   stage: number | null;
-  // The sub-issue's place on its server route (sub-issue list only).
-  route?: IssueRoute | null;
   // Calendar days as date-only "YYYY-MM-DD" (no time, no timezone). Use the
   // helpers in @multica/core/issues/date to format/compare — never `new Date()`
   // + local formatting, which shifts the day by the viewer's offset.

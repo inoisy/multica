@@ -455,11 +455,9 @@ var issueUsageCmd = &cobra.Command{
 var issueRerunCmd = &cobra.Command{
 	Use:   "rerun <id>",
 	Short: "Re-enqueue an issue's current agent assignment as a fresh run",
-	Long: "Re-enqueue the issue's current assignment, or the run named with --task, as a fresh run.\n\n" +
-		"On an issue with an enabled route (`issue conveyor`) the route owns the retry of its step: the call " +
-		"creates exactly one successor of the run that failed and returns the live one if it already exists.",
-	Args: exactArgs(1),
-	RunE: runIssueRerun,
+	Long:  "Re-enqueue the issue's current assignment, or the run named with --task, as a fresh run.",
+	Args:  exactArgs(1),
+	RunE:  runIssueRerun,
 }
 
 var issueCancelTaskCmd = &cobra.Command{
@@ -1224,7 +1222,7 @@ func runIssueChildren(cmd *cobra.Command, args []string) error {
 	output, _ := cmd.Flags().GetString("output")
 	if output == "table" {
 		actors := loadActorDisplayLookup(ctx, client)
-		headers := []string{"STAGE", "KEY", "TITLE", "STATUS", "STEP", "PRIORITY", "ASSIGNEE"}
+		headers := []string{"STAGE", "KEY", "TITLE", "STATUS", "PRIORITY", "ASSIGNEE"}
 		rows := make([][]string, 0, len(children))
 		for _, c := range children {
 			stageCell := "-"
@@ -1236,7 +1234,6 @@ func runIssueChildren(cmd *cobra.Command, args []string) error {
 				issueDisplayKey(c),
 				strVal(c, "title"),
 				strVal(c, "status"),
-				childRouteStep(c),
 				strVal(c, "priority"),
 				formatAssignee(c, actors),
 			})
@@ -3649,20 +3646,6 @@ func compactComments(comments []map[string]any) {
 			}
 		}
 	}
-}
-
-// childRouteStep is the sub-issue's route step for the table ("-" without a
-// route), with the route status when it is not simply running.
-func childRouteStep(c map[string]any) string {
-	route, _ := c["route"].(map[string]any)
-	if route == nil {
-		return "-"
-	}
-	step, status := strVal(route, "step"), strVal(route, "status")
-	if status == "" || status == "active" {
-		return step
-	}
-	return step + " (" + status + ")"
 }
 
 // reportSteerOutcomes tells a --steer author which recipients took the comment

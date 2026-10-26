@@ -141,38 +141,9 @@ func (s *StageDispatchService) loadStagedChildren(ctx context.Context, parent db
 			return nil, err
 		}
 		ch := stagedChild{issue: issue, closed: category == "done" || category == "closed", held: issue.Status == IssueStatusWaiting}
-		if !ch.closed {
-			// Merged by the route's accept step counts as closed: the work is in
-			// the base branch even before anyone marks the issue done.
-			if ch.closed, err = mergedByRoute(ctx, q, issue.ID); err != nil {
-				return nil, err
-			}
-		}
 		children = append(children, ch)
 	}
 	return children, nil
-}
-
-// mergedByRoute reports whether the issue's route completed through an accept
-// step, which merged its commit.
-func mergedByRoute(ctx context.Context, q *db.Queries, issueID pgtype.UUID) (bool, error) {
-	cv, err := q.GetIssueConveyor(ctx, issueID)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return false, nil
-	}
-	if err != nil || cv.Status != ConveyorCompleted {
-		return false, err
-	}
-	route, err := conveyorRoute(cv)
-	if err != nil {
-		return false, nil
-	}
-	for _, n := range route {
-		if n.Step == conveyorStepAccept {
-			return true, nil
-		}
-	}
-	return false, nil
 }
 
 // openStage is the first stage with work left that is not waiting for the

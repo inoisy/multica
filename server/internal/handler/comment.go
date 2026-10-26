@@ -1984,7 +1984,6 @@ func (h *Handler) triggerTasksForComment(ctx context.Context, issue db.Issue, co
 		OriginatorUserID:        originatorUserID,
 	})
 	triggers = filterSuppressedCommentAgentTriggers(triggers, suppressAgentIDs)
-	triggers = h.dropManagedRouteTriggers(ctx, issue, comment.ID, comment.SourceTaskID, triggers)
 	h.noteBlockedRuntimeTargets(ctx, issue, targets)
 	triggers, steered := h.steerCommentAgentTriggers(ctx, issue, comment, triggers, steerTaskIDs, steer)
 	enqueued := h.enqueueCommentAgentTriggers(ctx, issue, comment.ID, triggers)
