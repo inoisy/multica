@@ -39,8 +39,9 @@ func acceptWorkflowTarget(o acceptOutcome, view workflowAcceptView) string {
 }
 
 // runWorkflowAccept is the acceptance step of a project Workflow: it merges
-// the commit the previous step pinned with its status change, reports the
-// checks as a comment and hands the issue on with an ordinary status change.
+// the commit the previous step pinned with its status change (or, for a
+// repository with CI, confirms the platform merged it), reports the checks as
+// a comment and hands the issue on with an ordinary status change.
 func runWorkflowAccept(ctx context.Context, client *cli.APIClient, base, identifier string, log io.Writer) error {
 	var view workflowAcceptView
 	if err := getJSON(ctx, client, base+"/workflow-artifact", &view); err != nil {
@@ -100,7 +101,7 @@ func acceptReport(o acceptOutcome) string {
 	case "changes_requested":
 		fmt.Fprintf(&report, "Приёмка не пройдена: %s. Слияния нет.", o.Reason)
 	case "blocked":
-		fmt.Fprintf(&report, "Приёмка не дождалась ресурса: %s. Слияния нет.", o.Reason)
+		fmt.Fprintf(&report, "Приёмка не дождалась: %s. Слияния нет.", o.Reason)
 	default:
 		fmt.Fprintf(&report, "Приёмка не смогла проверить работу: %s. Слияния нет.", o.Reason)
 	}

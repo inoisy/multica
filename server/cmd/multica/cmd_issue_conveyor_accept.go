@@ -22,6 +22,8 @@ func newWorkflowAcceptCommand() *cobra.Command {
 			"repository of the commit the previous step pinned (`issue status --commit`), merges it onto the current\n" +
 			"base branch, runs the commands of " + acceptanceFile + " from the commit, pushes exactly the checked\n" +
 			"merge, posts the report as a comment and moves the issue to the next step, back, or to blocked.\n" +
+			"With \"mode\": \"ci\" in that file the platform merges after its checks: the command does not merge,\n" +
+			"push or run commands, it waits until the pinned commit is in the base and blocks the issue otherwise.\n" +
 			"The issue defaults to MULTICA_ISSUE_ID.",
 		Args: cobra.MaximumNArgs(1),
 		RunE: runAccept,
