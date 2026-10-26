@@ -129,7 +129,7 @@ func (h *Handler) prepareWorkflowArtifact(w http.ResponseWriter, r *http.Request
 	}
 	actorType, _ := h.resolveActor(r, requestUserID(r), uuidToString(prev.WorkspaceID))
 	if actorType == "agent" && req.WorkflowArtifact != nil && ownRun == nil {
-		writeError(w, http.StatusForbidden, "only the run of the step's handler may pin a commit")
+		writeErrorCode(w, http.StatusForbidden, "workflow_pin_not_step_run", "only the run of the step's handler may pin a commit")
 		return ctx, false
 	}
 	return context.WithValue(ctx, workflowArtifactWriteKey{}, workflowArtifactWrite{Previous: prev, Artifact: req.WorkflowArtifact, Run: ownRun}), true

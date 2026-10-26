@@ -5924,3 +5924,18 @@ func TestReportSteerOutcomesSeparatesDeliveredFromFallback(t *testing.T) {
 		t.Fatalf("missing empty line: %q", buf.String())
 	}
 }
+
+// A refused pin names the run that may make it, instead of the generic 403
+// line that sent a coordinator after wider rights (STT-433).
+func TestIssueStatusRequestErrorNamesThePinOwner(t *testing.T) {
+	t.Setenv("LANG", "en_US.UTF-8")
+	pin := &cli.HTTPError{StatusCode: 403, Body: `{"error":"only the run of the step's handler may pin a commit","code":"workflow_pin_not_step_run"}`}
+	got := cli.FormatError(issueStatusRequestError(pin), false)
+	if !strings.Contains(got, "only the running run of this issue's current assignee may pin a commit") {
+		t.Fatalf("pin refusal = %q, want the run that may pin", got)
+	}
+	other := &cli.HTTPError{StatusCode: 403, Body: `{"error":"some other resource is off limits"}`}
+	if got := cli.FormatError(issueStatusRequestError(other), false); strings.Contains(got, "off limits") || !strings.Contains(got, "permission") {
+		t.Fatalf("an un-coded 403 = %q, want the generic copy", got)
+	}
+}
