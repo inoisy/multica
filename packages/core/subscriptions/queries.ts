@@ -24,6 +24,7 @@ export const subscriptionKeys = {
   list: () => [...subscriptionKeys.all(), "list"] as const,
   discrepancies: () => [...subscriptionKeys.all(), "discrepancies"] as const,
   pools: () => [...subscriptionKeys.all(), "pools"] as const,
+  manualRuns: (key: string) => [...subscriptionKeys.all(), "manual-runs", key] as const,
   login: (key: string) => [...subscriptionKeys.all(), "login", key] as const,
   profile: (wsId: string, profileId: string) => [...runtimeProfileKeys.all(wsId), "subscriptions", profileId] as const,
 };
@@ -61,6 +62,18 @@ export function subscriptionLoginOptions(key: string, enabled = true) {
     queryFn: () => api.getSubscriptionLogin(key),
     enabled: enabled && key.length > 0,
     refetchInterval: (query) => (query.state.data?.state === "waiting" ? SUBSCRIPTION_LOGIN_POLL_MS : false),
+  });
+}
+
+export const MANUAL_RUNS_PAGE = 20;
+
+/** The journal of commands run by hand under an account; only an instance admin may read it, so a refusal is not retried. */
+export function manualRunsOptions(key: string, before?: string) {
+  return queryOptions({
+    queryKey: [...subscriptionKeys.manualRuns(key), before ?? "first"] as const,
+    queryFn: () => api.listSubscriptionManualRuns(key, { limit: MANUAL_RUNS_PAGE, before }),
+    enabled: key.length > 0,
+    retry: false,
   });
 }
 

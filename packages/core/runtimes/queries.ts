@@ -5,6 +5,8 @@ export const runtimeKeys = {
   all: (wsId: string) => ["runtimes", wsId] as const,
   list: (wsId: string) => [...runtimeKeys.all(wsId), "list"] as const,
   listMine: (wsId: string) => [...runtimeKeys.all(wsId), "list", "mine"] as const,
+  modelUsage: (rid: string) => ["runtimes", "model-usage", rid] as const,
+  runFacts: (rid: string) => ["runtimes", "run-facts", rid] as const,
   usage: (rid: string, days: number, tz: string) =>
     ["runtimes", "usage", rid, days, tz] as const,
   usageByAgent: (rid: string, days: number, tz: string) =>
@@ -57,5 +59,25 @@ export function runtimeListOptions(wsId: string, owner?: "me", wsSlug?: string) 
   return queryOptions({
     queryKey: owner === "me" ? runtimeKeys.listMine(wsId) : runtimeKeys.list(wsId),
     queryFn: () => api.listRuntimes({ workspace_id: wsId, owner }, wsSlug),
+  });
+}
+
+/** Profiles, agents and open issues that lead to the environment; what the page shows under "where it is selected". */
+export function runtimeModelUsageOptions(runtimeId: string) {
+  return queryOptions({
+    queryKey: runtimeKeys.modelUsage(runtimeId),
+    queryFn: () => api.getRuntimeModelUsage(runtimeId),
+    enabled: runtimeId.length > 0,
+    staleTime: 30_000,
+  });
+}
+
+/** Recorded runs of the last 24 hours, with the machine state kept apart from the selection state. */
+export function runtimeRunFactsOptions(runtimeId: string) {
+  return queryOptions({
+    queryKey: runtimeKeys.runFacts(runtimeId),
+    queryFn: () => api.getRuntimeRunFacts(runtimeId),
+    enabled: runtimeId.length > 0,
+    staleTime: 30_000,
   });
 }

@@ -2057,6 +2057,8 @@ export const ModelRowStateSchema = ModelOptionSchema.extend({
   reason_code: optionalCode,
   until_estimated: estimateFlag,
   chosen: z.boolean().default(false),
+  effective_model: z.string().nullish().catch("").transform((v) => v ?? ""),
+  model_at_run: estimateFlag,
 });
 
 export const ModelChoiceSchema = z.object({
@@ -4239,4 +4241,77 @@ export const PoolListSchema = z.object({
 export const PoolRevisionConflictSchema = z.object({
   code: z.literal("pool_revision_conflict"),
   current_revision: z.number().int(),
+});
+
+
+const profileRef = z.object({
+  profile_id: z.string(),
+  name: stringOrEmpty,
+  personal: estimateFlag,
+  owner_agent_id: nullableString,
+  positions: z.array(z.number().int()).nullish().catch([]).transform((v) => v ?? []),
+});
+const profileRefs = z.array(profileRef).nullish().catch([]).transform((v) => v ?? []);
+const count = z.number().int().nullish().catch(0).transform((v) => v ?? 0);
+
+export const RuntimeModelUsageSchema = z.object({
+  selected_in: profileRefs,
+  fallback_profiles: profileRefs,
+  based_on: profileRefs,
+  serving_agents: z
+    .array(
+      z.object({
+        id: z.string(),
+        name: stringOrEmpty,
+        profile_ids: z.array(z.string()).nullish().catch([]).transform((v) => v ?? []),
+      }),
+    )
+    .nullish()
+    .catch([])
+    .transform((v) => v ?? []),
+  hidden_agents: count,
+  hidden_profiles: count,
+  open_issues: count,
+  deletable: estimateFlag,
+});
+
+export const RuntimeRunFactsSchema = z.object({
+  runtime_id: z.string(),
+  selection_state: z.string().nullish().catch("unused").transform((v) => v || "unused"),
+  machine_status: stringOrEmpty,
+  run_facts_24h: z.object({
+    since: stringOrEmpty,
+    until: stringOrEmpty,
+    runs: count,
+    unknown_account_runs: count,
+    accounts: z
+      .record(z.string(), z.number())
+      .nullish()
+      .catch({})
+      .transform((v) => v ?? {}),
+  }),
+});
+
+export const ManualRunListSchema = z.object({
+  key: stringOrEmpty,
+  runs: z
+    .array(
+      z.object({
+        id: z.string(),
+        subscription_key: stringOrEmpty,
+        user_id: stringOrEmpty,
+        user_name: stringOrEmpty,
+        daemon_id: stringOrEmpty,
+        command: stringOrEmpty,
+        started_at: z.string(),
+        finished_at: nullableString,
+        exit_code: z.number().int().nullish().catch(null).transform((v) => v ?? null),
+        unfinished: estimateFlag,
+        agent_cap_exceeded: estimateFlag,
+      }),
+    )
+    .nullish()
+    .catch([])
+    .transform((v) => v ?? []),
+  next_before: nullableString,
 });

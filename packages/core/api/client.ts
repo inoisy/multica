@@ -9,7 +9,10 @@ import {
   DeleteSubscriptionResultSchema,
   PoolListSchema,
   PoolSchema,
+  ManualRunListSchema,
+  RuntimeModelUsageSchema,
   RuntimeProfileSubscriptionsSchema,
+  RuntimeRunFactsSchema,
   SubscriptionDiscrepancyListSchema,
   SubscriptionListSchema,
   SubscriptionLoginResponseSchema,
@@ -31,6 +34,7 @@ import type {
   SubscriptionLoginSession,
   UpdateSubscriptionInput,
 } from "../types/subscription";
+import type { ManualRunList, RuntimeModelUsage, RuntimeRunFacts } from "../types/runtime-model";
 import type { IssueStageDispatch, StageDispatchEpic } from "../types/stage-dispatch";
 import { WorkspaceWakeupPageSchema, IssueWakeupSchema, IssueWakeupSummaryRowSchema, PausedWakeupSchema, SystemWakeupSchema, WakeupRunSchema, WorkspaceSystemWakeupSchema } from "./schemas";
 import type { ArchivedInboxFilters } from "../inbox/filter-store";
@@ -2824,6 +2828,42 @@ export class ApiClient {
       `/api/workspaces/${workspaceId}/runtime-profiles/${encodeURIComponent(profileId)}/subscriptions`,
     );
     return this.parseProfileSubscriptions(raw, "GET /api/workspaces/:ws/runtime-profiles/:id/subscriptions");
+  }
+
+  /** Where the environment is selected, who it serves and whether the references let it go. */
+  async getRuntimeModelUsage(runtimeId: string): Promise<RuntimeModelUsage> {
+    const raw = await this.fetch<unknown>(`/api/runtimes/${encodeURIComponent(runtimeId)}/model-usage`);
+    const parsed = parseWithFallback<RuntimeModelUsage | null>(raw, RuntimeModelUsageSchema, null, {
+      endpoint: "GET /api/runtimes/:id/model-usage",
+    });
+    if (!parsed) throw new Error("Could not load where the environment is used");
+    return parsed;
+  }
+
+  /** What ran on the environment in the last 24 hours, apart from its forecast and its machine state. */
+  async getRuntimeRunFacts(runtimeId: string): Promise<RuntimeRunFacts> {
+    const raw = await this.fetch<unknown>(`/api/runtimes/${encodeURIComponent(runtimeId)}/run-facts`);
+    const parsed = parseWithFallback<RuntimeRunFacts | null>(raw, RuntimeRunFactsSchema, null, {
+      endpoint: "GET /api/runtimes/:id/run-facts",
+    });
+    if (!parsed) throw new Error("Could not load the environment's runs");
+    return parsed;
+  }
+
+  /** The journal of commands run by hand under an account; an instance admin in person only. */
+  async listSubscriptionManualRuns(key: string, params?: { limit?: number; before?: string }): Promise<ManualRunList> {
+    const search = new URLSearchParams();
+    if (params?.limit) search.set("limit", String(params.limit));
+    if (params?.before) search.set("before", params.before);
+    const query = search.toString();
+    const raw = await this.fetch<unknown>(
+      `/api/subscriptions/${encodeURIComponent(key)}/manual-runs${query ? `?${query}` : ""}`,
+    );
+    const parsed = parseWithFallback<ManualRunList | null>(raw, ManualRunListSchema, null, {
+      endpoint: "GET /api/subscriptions/:key/manual-runs",
+    });
+    if (!parsed) throw new Error("Could not load the manual runs");
+    return parsed;
   }
 
   async getRuntimeUsage(
