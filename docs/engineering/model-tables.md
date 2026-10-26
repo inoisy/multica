@@ -188,9 +188,9 @@ erDiagram
 | Настройка | Где | Чем кончается |
 |---|---|---|
 | Среда и модель агента | `agent.runtime_id`/`model` и строка 1 профиля | С миграции 613 поля — проекция строки 1, которую сервер обновляет вместе с профилем; прямой `PATCH` этих полей при профиле — 409 |
-| Состав пула | `subscription_pool_member` и `runtime_profile.subscriptions` | Правит только пул, старая колонка ждёт удаления |
-| Лимит агентам | `subscription.caps` и `reserve` | `reserve` свёрнут в `caps` (611), колонка ждёт удаления |
-| Своя цепочка агента | `agent_model_option` и личный профиль | Перенесено в личные профили (609), таблица ждёт удаления |
+| Состав пула | `subscription_pool_member` и `runtime_profile.subscriptions` | Правит только пул, старая колонка удаляется миграцией 616 |
+| Лимит агентам | `subscription.caps` и `reserve` | `reserve` свёрнут в `caps` (611), колонка удаляется миграцией 616 |
+| Своя цепочка агента | `agent_model_option` и личный профиль | Перенесено в личные профили (609), таблица удаляется миграцией 616 |
 | Вход в аккаунт | `subscription.credential_path` и обёртки в `command_name` | Обёртки со своим входом тратят аккаунт без учёта. Обёртки встроенных сред убраны 26.10 |
 
-Удаление старого — миграция 615 в STT-433, не раньше 01.11.2026 и после отдельного разрешения.
+Удаление старого — миграция 616: `agent_model_option`, `subscription_limit_backup`, `model_truth_backup`, `subscription.reserve`, `runtime_profile.subscriptions/spend_order/share_key/all_workspaces`, `subscription_pool.legacy_share_key`, индекс `runtime_profile_workspace_share_key_uidx`; у `runtime_unavailable.reason_code` остаётся закрытый набор `provider_limit`, `agent_cap_refusal`, `disabled_refusal`, `unknown`. Применять не раньше 01.11.2026, после прогона на копии прод-БД и только вручную (`multica-autodeploy --allow-destructive <sha>`). Откат данных — только из бэкапа: down возвращает пустую схему.
