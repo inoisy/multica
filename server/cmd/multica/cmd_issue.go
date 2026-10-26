@@ -455,11 +455,9 @@ var issueUsageCmd = &cobra.Command{
 var issueRerunCmd = &cobra.Command{
 	Use:   "rerun <id>",
 	Short: "Re-enqueue an issue's current agent assignment as a fresh run",
-	Long: "Re-enqueue the issue's current assignment, or the run named with --task, as a fresh run.\n\n" +
-		"On an issue with an enabled route (`issue conveyor`) the route owns the retry of its step: the call " +
-		"creates exactly one successor of the run that failed and returns the live one if it already exists.",
-	Args: exactArgs(1),
-	RunE: runIssueRerun,
+	Long:  "Re-enqueue the issue's current assignment, or the run named with --task, as a fresh run.",
+	Args:  exactArgs(1),
+	RunE:  runIssueRerun,
 }
 
 var issueCancelTaskCmd = &cobra.Command{
@@ -738,6 +736,7 @@ func init() {
 	issueCommentAddCmd.Flags().String("content-file", "", "Read comment content from a UTF-8 file (preserves multi-line content verbatim; use this on Windows when stdin piping mangles non-ASCII bytes). The path must be inside the current working directory unless --allow-external-file is set.")
 	issueCommentAddCmd.Flags().Bool("allow-external-file", false, "Allow --content-file / --attachment to read a path outside the current working directory. Off by default so a stale file from another run/environment can't be picked up (MUL-4252).")
 	issueCommentAddCmd.Flags().String("parent", "", "Parent comment ID to reply under. A comment-triggered agent run must reply under its trigger comment; omitting --parent to post a top-level comment is rejected")
+	issueCommentAddCmd.Flags().Bool("steer", false, "Deliver the comment into the running turn of each agent it triggers on this issue instead of queueing a follow-up run. Use only for a correction to the work in progress (a wrong requirement, a new constraint), not for new work. A recipient with no running turn, or a comment with attachments, falls back to the normal trigger")
 	issueCommentAddCmd.Flags().StringSlice("attachment", nil, "File path(s) to attach (can be specified multiple times). Non-image files, HTML included, show as file cards that open in the viewer; to render a chart inside the comment, put a ```html or ```mermaid block in the content instead")
 	issueCommentAddCmd.Flags().String("output", "json", "Output format: table or json")
 
@@ -1223,7 +1222,7 @@ func runIssueChildren(cmd *cobra.Command, args []string) error {
 	output, _ := cmd.Flags().GetString("output")
 	if output == "table" {
 		actors := loadActorDisplayLookup(ctx, client)
-		headers := []string{"STAGE", "KEY", "TITLE", "STATUS", "STEP", "PRIORITY", "ASSIGNEE"}
+		headers := []string{"STAGE", "KEY", "TITLE", "STATUS", "PRIORITY", "ASSIGNEE"}
 		rows := make([][]string, 0, len(children))
 		for _, c := range children {
 			stageCell := "-"
@@ -1235,7 +1234,6 @@ func runIssueChildren(cmd *cobra.Command, args []string) error {
 				issueDisplayKey(c),
 				strVal(c, "title"),
 				strVal(c, "status"),
-				childRouteStep(c),
 				strVal(c, "priority"),
 				formatAssignee(c, actors),
 			})
@@ -1991,7 +1989,7 @@ func runIssueStatus(cmd *cobra.Command, args []string) error {
 	}
 	var result map[string]any
 	if err := client.PutJSON(ctx, "/api/issues/"+issueRef.ID, body, &result); err != nil {
-		return fmt.Errorf("update status: %w", err)
+		return issueStatusRequestError(err)
 	}
 
 	if duplicateOf != "" {
@@ -2009,6 +2007,18 @@ func runIssueStatus(cmd *cobra.Command, args []string) error {
 		return cli.PrintJSON(os.Stdout, result)
 	}
 	return nil
+}
+
+// issueStatusRequestError names why a status write was refused. A pin is
+// refused to every run but the running one of the issue's current assignee, so
+// a coordinator handing off a sub-issue from its own issue read the generic
+// "ask an administrator to grant access" and went looking for wider rights
+// (STT-433). The branch is on the server's stable code.
+func issueStatusRequestError(err error) error {
+	if cli.ServerErrorCode(err) == "workflow_pin_not_step_run" {
+		return cli.WithUserMessage("only the running run of this issue's current assignee may pin a commit: hand the step off with --commit from that run, or change the status without --commit and leave the pin to it; wider rights do not help", err)
+	}
+	return fmt.Errorf("update status: %w", err)
 }
 
 // workflowArtifactFlags reads --commit/--repo/--branch: the code revision a
@@ -2608,12 +2618,19 @@ func runIssueCommentAdd(cmd *cobra.Command, args []string) error {
 	if len(attachmentIDs) > 0 {
 		body["attachment_ids"] = attachmentIDs
 	}
+	steer, _ := cmd.Flags().GetBool("steer")
+	if steer {
+		body["steer"] = true
+	}
 	var result map[string]any
 	if err := client.PostJSON(ctx, "/api/issues/"+issueID+"/comments", body, &result); err != nil {
 		return fmt.Errorf("add comment: %w", err)
 	}
 
 	fmt.Fprintf(os.Stderr, "Comment added to issue %s.\n", issueRef.Display)
+	if steer {
+		reportSteerOutcomes(os.Stderr, result)
+	}
 
 	output, _ := cmd.Flags().GetString("output")
 	if output == "table" {
@@ -3643,16 +3660,23 @@ func compactComments(comments []map[string]any) {
 	}
 }
 
-// childRouteStep is the sub-issue's route step for the table ("-" without a
-// route), with the route status when it is not simply running.
-func childRouteStep(c map[string]any) string {
-	route, _ := c["route"].(map[string]any)
-	if route == nil {
-		return "-"
+// reportSteerOutcomes tells a --steer author which recipients took the comment
+// into their running turn and which fell back to the normal trigger, so the
+// author never assumes a correction reached a turn that had already ended.
+func reportSteerOutcomes(w io.Writer, result map[string]any) {
+	outcomes, _ := result["trigger_outcomes"].([]any)
+	if len(outcomes) == 0 {
+		fmt.Fprintln(w, "Steer: no agent was triggered by this comment.")
+		return
 	}
-	step, status := strVal(route, "step"), strVal(route, "status")
-	if status == "" || status == "active" {
-		return step
+	for _, o := range outcomes {
+		m, _ := o.(map[string]any)
+		target, _ := m["target_id"].(string)
+		status, _ := m["status"].(string)
+		if status == "steered" {
+			fmt.Fprintf(w, "Steer: delivered into the running turn of %s.\n", target)
+			continue
+		}
+		fmt.Fprintf(w, "Steer: %s had no turn to take it; handled as %s.\n", target, status)
 	}
-	return step + " (" + status + ")"
 }

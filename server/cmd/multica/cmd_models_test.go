@@ -13,7 +13,7 @@ const modelsTestAgent = "0b8e3a52-1f0e-4c6c-9a52-5c2f3c9e7a11"
 
 // modelsServer answers the model API with fixed runtimes and profiles and
 // records the writes the CLI sends.
-func modelsServer(t *testing.T, writes *[]conveyorCall) {
+func modelsServer(t *testing.T, writes *[]apiCall) {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
@@ -26,7 +26,7 @@ func modelsServer(t *testing.T, writes *[]conveyorCall) {
 			_ = json.NewEncoder(w).Encode([]map[string]any{{"id": "p-1", "name": "Strong"}})
 			return
 		}
-		call := conveyorCall{method: r.Method, path: r.URL.RequestURI()}
+		call := apiCall{method: r.Method, path: r.URL.RequestURI()}
 		if raw, _ := io.ReadAll(r.Body); len(raw) > 0 {
 			_ = json.Unmarshal(raw, &call.body)
 		}
@@ -41,7 +41,7 @@ func modelsServer(t *testing.T, writes *[]conveyorCall) {
 
 func TestModelOptionCLIWritesTheListItWasGiven(t *testing.T) {
 	t.Chdir(t.TempDir())
-	var writes []conveyorCall
+	var writes []apiCall
 	modelsServer(t, &writes)
 	run := func(args ...string) {
 		t.Helper()
@@ -111,28 +111,19 @@ func TestModelOptionCLIReasonLabels(t *testing.T) {
 	}
 }
 
-// TOON-274: the Critic's run waited for Claude on a cross step while the
-// agent's own preview said Codex. The route run is shown with its step and
-// the preview is marked as the choice outside a route.
-func TestAgentModelsShowsRouteRuns(t *testing.T) {
-	raw := json.RawMessage(`{"profile_name":"Сильная","preview":{"source":"agent_profile","profile_name":"Сильная","reason":"primary","position":1,"runtime_name":"Codex · 1","chosen":{"position":1,"model":"gpt-6.1-sol"},"rows":[]},
-		"route_runs":[{"issue_identifier":"TOON-274","step":"critic","cross":"build","choice":{"source":"agent_profile","profile_name":"Сильная","reason":"all_unavailable","excluded_family":"codex","rows":[]}}]}`)
+// A server that still sends route_runs (always empty now) shows the preview
+// as the next run.
+func TestAgentModelsShowsTheNextRun(t *testing.T) {
 	cmd := newAgentModelsCommand()
 	_ = cmd.Flags().Set("output", "table")
-	out, err := captureStdout(t, func() error { return printAgentModels(cmd, raw) })
+	out, err := captureStdout(t, func() error {
+		return printAgentModels(cmd, json.RawMessage(`{"preview":{"source":"agent_list","reason":"primary","rows":[]},"route_runs":[]}`))
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"Off-route:", "Route run:  TOON-274 step critic[cross=build]", "the run waits", "family codex ruled out"} {
-		if !strings.Contains(out, want) {
-			t.Errorf("output lacks %q:\n%s", want, out)
-		}
-	}
-	out, _ = captureStdout(t, func() error {
-		return printAgentModels(cmd, json.RawMessage(`{"preview":{"source":"agent_list","reason":"primary","rows":[]},"route_runs":[]}`))
-	})
 	if !strings.Contains(out, "Next run:") || strings.Contains(out, "Route run") {
-		t.Errorf("no route run: %s", out)
+		t.Errorf("next run: %s", out)
 	}
 }
 
