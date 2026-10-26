@@ -138,3 +138,17 @@ func TestUnitBelowThresholdKillsNothing(t *testing.T) {
 		t.Fatalf("killed = %v", *killed)
 	}
 }
+
+func TestGuardForgetsFinishedHeavyRuns(t *testing.T) {
+	g, _ := newTestGuard(RunMemoryConfig{Interval: time.Second, HighBytes: 100 * mb},
+		[]procInfo{{PID: 200, PPID: 100, Comm: "node", AnonBytes: 200 * mb, TaskID: "t1"}})
+	g.tick()
+	if !g.heavy["t1"] {
+		t.Fatalf("heavy = %v, want t1", g.heavy)
+	}
+	g.scanner = &fakeScanner{}
+	g.tick()
+	if len(g.heavy) != 0 {
+		t.Fatalf("heavy = %v after the run ended, want empty", g.heavy)
+	}
+}

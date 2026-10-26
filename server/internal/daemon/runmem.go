@@ -300,6 +300,12 @@ func (g *runMemoryGuard) tick() {
 		}
 		g.noteHeavy(r)
 	}
+	// Forget finished runs so the heavy set does not grow with every task.
+	for id := range g.heavy {
+		if !hasRun(runs, id) {
+			delete(g.heavy, id)
+		}
+	}
 
 	// Unit-wide guard: the sum of runs is about to reach the unit's MemoryHigh.
 	g.status.UnitAnonBytes, g.status.UnitHighBytes = 0, 0
@@ -362,6 +368,15 @@ func (g *runMemoryGuard) shed(r *runAccount, reason string, now time.Time) bool 
 		"process_mb", victim.AnonBytes>>20, "run_mb", r.bytes>>20,
 		"unit_anon_mb", g.status.UnitAnonBytes>>20, "unit_high_mb", g.status.UnitHighBytes>>20)
 	return true
+}
+
+func hasRun(runs []*runAccount, id string) bool {
+	for _, r := range runs {
+		if r.id == id {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *runAccount) top(n int) []procInfo {
