@@ -1665,6 +1665,18 @@ type SubscriptionLimitBackup struct {
 	SavedAt pgtype.Timestamptz `json:"saved_at"`
 }
 
+type SubscriptionManualRun struct {
+	ID               pgtype.UUID        `json:"id"`
+	SubscriptionID   pgtype.UUID        `json:"subscription_id"`
+	UserID           pgtype.UUID        `json:"user_id"`
+	DaemonID         string             `json:"daemon_id"`
+	Command          string             `json:"command"`
+	StartedAt        pgtype.Timestamptz `json:"started_at"`
+	FinishedAt       pgtype.Timestamptz `json:"finished_at"`
+	ExitCode         pgtype.Int4        `json:"exit_code"`
+	AgentCapExceeded bool               `json:"agent_cap_exceeded"`
+}
+
 type SubscriptionPool struct {
 	ID             pgtype.UUID        `json:"id"`
 	Name           string             `json:"name"`

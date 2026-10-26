@@ -715,6 +715,8 @@ func LoadModelWorld(ctx context.Context, q *db.Queries, workspaceID pgtype.UUID,
 		var pool *PoolVerdict
 		if poolID := poolOf[util.UUIDToString(rt.ProfileID)]; poolID != "" {
 			ra.PoolID = poolID
+			ra.HasPool = true
+			ra.AccountModels = poolAccountList(accounts, members[poolID])
 			pv := EvaluatePool(poolAccountList(accounts, members[poolID]), rt.DaemonID.String, now)
 			pool = &pv
 		}

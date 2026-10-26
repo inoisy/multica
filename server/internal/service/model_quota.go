@@ -26,136 +26,128 @@ const quotaPastResetWait = 5 * time.Minute
 
 // quotaMaxWait bounds a parsed reset: a weekly window is the longest any
 // provider reports, and a typo must not park a runtime for a year.
-const quotaMaxWait = 8 * 24 * time.Hour
-
-var zaiLocation = time.FixedZone("UTC+8", 8*60*60)
+const quotaMaxWait = 7 * 24 * time.Hour
 
 var (
 	quotaInRe       = regexp.MustCompile(`(?i)(?:try again|retry|available again|resets?)\s+(?:in|after)\s+((?:\d+\s*(?:d|days?|h|hours?|hrs?|m|mins?|minutes?|s|secs?|seconds?)\s*,?\s*(?:and\s+)?)+)`)
 	quotaUnitRe     = regexp.MustCompile(`(?i)(\d+)\s*(d|days?|h|hours?|hrs?|m|mins?|minutes?|s|secs?|seconds?)`)
 	quotaRetryHdrRe = regexp.MustCompile(`(?i)retry-after:?\s*(\d+)\b`)
 	quotaEpochRe    = regexp.MustCompile(`(?i)"?resets?_?(?:at|_at)?"?\s*[:=]\s*(\d{10})\b`)
-	quotaDateRe     = regexp.MustCompile(`(?i)(?:reset|resets|available|try again)[^0-9]{0,40}?(\d{4}-\d{2}-\d{2})[ t](\d{1,2}:\d{2}(?::\d{2})?)(z|[+-]\d{2}:?\d{2})?`)
-	quotaClockRe    = regexp.MustCompile(`(?i)(?:resets?|reset at|try again at|available at)\s+(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?(?:\s*\(([A-Za-z_]+/[A-Za-z_]+|UTC|GMT)\))?`)
+	quotaDateRe     = regexp.MustCompile(`(?i)(?:reset|resets|available|try again)[^0-9]{0,40}?(\d{4}-\d{2}-\d{2})[ t](\d{1,2}:\d{2}(?::\d{2})?)(.*)`)
+	quotaClockRe    = regexp.MustCompile(`(?i)(?:resets?|reset at|try again at|available at)\s+(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?(.*)`)
 )
 
-// isZai reports whether the runtime belongs to z.ai (Zhipu GLM), whose limit
-// messages give wall-clock times in UTC+8.
-func isZai(runtimeName, provider, text string) bool {
-	all := strings.ToLower(runtimeName + " " + provider + " " + text)
-	return strings.Contains(all, "z.ai") || strings.Contains(all, "zai") || strings.Contains(all, "glm") ||
-		strings.Contains(all, "zhipu") || strings.Contains(all, "bigmodel")
+// quotaUTCZone refuses named/offset zones rather than guessing the provider's
+// local time. A missing zone means UTC, independently of account or runtime.
+func quotaUTCZone(s string) bool {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return true
+	}
+	if strings.HasPrefix(s, "(") {
+		end := strings.IndexByte(s, ')')
+		return end > 0 && (strings.EqualFold(s[1:end], "UTC") || strings.EqualFold(s[1:end], "GMT"))
+	}
+	word := strings.Fields(s)[0]
+	word = strings.TrimRight(word, ".,;·")
+	if strings.EqualFold(word, "UTC") || strings.EqualFold(word, "GMT") || strings.EqualFold(word, "Z") {
+		return true
+	}
+	// Punctuation after an unzoned clock is not a timezone.
+	return s[0] == '.' || s[0] == ',' || s[0] == ';' || strings.HasPrefix(s, "·")
 }
 
-// ParseQuotaReset reads when a provider limit lifts from the failure text.
-// Durations ("try again in 2h 13m"), epoch seconds, dates and wall-clock
-// times ("resets 3pm (Europe/Moscow)") are understood; a wall-clock time
-// without a zone is UTC, or UTC+8 for z.ai. No reset in the text, or one that
-// is not in the future: now + 60 minutes. A full date that has passed is
-// the reset the error meant, not a wall-clock time: now + 5 minutes.
+// ParseQuotaReset accepts only valid UTC/GMT (or unzoned UTC) times within a
+// week. An invalid, ambiguous or distant reset keeps the ordinary unknown wait.
 func ParseQuotaReset(text, runtimeName, provider string, now time.Time) time.Time {
-	fallback := now.Add(quotaDefaultWait)
-	accept := func(t time.Time) (time.Time, bool) {
-		if !t.After(now) {
-			return time.Time{}, false
+	fallback := now.Add(unknownResetWait)
+	accept := func(t time.Time) time.Time {
+		if !t.After(now) || t.Sub(now) > quotaMaxWait {
+			return fallback
 		}
-		if t.Sub(now) > quotaMaxWait {
-			return now.Add(quotaMaxWait), true
-		}
-		return t, true
+		return t
 	}
 	if m := quotaInRe.FindStringSubmatch(text); m != nil {
 		var d time.Duration
 		for _, u := range quotaUnitRe.FindAllStringSubmatch(m[1], -1) {
-			n, _ := strconv.Atoi(u[1])
+			n, err := strconv.ParseInt(u[1], 10, 64)
+			if err != nil || n > int64(quotaMaxWait/time.Second) {
+				return fallback
+			}
+			unit := time.Second
 			switch strings.ToLower(u[2])[0] {
 			case 'd':
-				d += time.Duration(n) * 24 * time.Hour
+				unit = 24 * time.Hour
 			case 'h':
-				d += time.Duration(n) * time.Hour
+				unit = time.Hour
 			case 'm':
-				d += time.Duration(n) * time.Minute
-			case 's':
-				d += time.Duration(n) * time.Second
+				unit = time.Minute
+			}
+			if n > int64(quotaMaxWait/unit) {
+				return fallback
+			}
+			d += time.Duration(n) * unit
+			if d > quotaMaxWait {
+				return fallback
 			}
 		}
-		if t, ok := accept(now.Add(d)); ok {
-			return t
-		}
+		return accept(now.Add(d))
 	}
 	if m := quotaRetryHdrRe.FindStringSubmatch(text); m != nil {
-		n, _ := strconv.Atoi(m[1])
-		if t, ok := accept(now.Add(time.Duration(n) * time.Second)); ok {
-			return t
+		n, err := strconv.ParseInt(m[1], 10, 64)
+		if err != nil || n > int64(quotaMaxWait/time.Second) {
+			return fallback
 		}
+		return accept(now.Add(time.Duration(n) * time.Second))
 	}
 	if m := quotaEpochRe.FindStringSubmatch(text); m != nil {
 		n, _ := strconv.ParseInt(m[1], 10, 64)
-		if t, ok := accept(time.Unix(n, 0)); ok {
-			return t
-		}
-	}
-	loc := time.UTC
-	if isZai(runtimeName, provider, text) {
-		loc = zaiLocation
+		return accept(time.Unix(n, 0))
 	}
 	if m := quotaDateRe.FindStringSubmatch(text); m != nil {
-		clock := m[2]
-		if strings.Count(clock, ":") == 1 {
-			clock += ":00"
+		if !quotaUTCZone(m[3]) {
+			return fallback
 		}
-		raw := m[1] + "T" + clock
-		var t time.Time
-		var err error
-		if zone := strings.ToUpper(m[3]); zone != "" {
-			if zone != "Z" && !strings.Contains(zone, ":") {
-				zone = zone[:3] + ":" + zone[3:]
-			}
-			t, err = time.Parse(time.RFC3339, raw+zone)
-		} else {
-			t, err = time.ParseInLocation("2006-01-02T15:04:05", raw, loc)
+		layout := "2006-01-02 15:04"
+		if strings.Count(m[2], ":") == 2 {
+			layout += ":05"
 		}
-		if err == nil {
-			if t, ok := accept(t); ok {
-				return t
-			}
-			// The clock pattern below would read the year's first digits as
-			// an hour ("reset at 2026-…" → 20:00 tomorrow).
+		t, err := time.ParseInLocation(layout, m[1]+" "+m[2], time.UTC)
+		if err != nil {
+			return fallback
+		}
+		if !t.After(now) {
 			return now.Add(quotaPastResetWait)
 		}
+		return accept(t)
 	}
 	if m := quotaClockRe.FindStringSubmatch(text); m != nil {
+		if !quotaUTCZone(m[4]) {
+			return fallback
+		}
 		hour, _ := strconv.Atoi(m[1])
 		minute := 0
 		if m[2] != "" {
 			minute, _ = strconv.Atoi(m[2])
 		}
-		switch strings.ToLower(m[3]) {
-		case "pm":
-			if hour < 12 {
+		if m[3] != "" {
+			if hour < 1 || hour > 12 {
+				return fallback
+			}
+			hour %= 12
+			if strings.EqualFold(m[3], "pm") {
 				hour += 12
 			}
-		case "am":
-			if hour == 12 {
-				hour = 0
-			}
 		}
-		where := loc
-		if m[4] != "" {
-			if l, err := time.LoadLocation(m[4]); err == nil {
-				where = l
-			}
+		if hour > 23 || minute > 59 {
+			return fallback
 		}
-		if hour < 24 && minute < 60 {
-			local := now.In(where)
-			t := time.Date(local.Year(), local.Month(), local.Day(), hour, minute, 0, 0, where)
-			if !t.After(now) {
-				t = t.Add(24 * time.Hour)
-			}
-			if t, ok := accept(t); ok {
-				return t
-			}
+		utc := now.UTC()
+		t := time.Date(utc.Year(), utc.Month(), utc.Day(), hour, minute, 0, 0, time.UTC)
+		if !t.After(now) {
+			t = t.Add(24 * time.Hour)
 		}
+		return accept(t)
 	}
 	return fallback
 }
@@ -180,7 +172,7 @@ func quotaRetryEligible(t db.AgentTaskQueue) bool {
 func QuotaUnavailableUntil(reported time.Time, errMsg, runtimeName, provider string, now time.Time) time.Time {
 	if reported.After(now) {
 		if reported.Sub(now) > quotaMaxWait {
-			return now.Add(quotaMaxWait)
+			return now.Add(unknownResetWait)
 		}
 		return reported
 	}
