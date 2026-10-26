@@ -178,7 +178,7 @@ erDiagram
 | `subscription` | 10: Claude ×3, Codex ×2, ключи API ×5 (MiniMax, z.ai ×2, Лоция, OpenRouter). `zai` и `zai-pro` — один ключ, `account_group = zai` |
 | `model_profile` | 6 общих (на «Креатив · ультра» никто не ссылается) и 2 личных (Техдиректор, MiniMax) |
 | `agent` | 16 активных. 15 на профиле, «Бенч z.ai» — на полях. Поля `runtime_id`/`model` выровнены по строке 1 профиля 26.10 вручную |
-| `subscription_host_state` | пусто: состояние входа по машинам не заполняется |
+| `subscription_host_state` | заполняет демон вместе с замерами квоты (`subscription_daemon.go`, `UpsertSubscriptionHostState`). API отдаёт `hosts` и `credential_path` только админу инстанса, остальным — пустой список. `login_state = logged_in` у всех аккаунтов подтверждает, что отчёты приходят |
 | `agent_task_queue.account_fact` | пишется с 25.10 14:25 UTC; у более ранних запусков `NULL` |
 
 ## Где одна настройка хранится дважды
