@@ -72,7 +72,8 @@ export function RuntimeModelFacts({ runtime, profile }: { runtime: AgentRuntime;
   const facts = useQuery(runtimeRunFactsOptions(runtime.id));
   const subscriptions = useQuery(subscriptionListOptions());
   const kind = environmentKind(runtime, profile);
-  const titleOf = (key: string) => subscriptions.data?.subscriptions.find((sub) => sub.key === key)?.title ?? key;
+  // The server counts by account id; an account the reader cannot see keeps its id.
+  const titleOf = (id: string) => subscriptions.data?.subscriptions.find((sub) => sub.id === id)?.title ?? id;
   const knownState = knownSelectionState(facts.data?.selection_state);
 
   return (
@@ -116,9 +117,9 @@ export function RuntimeModelFacts({ runtime, profile }: { runtime: AgentRuntime;
                   ) : null}
                   {Object.keys(facts.data.run_facts_24h.accounts).length ? (
                     <ul className="mt-1 space-y-0.5 text-caption" aria-label={t(($) => $.facts.accounts_24h)}>
-                      {Object.entries(facts.data.run_facts_24h.accounts).map(([key, runs]) => (
-                        <li key={key} className="flex justify-between gap-3">
-                          <span className="min-w-0 break-words">{titleOf(key)}</span>
+                      {Object.entries(facts.data.run_facts_24h.accounts).map(([id, runs]) => (
+                        <li key={id} className="flex justify-between gap-3">
+                          <span className="min-w-0 break-words">{titleOf(id)}</span>
                           <span className="tabular-nums text-muted-foreground">{runs}</span>
                         </li>
                       ))}

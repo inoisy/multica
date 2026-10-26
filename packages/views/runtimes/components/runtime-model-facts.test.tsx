@@ -38,7 +38,7 @@ function usage(over = {}) {
 function facts(over = {}) {
   return {
     runtime_id: "rt-1", selection_state: "active", machine_status: "offline",
-    run_facts_24h: { since: "", until: "", runs: 9, unknown_account_runs: 2, accounts: { "acc-a": 7 } }, ...over,
+    run_facts_24h: { since: "", until: "", runs: 9, unknown_account_runs: 2, accounts: { "id-acc-a": 7 } }, ...over,
   };
 }
 
@@ -56,7 +56,7 @@ describe("RuntimeModelFacts", () => {
     vi.clearAllMocks();
     api.getRuntimeModelUsage.mockResolvedValue(usage());
     api.getRuntimeRunFacts.mockResolvedValue(facts());
-    api.listSubscriptions.mockResolvedValue({ can_manage: false, subscriptions: [{ key: "acc-a", title: "Plan A" }] });
+    api.listSubscriptions.mockResolvedValue({ can_manage: false, subscriptions: [{ id: "id-acc-a", key: "acc-a", title: "Plan A" }] });
   });
 
   it("keeps the selection state, the machine and the runs apart, and names the accounts with the unconfirmed ones counted separately", async () => {

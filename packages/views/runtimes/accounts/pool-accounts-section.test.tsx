@@ -11,9 +11,11 @@ const api = vi.hoisted(() => ({
   listSubscriptions: vi.fn(),
   listPools: vi.fn(),
   listWorkspaces: vi.fn(),
+  listRuntimes: vi.fn(),
   updatePool: vi.fn(),
   setPoolGrants: vi.fn(),
 }));
+vi.mock("@multica/core/hooks", () => ({ useWorkspaceId: () => "ws-1" }));
 vi.mock("@multica/core/paths", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@multica/core/paths")>()),
   useWorkspacePaths: () => ({ runtimes: () => "/acme/runtimes" }),
@@ -63,6 +65,7 @@ describe("PoolAccountsSection", () => {
     api.listSubscriptions.mockResolvedValue({ can_manage: true, subscriptions: [sub("a"), sub("b"), sub("c")] });
     api.listPools.mockResolvedValue({ can_manage: true, pools: [pool(["a", "b"], 5)] });
     api.listWorkspaces.mockResolvedValue([{ id: "ws-1", name: "STT" }]);
+    api.listRuntimes.mockResolvedValue([]);
   });
 
   it("renders nothing for an environment without a pool", () => {

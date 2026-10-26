@@ -11,6 +11,7 @@ import { Checkbox } from "@multica/ui/components/ui/checkbox";
 import { Input } from "@multica/ui/components/ui/input";
 import { useT } from "../../i18n";
 import { useAvailabilityText } from "../../model-profiles";
+import { PoolEnvironmentLinks } from "./pool-environments";
 import { SpendOrderField } from "./spend-order-field";
 import { SubscriptionOrderList } from "./subscription-order-list";
 import { VerdictBadge } from "./verdict-badge";
@@ -132,8 +133,6 @@ export function PoolEditor({
   const toggleWorkspace = (id: string, checked: boolean) =>
     setDraft({ ...draft, workspaceIds: checked ? [...draft.workspaceIds, id] : draft.workspaceIds.filter((x) => x !== id) });
 
-  const environments = pool.environments;
-
   return (
     <div className="min-w-0 space-y-4" data-testid="pool-editor" data-revision={pool.revision}>
       <div className="flex flex-wrap items-center gap-2">
@@ -205,11 +204,9 @@ export function PoolEditor({
               : workspaces.filter((ws) => pool.workspace_ids.includes(ws.id)).map((ws) => ws.name).join(", ") || "—"}
           </p>
         )}
-        <p className="text-caption text-muted-foreground">
-          {environments.length
-            ? t(($) => $.subscriptions.pool.environments, { names: environments.map((env) => env.display_name).join(", ") })
-            : t(($) => $.subscriptions.pool.no_environments)}
-        </p>
+        <div className="text-caption">
+          <PoolEnvironmentLinks pool={pool} />
+        </div>
       </fieldset>
 
       {canManage ? (

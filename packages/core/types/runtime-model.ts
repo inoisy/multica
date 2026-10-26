@@ -45,7 +45,7 @@ export interface RunFacts {
   runs: number;
   /** Runs the daemon did not confirm an account for: counted apart, never assigned by pool order. */
   unknown_account_runs: number;
-  /** Subscription key → runs in the window. */
+  /** Subscription id (not its key) → runs in the window. */
   accounts: Record<string, number>;
 }
 

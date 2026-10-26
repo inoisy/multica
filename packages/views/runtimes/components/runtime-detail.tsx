@@ -29,6 +29,7 @@ import {
   useWorkspacePresenceMap,
 } from "@multica/core/agents";
 import { useWorkspacePaths } from "@multica/core/paths";
+import { runtimeModelUsageOptions } from "@multica/core/runtimes/queries";
 import { Button } from "@multica/ui/components/ui/button";
 import {
   Tooltip,
@@ -130,8 +131,12 @@ export function RuntimeDetail({
     ? isAdmin && !!runtimeProfile
     : canEditRuntime;
 
-  const servingAgents = agents.filter(
-    (a) => a.runtime_id === runtime.id && !a.archived_at,
+  // Who the environment serves is decided by the rows of the profiles that
+  // select it, not by the agent's projected first row.
+  const usage = useQuery(runtimeModelUsageOptions(runtime.id));
+  const servingIds = usage.data ? new Set(usage.data.serving_agents.map((agent) => agent.id)) : null;
+  const servingAgents = agents.filter((a) =>
+    !a.archived_at && (servingIds ? servingIds.has(a.id) : a.runtime_id === runtime.id),
   );
 
   const deleteDestination = afterDeleteHref ?? paths.runtimes();
