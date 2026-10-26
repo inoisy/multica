@@ -1989,7 +1989,7 @@ func runIssueStatus(cmd *cobra.Command, args []string) error {
 	}
 	var result map[string]any
 	if err := client.PutJSON(ctx, "/api/issues/"+issueRef.ID, body, &result); err != nil {
-		return fmt.Errorf("update status: %w", err)
+		return issueStatusRequestError(err)
 	}
 
 	if duplicateOf != "" {
@@ -2007,6 +2007,18 @@ func runIssueStatus(cmd *cobra.Command, args []string) error {
 		return cli.PrintJSON(os.Stdout, result)
 	}
 	return nil
+}
+
+// issueStatusRequestError names why a status write was refused. A pin is
+// refused to every run but the running one of the issue's current assignee, so
+// a coordinator handing off a sub-issue from its own issue read the generic
+// "ask an administrator to grant access" and went looking for wider rights
+// (STT-433). The branch is on the server's stable code.
+func issueStatusRequestError(err error) error {
+	if cli.ServerErrorCode(err) == "workflow_pin_not_step_run" {
+		return cli.WithUserMessage("only the running run of this issue's current assignee may pin a commit: hand the step off with --commit from that run, or change the status without --commit and leave the pin to it; wider rights do not help", err)
+	}
+	return fmt.Errorf("update status: %w", err)
 }
 
 // workflowArtifactFlags reads --commit/--repo/--branch: the code revision a
