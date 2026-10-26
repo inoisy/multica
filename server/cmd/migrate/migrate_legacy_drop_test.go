@@ -5,10 +5,10 @@ import (
 	"testing"
 )
 
-// Migration 616 removes the schema the single model source and the pools
+// Migration 617 removes the schema the single model source and the pools
 // replaced. It runs on the schema of 614 with the leftovers it has to clear.
 
-const dropLegacyMigration = 616
+const dropLegacyMigration = 617
 
 const (
 	legacyTables  = "agent_model_option,subscription_limit_backup,model_truth_backup"
@@ -46,7 +46,7 @@ func TestDropLegacyMigrationRemovesTheOldSchema(t *testing.T) {
 	r := seedLegacyDrop(t)
 	for _, table := range strings.Split(legacyTables, ",") {
 		if !r.hasTable(table) {
-			t.Fatalf("%s must exist before 616", table)
+			t.Fatalf("%s must exist before 617", table)
 		}
 	}
 	if err := r.run("up", dropLegacyMigration, dropLegacyMigration); err != nil {
@@ -54,16 +54,16 @@ func TestDropLegacyMigrationRemovesTheOldSchema(t *testing.T) {
 	}
 	for _, table := range strings.Split(legacyTables, ",") {
 		if r.hasTable(table) {
-			t.Errorf("table %s survived 616", table)
+			t.Errorf("table %s survived 617", table)
 		}
 	}
 	for _, column := range strings.Split(legacyColumns, ",") {
 		if r.hasColumn(column) {
-			t.Errorf("column %s survived 616", column)
+			t.Errorf("column %s survived 617", column)
 		}
 	}
 	if r.hasIndex("runtime_profile_workspace_share_key_uidx") {
-		t.Error("the share_key index survived 616")
+		t.Error("the share_key index survived 617")
 	}
 	// What the pools stand on stays.
 	for _, table := range []string{"subscription_pool", "subscription_pool_member", "subscription_pool_grant"} {
