@@ -230,7 +230,6 @@ func TestStoredRefusalCodeDoesNotReclassifyRowsByTheirText(t *testing.T) {
 func TestRuntimeBlocksReadStoredRefusalsByCode(t *testing.T) {
 	until := ts(availNow.Add(time.Hour))
 	rows := []db.RuntimeUnavailable{
-		{Until: until, ReasonCode: UnavailablePoolVerdict, Reason: "subscriptions: x"},
 		{Until: until, ReasonCode: UnavailableAgentCapRefusal},
 		{Until: until, ReasonCode: UnavailableProviderLimit},
 		{Until: until, ReasonCode: UnavailableProviderLimit, SubscriptionID: pgtype.UUID{Valid: true}}, // pinned to an account

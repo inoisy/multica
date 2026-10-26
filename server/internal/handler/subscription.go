@@ -804,7 +804,6 @@ func (h *Handler) CreateSubscription(w http.ResponseWriter, r *http.Request) {
 		CredentialPath: credential,
 		Windows:        windowsJSON,
 		Caps:           capsJSON,
-		Reserve:        0,
 		Settings:       settingsJSON,
 		AccountGroup:   strings.TrimSpace(deref(req.AccountGroup)),
 		DisabledUntil:  disabledUntil,
@@ -990,7 +989,6 @@ func (h *Handler) UpdateSubscription(w http.ResponseWriter, r *http.Request) {
 			caps = foldReserve(windows, caps, *req.Reserve)
 			params.Caps, _ = json.Marshal(caps)
 		}
-		params.Reserve = pgtype.Int4{Int32: 0, Valid: true}
 	}
 	if req.Settings != nil {
 		if err := validateSubscriptionSettings(*req.Settings, ""); err != nil {
