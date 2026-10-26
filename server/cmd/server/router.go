@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -14,6 +15,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
@@ -25,6 +27,7 @@ import (
 	"github.com/multica-ai/multica/server/internal/entitlement"
 	"github.com/multica-ai/multica/server/internal/events"
 	"github.com/multica-ai/multica/server/internal/featureflags"
+	"github.com/multica-ai/multica/server/internal/gitca"
 	"github.com/multica-ai/multica/server/internal/handler"
 	"github.com/multica-ai/multica/server/internal/integrations/channel"
 	"github.com/multica-ai/multica/server/internal/integrations/channel/engine"
@@ -424,26 +427,29 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 	origins := allowedOrigins()
 
 	signupConfig := handler.Config{
-		AllowSignup:              os.Getenv("ALLOW_SIGNUP") != "false",
-		AllowedEmails:            splitAndTrim(os.Getenv("ALLOWED_EMAILS")),
-		AllowedEmailDomains:      splitAndTrim(os.Getenv("ALLOWED_EMAIL_DOMAINS")),
-		DisableWorkspaceCreation: os.Getenv("DISABLE_WORKSPACE_CREATION") == "true",
-		VCSIntegrationEnabled:    os.Getenv("MULTICA_VCS_INTEGRATION_ENABLED") == "true",
-		PublicURL:                strings.TrimRight(strings.TrimSpace(os.Getenv("MULTICA_PUBLIC_URL")), "/"),
-		AppURL:                   appURLFromEnv(),
-		TrustedProxies:           parseTrustedProxies(os.Getenv("MULTICA_TRUSTED_PROXIES")),
-		CloudURL:                 strings.TrimSpace(os.Getenv("MULTICA_CLOUD_URL")),
-		CloudTimeout:             35 * time.Second,
-		AttachmentDownloadMode:   os.Getenv("ATTACHMENT_DOWNLOAD_MODE"),
-		AttachmentDownloadURLTTL: envDuration("ATTACHMENT_DOWNLOAD_URL_TTL", 30*time.Minute),
-		AttachmentFrameAncestors: origins,
-		PluginSurfaceOrigin:      strings.TrimRight(strings.TrimSpace(os.Getenv("MULTICA_PLUGIN_SURFACE_ORIGIN")), "/"),
-		LLMAPIKey:                strings.TrimSpace(os.Getenv("MULTICA_LLM_API_KEY")),
-		LLMBaseURL:               strings.TrimSpace(os.Getenv("MULTICA_LLM_BASE_URL")),
-		LLMDefaultModel:          strings.TrimSpace(os.Getenv("MULTICA_LLM_DEFAULT_MODEL")),
-		LLMMaxRetries:            opts.LLMMaxRetries,
-		LLMDisableThinking:       opts.LLMDisableThinking,
-		ServerVersion:            normalizeServerVersion(version),
+		InstanceAdmins:                 splitAndTrim(os.Getenv("MULTICA_INSTANCE_ADMINS")),
+		AllowSignup:                    os.Getenv("ALLOW_SIGNUP") != "false",
+		AllowedEmails:                  splitAndTrim(os.Getenv("ALLOWED_EMAILS")),
+		AllowedEmailDomains:            splitAndTrim(os.Getenv("ALLOWED_EMAIL_DOMAINS")),
+		DisableWorkspaceCreation:       os.Getenv("DISABLE_WORKSPACE_CREATION") == "true",
+		WorkspaceCreationAllowedEmails: splitAndTrim(os.Getenv("WORKSPACE_CREATION_ALLOWED_EMAILS")),
+		VCSIntegrationEnabled:          os.Getenv("MULTICA_VCS_INTEGRATION_ENABLED") == "true",
+		PublicURL:                      strings.TrimRight(strings.TrimSpace(os.Getenv("MULTICA_PUBLIC_URL")), "/"),
+		AppURL:                         appURLFromEnv(),
+		TrustedProxies:                 parseTrustedProxies(os.Getenv("MULTICA_TRUSTED_PROXIES")),
+		CloudURL:                       strings.TrimSpace(os.Getenv("MULTICA_CLOUD_URL")),
+		CloudTimeout:                   35 * time.Second,
+		AttachmentDownloadMode:         os.Getenv("ATTACHMENT_DOWNLOAD_MODE"),
+		AttachmentDownloadURLTTL:       envDuration("ATTACHMENT_DOWNLOAD_URL_TTL", 30*time.Minute),
+		AttachmentFrameAncestors:       origins,
+		PluginSurfaceOrigin:            strings.TrimRight(strings.TrimSpace(os.Getenv("MULTICA_PLUGIN_SURFACE_ORIGIN")), "/"),
+		LLMAPIKey:                      strings.TrimSpace(os.Getenv("MULTICA_LLM_API_KEY")),
+		LLMBaseURL:                     strings.TrimSpace(os.Getenv("MULTICA_LLM_BASE_URL")),
+		LLMDefaultModel:                strings.TrimSpace(os.Getenv("MULTICA_LLM_DEFAULT_MODEL")),
+		LLMMaxRetries:                  opts.LLMMaxRetries,
+		LLMDisableThinking:             opts.LLMDisableThinking,
+		ServerVersion:                  normalizeServerVersion(version),
+		GitExtraCACerts:                gitca.Load(slog.Default()),
 	}
 	h := handler.New(queries, pool, hub, bus, emailSvc, store, cfSigner, analyticsClient, signupConfig, daemonHub)
 	invitationRateLimits := handler.DefaultInvitationRateLimits()
@@ -512,6 +518,7 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 		h.LocalSkillListStore = handler.NewRedisLocalSkillListStore(rdb)
 		h.LocalSkillImportStore = handler.NewRedisLocalSkillImportStore(rdb)
 		h.LivenessStore = handler.NewRedisLivenessStore(rdb)
+		h.QoderRateLimiter = handler.NewRedisWebhookRateLimiter(rdb, handler.WebhookRateLimit{Limit: 6, Window: time.Minute})
 		h.WebhookRateLimiter = handler.NewRedisWebhookRateLimiter(rdb, handler.DefaultWebhookRateLimit())
 		h.WebhookIPRateLimiter = handler.NewRedisWebhookIPRateLimiter(rdb, handler.DefaultWebhookIPRateLimit())
 		h.WebhookAbsoluteIPRateLimiter = handler.NewRedisWebhookAbsoluteIPRateLimiter(rdb, handler.DefaultWebhookAbsoluteIPRateLimit())
@@ -615,10 +622,11 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 				patcher.Register(bus)
 
 				// Typing indicator: shows a "processing" reaction on the user's
-				// message while the agent is working, then removes it before the
-				// reply is sent. Best-effort; failures are logged only.
+				// message while the agent is working. Terminal cleanup has its own
+				// budget, with a durable retry worker for failed or missed cleanup.
 				typingIndicator := lark.NewTypingIndicatorManager(larkClient, installSvc, cs, slog.Default())
 				patcher.SetTypingIndicatorManager(typingIndicator)
+				h.LarkTyping = typingIndicator
 
 				// Inbound pipeline seams: lark_inbound_audit logger and the
 				// shared channel-agnostic chat-session service. They back the
@@ -978,7 +986,11 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 					Binding: wecomBinding,
 					Senders: wecomSenders,
 					AppURL:  appURLFromEnv(),
-					Logger:  slog.Default(),
+					// Without this the replier has no way to read a reader's
+					// profile language and every notice falls back to the
+					// deployment's, which is the whole of what this is for.
+					Languages: queries,
+					Logger:    slog.Default(),
 				})
 
 				// Wecom shares the engine.ChatSession (channel_type-keyed) so
@@ -1444,6 +1456,7 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 
 	// WebSocket
 	mc := &membershipChecker{queries: queries}
+	hub.SetMembershipChecker(mc)
 	pr := &patResolver{queries: queries, cache: patCache}
 	slugResolver := realtime.SlugResolver(func(ctx context.Context, slug string) (string, error) {
 		ws, err := queries.GetWorkspaceBySlug(ctx, slug)
@@ -1558,6 +1571,11 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 		r.Get("/workspaces", h.ListDaemonWorkspaces)
 		r.Get("/workspaces/{workspaceId}/repos", h.GetDaemonWorkspaceRepos)
 		r.Get("/workspaces/{workspaceId}/runtime-profiles", h.DaemonListRuntimeProfiles)
+		// Subscriptions the workspace's runtimes spend: the daemon probes them
+		// and reports usage and the state of each credential file.
+		r.Get("/workspaces/{workspaceId}/subscriptions", h.DaemonListSubscriptions)
+		r.Post("/workspaces/{workspaceId}/subscription-usage", h.DaemonReportSubscriptionUsage)
+		r.Post("/runtimes/{runtimeId}/subscription-logins/{loginId}/result", h.DaemonReportSubscriptionLogin)
 
 		// Agent-triggered plugin hooks. The daemon's local MCP server calls
 		// this when an agent picks one of its tools; the server makes the
@@ -1583,6 +1601,7 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 
 		r.Get("/tasks/{taskId}/status", h.GetTaskStatus)
 		r.Post("/tasks/{taskId}/start", h.StartTask)
+		r.Post("/tasks/{taskId}/account", h.ConfirmTaskAccount)
 		r.Post("/tasks/{taskId}/supplements/claim", h.ClaimTaskSupplement)
 		r.Post("/tasks/{taskId}/supplements/{commentId}/ack", h.AckTaskSupplement)
 		r.Post("/tasks/{taskId}/wait-local-directory", h.MarkTaskWaitingLocalDirectory)
@@ -1650,15 +1669,11 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 		r.Patch("/api/me/onboarding", h.PatchOnboarding)
 		r.Post("/api/me/onboarding/complete", h.CompleteOnboarding)
 		r.Post("/api/me/onboarding/cloud-waitlist", h.JoinCloudWaitlist)
-		// DEPRECATED — shim routes for desktop < v3 during the rollout
-		// window. v3 frontend creates the Helper agent + starter issue
-		// via generic CreateAgent / CreateIssue and only calls /complete
-		// here. Remove once X-Client-Version telemetry confirms zero
-		// pre-v3 desktops are still calling these. Handlers live in
-		// server/internal/handler/onboarding_shim.go.
-		r.Post("/api/me/onboarding/runtime-bootstrap", h.BootstrapOnboardingRuntime)
-		r.Post("/api/me/onboarding/no-runtime-bootstrap", h.BootstrapOnboardingNoRuntime)
-		r.Post("/api/cli-token", h.IssueCliToken)
+		// Credential minting is human-only (MUL-8154): an agent task token
+		// (mat_) or cloud-node PAT (mcn_) authenticates as its owner, so
+		// without this guard a prompt-injected agent could trade its scoped,
+		// short-lived credential for a 30-day session JWT.
+		r.With(handler.RequireHumanActor).Post("/api/cli-token", h.IssueCliToken)
 		// Sliding session renewal for clients that hold the session as a
 		// string (Desktop, mobile). Browsers get theirs re-issued inline by
 		// middleware.Auth and never call this (MUL-7436).
@@ -1686,6 +1701,38 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 		// because they are JSON-API consumers that always have
 		// workspace context.
 		r.Get("/api/attachments/{id}/download", h.DownloadAttachment)
+		// Markdown links may point to an attachment in a different workspace.
+		// Resolve that workspace from the row and check membership before minting
+		// a fresh URL; the workspace-scoped metadata route stays unchanged.
+		r.Get("/api/attachments/{id}/download-metadata", h.GetAttachmentForDownload)
+
+		// Instance-level subscriptions. Readable by members of any workspace;
+		// every write is gated inside the handler on MULTICA_INSTANCE_ADMINS.
+		r.Route("/api/subscriptions", func(r chi.Router) {
+			r.Get("/", h.ListSubscriptions)
+			r.Post("/", h.CreateSubscription)
+			r.Get("/discrepancies", h.ListSubscriptionDiscrepancies)
+			r.Get("/{key}", h.GetSubscription)
+			r.Patch("/{key}", h.UpdateSubscription)
+			r.Delete("/{key}", h.DeleteSubscription)
+			r.Get("/{key}/usage", h.ListSubscriptionUsage)
+			r.Post("/{key}/usage", h.RecordSubscriptionUsage)
+			r.Post("/{key}/login", h.StartSubscriptionLogin)
+			r.Get("/{key}/login", h.GetSubscriptionLogin)
+			r.Delete("/{key}/login", h.CancelSubscriptionLogin)
+		})
+		r.Post("/api/runtime-pools", h.CreateRuntimePool)
+		// Pools of accounts: readable by members of any workspace for the
+		// workspaces they are in; every write is gated inside the handler on
+		// MULTICA_INSTANCE_ADMINS.
+		r.Route("/api/pools", func(r chi.Router) {
+			r.Get("/", h.ListPools)
+			r.Post("/", h.CreatePool)
+			r.Get("/{id}", h.GetPool)
+			r.Patch("/{id}", h.UpdatePool)
+			r.Delete("/{id}", h.DeletePool)
+			r.Put("/{id}/grants", h.SetPoolGrants)
+		})
 
 		r.Route("/api/workspaces", func(r chi.Router) {
 			r.Get("/", h.ListWorkspaces)
@@ -1707,11 +1754,19 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 					// for the same reason as GitHub installations; connect /
 					// disconnect are admin-gated in the group below.
 					r.Get("/vcs/connections", h.ListVCSConnections)
+					r.Get("/qoder", h.GetQoderConnection)
+					r.Get("/qoder/agents", h.ListQoderAgents)
 					// Custom runtime profiles — listing/reading is member-visible
 					// (the Runtime page renders for everyone; create/edit/delete
 					// are admin-gated below).
 					r.Get("/runtime-profiles", h.ListRuntimeProfiles)
 					r.Get("/runtime-profiles/{profileId}", h.GetRuntimeProfile)
+					// Subscriptions a runtime spends. Reading is member-visible
+					// (subs-run reads it with the run's task token); changing it
+					// is gated inside the handler on instance admins, not on the
+					// workspace role.
+					r.Get("/runtime-profiles/{profileId}/subscriptions", h.GetRuntimeProfileSubscriptions)
+					r.Put("/runtime-profiles/{profileId}/subscriptions", h.SetRuntimeProfileSubscriptions)
 					// The workspace MCP library — member-visible so an agent
 					// owner can see what is available to add to their agent.
 					// The payload is names and transports only; the stored
@@ -1792,6 +1847,12 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 					r.Delete("/github/installations/{installationId}", h.DeleteGitHubInstallation)
 					// VCS connect / disconnect / webhook regeneration (admin-only).
 					r.Post("/vcs/connections", h.ConnectVCS)
+					r.Put("/qoder", h.SaveQoderConnection)
+					r.Post("/qoder/check", h.CheckQoderConnection)
+					r.Post("/qoder/environments", h.ListQoderEnvironments)
+					r.Post("/qoder/stop", h.StopQoderConnection)
+					r.Post("/qoder/resume", h.ResumeQoderConnection)
+					r.Delete("/qoder", h.DisconnectQoderConnection)
 					r.Post("/vcs/connections/{connectionId}/rotate-webhook", h.RotateVCSConnectionWebhook)
 					r.Delete("/vcs/connections/{connectionId}", h.DeleteVCSConnection)
 				})
@@ -1909,7 +1970,12 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 		r.Post("/api/invitations/{id}/decline", h.DeclineInvitation)
 		r.Post("/api/share-links/join", h.JoinByShareLink)
 
+		// PAT management is human-only (MUL-8154): a machine credential must
+		// not mint a non-expiring PAT, enumerate the owner's PATs, or revoke
+		// them. /current/renew already accepts only mul_ PATs, which are human
+		// credentials, so the group-wide guard does not change its behavior.
 		r.Route("/api/tokens", func(r chi.Router) {
+			r.Use(handler.RequireHumanActor)
 			r.Get("/", h.ListPersonalAccessTokens)
 			r.Post("/", h.CreatePersonalAccessToken)
 			r.Post("/current/renew", h.RenewCurrentPersonalAccessToken)
@@ -1984,6 +2050,16 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 			// Assignee frequency
 			r.Get("/api/assignee-frequency", h.GetAssigneeFrequency)
 
+			// Local search index sync for Web/Desktop (MUL-7754). Human clients
+			// only: agents search through /api/issues/search.
+			r.Route("/api/search-index", func(r chi.Router) {
+				r.Use(handler.RequireHumanActor)
+				r.Use(h.RequireLocalSearchIndex)
+				r.Get("/manifest", h.GetSearchIndexManifest)
+				r.Get("/snapshot", h.GetSearchIndexSnapshot)
+				r.Post("/changes", h.ListSearchIndexChanges)
+			})
+
 			// Issues
 			r.Route("/api/issues", func(r chi.Router) {
 				r.Get("/limit-usage", h.GetIssueLimitUsage)
@@ -2012,6 +2088,8 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 					r.Post("/comments", h.CreateComment)
 					r.Get("/comments", h.ListComments)
 					r.Get("/timeline", h.ListTimeline)
+					r.Get("/workflow-handoff", h.PreviewWorkflowHandoff)
+					r.Get("/workflow-artifact", h.GetIssueWorkflowArtifact)
 					r.Get("/subscribers", h.ListIssueSubscribers)
 					r.Post("/subscribe", h.SubscribeToIssue)
 					r.Post("/unsubscribe", h.UnsubscribeFromIssue)
@@ -2028,6 +2106,14 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 					r.Get("/wakeups/{wakeupID}/runs", h.ListIssueWakeupRuns)
 					r.Get("/system-wakeups", h.ListIssueSystemWakeups)
 					r.Put("/system-wakeups/{rule}", h.UpdateIssueSystemWakeup)
+					r.Get("/model-profile", h.GetIssueModelProfile)
+					r.Put("/model-profile", h.SetIssueModelProfile)
+					r.Get("/conveyor", h.GetIssueConveyor)
+					r.Put("/conveyor", h.ApplyIssueConveyor)
+					r.Get("/stage-dispatch", h.GetIssueStageDispatch)
+					r.Put("/stage-dispatch", h.SetIssueStageDispatch)
+					r.Get("/conveyor/events", h.ListIssueConveyorEvents)
+					r.Post("/conveyor/results", h.SubmitIssueConveyorResult)
 					r.Get("/active-task", h.GetActiveTaskForIssue)
 					r.Post("/tasks/{taskId}/cancel", h.CancelTask)
 					r.With(handler.RequireHumanActor).Post("/tasks/{taskId}/supplements", h.CreateTaskSupplement)
@@ -2106,6 +2192,22 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 				})
 			})
 
+			// Project workflows (MUL-7420). Reads and creates are open to any
+			// member; edits and deletes are gated inside the handlers to the
+			// workflow's owner and workspace owners/admins (MUL-8120), and
+			// switching a project's workflow to admins and the project's lead.
+			r.Route("/api/issue-workflows", func(r chi.Router) {
+				r.Get("/", h.ListIssueWorkflows)
+				r.Post("/", h.CreateIssueWorkflow)
+				r.Route("/{id}", func(r chi.Router) {
+					r.Get("/", h.GetIssueWorkflow)
+					r.Patch("/", h.UpdateIssueWorkflow)
+					r.Delete("/", h.DeleteIssueWorkflow)
+					r.Put("/handoffs/{status}", h.SetIssueWorkflowHandoff)
+					r.Post("/brief", h.PreviewIssueWorkflowBrief)
+				})
+			})
+
 			// Projects
 			r.Route("/api/projects", func(r chi.Router) {
 				r.Get("/search", h.SearchProjects)
@@ -2115,12 +2217,16 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 					r.Get("/", h.GetProject)
 					r.Put("/", h.UpdateProject)
 					r.Delete("/", h.DeleteProject)
+					r.Post("/workflow", h.SetProjectWorkflow)
 					r.Get("/resources", h.ListProjectResources)
 					r.Post("/resources", h.CreateProjectResource)
 					r.Put("/resources/{resourceId}", h.UpdateProjectResource)
 					r.Delete("/resources/{resourceId}", h.DeleteProjectResource)
 				})
 			})
+
+			// Epics whose stages the server dispatches (conveyor board)
+			r.Get("/api/stage-dispatch", h.ListStageDispatch)
 
 			// Squads
 			r.Route("/api/squads", func(r chi.Router) {
@@ -2259,6 +2365,17 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 					// internal/handler/agent_env.go.
 					r.Get("/env", h.GetAgentEnv)
 					r.Put("/env", h.UpdateAgentEnv)
+					// Model list of the agent: profile, own list, disallowed
+					// tools, and what the server chooses for its next run.
+					r.Get("/models", h.GetAgentModels)
+					r.Put("/models", h.UpdateAgentModels)
+					// Personal profile of the agent: made from a shared one,
+					// edited, or one model only; DELETE returns the agent to the
+					// shared profile it was made from.
+					r.Post("/models/personal", h.CreateAgentPersonalProfile)
+					r.Put("/models/personal", h.SetAgentPersonalProfile)
+					r.Delete("/models/personal", h.ResetAgentPersonalProfile)
+					r.Put("/models/single", h.SetAgentSingleModel)
 				})
 			})
 
@@ -2306,6 +2423,22 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 				r.Get("/failures/by-agent", h.GetDashboardFailuresByAgent)
 			})
 
+			// Model profiles of the workspace: agents and issues reference
+			// them; an edit reaches every referencing run from its next claim.
+			r.Route("/api/model-profiles", func(r chi.Router) {
+				r.Get("/", h.ListModelProfiles)
+				r.Post("/", h.CreateModelProfile)
+				r.Post("/import", h.ImportModelProfiles)
+				r.Route("/{id}", func(r chi.Router) {
+					r.Get("/", h.GetModelProfile)
+					r.Put("/", h.UpdateModelProfile)
+					r.Delete("/", h.DeleteModelProfile)
+					r.Post("/preview", h.PreviewModelProfile)
+				})
+			})
+			r.Get("/api/runtime-unavailable", h.ListRuntimeUnavailable)
+			r.Post("/api/runtime-unavailable/recheck", h.RecheckRuntimeUnavailable)
+
 			// Runtimes
 			r.Route("/api/runtimes", func(r chi.Router) {
 				r.Get("/", h.ListAgentRuntimes)
@@ -2332,6 +2465,11 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 					// the strict DELETE refused with
 					// `runtime_has_active_agents` and the user confirmed.
 					r.Post("/unbind-agents-and-delete", h.UnbindAgentsAndDeleteRuntime)
+					// Confirmed public-to-private transition. The normal PATCH
+					// returns a structured plan when teammates still have agents
+					// or active work on the runtime; this route applies that plan
+					// atomically after the owner reviews it.
+					r.Post("/revoke-workspace-access", h.RevokeRuntimeWorkspaceAccess)
 					// Legacy path for installed clients built against the
 					// archive-and-delete contract (MUL-5559 renamed the
 					// behaviour, not just the route). Same handler.
@@ -2531,12 +2669,49 @@ type membershipChecker struct {
 	queries *db.Queries
 }
 
-func (mc *membershipChecker) IsMember(ctx context.Context, userID, workspaceID string) bool {
+func (mc *membershipChecker) IsMember(ctx context.Context, userID, workspaceID string) (bool, error) {
 	_, err := mc.queries.GetMemberByUserAndWorkspace(ctx, db.GetMemberByUserAndWorkspaceParams{
 		UserID:      parseUUID(userID),
 		WorkspaceID: parseUUID(workspaceID),
 	})
-	return err == nil
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	return err == nil, err
+}
+
+func (mc *membershipChecker) Members(ctx context.Context, identities []realtime.MembershipIdentity) (map[realtime.MembershipIdentity]bool, error) {
+	params := db.GetRealtimeMembershipsParams{}
+	for _, identity := range identities {
+		userID, err := util.ParseUUID(identity.UserID)
+		if err != nil {
+			return nil, err
+		}
+		workspaceID, err := util.ParseUUID(identity.WorkspaceID)
+		if err != nil {
+			return nil, err
+		}
+		params.UserIds = append(params.UserIds, userID)
+		params.WorkspaceIds = append(params.WorkspaceIds, workspaceID)
+	}
+	rows, err := mc.queries.GetRealtimeMemberships(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+	type pair struct{ workspaceID, userID pgtype.UUID }
+	current := make(map[pair]bool, len(rows))
+	for _, row := range rows {
+		current[pair{row.WorkspaceID, row.UserID}] = true
+	}
+	// Return the exact request keys, including valid UUID spellings that are
+	// different from the database's canonical lowercase rendering.
+	members := make(map[realtime.MembershipIdentity]bool, len(rows))
+	for i, identity := range identities {
+		if current[pair{params.WorkspaceIds[i], params.UserIds[i]}] {
+			members[identity] = true
+		}
+	}
+	return members, nil
 }
 
 // patResolver implements realtime.PATResolver using database queries.

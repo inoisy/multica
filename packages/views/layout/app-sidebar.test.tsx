@@ -145,6 +145,9 @@ vi.mock("@multica/core/paths", async (importOriginal) => ({
     agents: () => "/acme/agents",
     squads: () => "/acme/squads",
     usage: () => "/acme/usage",
+    conveyor: () => "/acme/conveyor",
+    subscriptions: () => "/acme/subscriptions",
+    modelProfiles: () => "/acme/profiles",
     runtimes: () => "/acme/runtimes",
     skills: () => "/acme/skills",
     settings: () => "/acme/settings",
@@ -166,6 +169,7 @@ vi.mock("@multica/core/api", async (importOriginal) => {
 });
 vi.mock("@multica/core/inbox/queries", () => ({
   inboxUnreadSummaryOptions: () => ({ queryKey: ["inbox", "unread-summary"] }),
+  inboxUnreadSummaryEnabled: (wsId: string | null) => () => !!wsId,
   // The nav badge and the switcher dot read the SAME cross-workspace summary,
   // so the fixture that drives one drives the other.
   useInboxUnreadCount: (currentWsId: string | null) =>
@@ -199,6 +203,7 @@ vi.mock("@tanstack/react-query", async (importOriginal) => ({
     return { isPending: false, mutate: vi.fn() };
   },
   useQuery: ({ queryKey }: { queryKey: readonly unknown[] }) => {
+    if (queryKey[0] === "custom-pages") return { data: { pages: [], can_edit: false } };
     if (queryKey[0] === "pins") return { data: pins.current };
     if (queryKey[0] === "issue") return detail.current;
     if (queryKey[0] === "inbox" && queryKey[1] === "unread-summary") return { data: summary.current };
@@ -433,6 +438,21 @@ describe("personal nav — Chat", () => {
 
     expect(inboxBadge?.animated).toBe(false);
     expect(currentChatBadge?.animated).toBe(false);
+  });
+
+  it("hosts the fork pages under their sections instead of listing them", () => {
+    navigation.current = { pathname: "/acme/profiles" };
+    const agents = render(<AppSidebar />);
+    for (const href of ["/acme/conveyor", "/acme/subscriptions", "/acme/profiles"]) {
+      expect(agents.container.querySelector(`[data-href="${href}"]`)).toBeNull();
+    }
+    expect(agents.container.querySelector('button[data-href="/acme/agents"]')).toHaveAttribute("data-active", "true");
+    agents.unmount();
+
+    navigation.current = { pathname: "/acme/usage" };
+    const analytics = render(<AppSidebar />);
+    expect(analytics.container.querySelector('button[data-href="/acme/usage"]')).toHaveAttribute("data-active", "true");
+    expect(analytics.container.querySelector('button[data-href="/acme/runtimes"]')).not.toHaveAttribute("data-active", "true");
   });
 
   it("renders a Chat nav link to the workspace chat route", () => {

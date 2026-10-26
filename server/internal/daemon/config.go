@@ -108,6 +108,7 @@ type Config struct {
 	DeviceName                     string
 	RuntimeName                    string
 	CLIVersion                     string                // multica CLI version (e.g. "0.1.13")
+	CLICommit                      string                // full build revision embedded in the running CLI; empty/unknown if unavailable
 	LaunchedBy                     string                // "desktop" when spawned by the Electron app, empty for standalone
 	Profile                        string                // profile name (empty = default)
 	Agents                         map[string]AgentEntry // keyed by provider: claude, codebuddy, codex, copilot, opencode, codearts, deveco, openclaw, hermes, pi, cursor, kimi, reasonix, dsh, kiro, antigravity, qoder, qoderclicn, traecli, grok, qwen, qwenpaw, mcode, dim, zeroclaw (plus built-in runtime identities from agent.BuiltinRuntimes, e.g. omp)
@@ -165,6 +166,18 @@ type Config struct {
 	// prefers a matching, executable override over resolving the profile's
 	// command_name on PATH. nil/empty means "always resolve via PATH".
 	ProfileCommandOverrides map[string]string
+	// RequireVLESS is a host check run before a Claude or Codex subscription
+	// is spent (MULTICA_REQUIRE_VLESS, e.g. /usr/local/bin/require-vless);
+	// empty skips it.
+	RequireVLESS string
+	// CodexAgentsMD is linked as AGENTS.md into every task CODEX_HOME that has
+	// none (MULTICA_CODEX_AGENTS_MD, e.g. /etc/agent-memory/AGENTS.md): Codex
+	// reads shared rules from there. Empty skips it.
+	CodexAgentsMD string
+	// Subscription probe cadence (MULTICA_SUBSCRIPTION_PROBE_INTERVAL,
+	// MULTICA_SUBSCRIPTION_CLAUDE_PROBE_INTERVAL); zero means the defaults.
+	SubscriptionProbeInterval       time.Duration
+	SubscriptionClaudeProbeInterval time.Duration
 }
 
 // Overrides allows CLI flags to override environment variables and defaults.
@@ -265,7 +278,7 @@ func LoadConfig(overrides Overrides) (Config, error) {
 	// can re-run the same discovery on a live daemon (MUL-5439).
 	agents := probeAgentCLIs()
 	if len(agents) == 0 && !overrides.AllowNoAgents {
-		return Config{}, fmt.Errorf("no agent CLI found: install claude, codebuddy, codearts, codex, copilot, opencode, deveco, openclaw, hermes, pi, omp, cursor-agent, kimi, reasonix, dsh, kiro-cli, agy, qodercli, qoderclicn, traecli, grok, qwen, qwenpaw, mcode, dim, or zeroclaw and ensure it is on PATH")
+		return Config{}, fmt.Errorf("no agent CLI found: install claude, codebuddy, codearts, codex, copilot, opencode, deveco, openclaw, hermes, pi, omp, cursor-agent, kimi, reasonix, dsh, kiro-cli, agy, qodercli, qoderclicn, traecli, grok, qwen, qwenpaw, mcode, muse, dim, or zeroclaw and ensure it is on PATH")
 	}
 
 	claudeArgs, err := shellArgsFromEnv("MULTICA_CLAUDE_ARGS")
@@ -333,6 +346,14 @@ func LoadConfig(overrides Overrides) (Config, error) {
 	// MULTICA_AGENT_IDLE_WATCHDOG=0 disables the per-task idle watchdog. We
 	// route 0 through durationFromEnv so the operator can opt out without
 	// patching the binary; any positive duration overrides DefaultAgentIdleWatchdog.
+	subscriptionProbeInterval, err := durationFromEnv("MULTICA_SUBSCRIPTION_PROBE_INTERVAL", 0)
+	if err != nil {
+		return Config{}, err
+	}
+	subscriptionClaudeProbeInterval, err := durationFromEnv("MULTICA_SUBSCRIPTION_CLAUDE_PROBE_INTERVAL", 0)
+	if err != nil {
+		return Config{}, err
+	}
 	agentIdleWatchdog, err := durationFromEnv("MULTICA_AGENT_IDLE_WATCHDOG", DefaultAgentIdleWatchdog)
 	if err != nil {
 		return Config{}, err
@@ -668,6 +689,10 @@ func LoadConfig(overrides Overrides) (Config, error) {
 		QwenArgs:                        qwenArgs,
 		QwenpawArgs:                     qwenpawArgs,
 		ProfileCommandOverrides:         profileCommandOverrides,
+		RequireVLESS:                    strings.TrimSpace(os.Getenv("MULTICA_REQUIRE_VLESS")),
+		CodexAgentsMD:                   strings.TrimSpace(os.Getenv("MULTICA_CODEX_AGENTS_MD")),
+		SubscriptionProbeInterval:       subscriptionProbeInterval,
+		SubscriptionClaudeProbeInterval: subscriptionClaudeProbeInterval,
 	}, nil
 }
 
@@ -973,22 +998,26 @@ func isExecutableFile(path string) bool {
 // doesn't require editing this list by hand.
 var defaultAgentCommandNames = append([]string{
 	"claude", "codex", "opencode", "codearts", "deveco", "openclaw", "hermes",
-	"pi", "cursor-agent", "copilot", "kimi", "reasonix", "dsh", "kiro-cli", "codebuddy", "agy", "qodercli", "qoderclicn", "traecli", "grok", "qwen", "qwenpaw", "mcode", "dim", "zeroclaw",
+	"pi", "cursor-agent", "copilot", "kimi", "reasonix", "dsh", "kiro-cli", "codebuddy", "agy", "qodercli", "qoderclicn", "traecli", "grok", "qwen", "qwenpaw", "mcode", "muse", "dim", "zeroclaw",
 }, agent.BuiltinRuntimeCommands()...)
 
 // codexDesktopAppBundlePaths returns candidate macOS app-bundle locations for
 // the bundled Codex CLI. OpenAI relocated the Desktop app from Codex.app to
-// ChatGPT.app (#5205). Candidates are ordered by install location first
-// (system /Applications before user ~/Applications); within each location the
-// new ChatGPT.app path is tried before the legacy Codex.app path, so updated
-// installs win while older installs still resolve.
+// ChatGPT.app (#5205), then nested the CLI under Resources/codex-cli/bin
+// (#8941). Candidates are ordered by install location first (system
+// /Applications before user ~/Applications). Within each location the current
+// ChatGPT.app nested path is tried before the flat Resources/codex path, which
+// is tried before the legacy Codex.app path, so the newest install wins while
+// older installs still resolve.
 var codexDesktopAppBundlePaths = func() []string {
 	paths := []string{
+		"/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex",
 		"/Applications/ChatGPT.app/Contents/Resources/codex",
 		"/Applications/Codex.app/Contents/Resources/codex",
 	}
 	if home, err := os.UserHomeDir(); err == nil {
 		paths = append(paths,
+			filepath.Join(home, "Applications", "ChatGPT.app", "Contents", "Resources", "codex-cli", "bin", "codex"),
 			filepath.Join(home, "Applications", "ChatGPT.app", "Contents", "Resources", "codex"),
 			filepath.Join(home, "Applications", "Codex.app", "Contents", "Resources", "codex"),
 		)

@@ -203,9 +203,16 @@ func runSquadUpdate(cmd *cobra.Command, args []string) error {
 		v, _ := cmd.Flags().GetString("avatar-url")
 		body["avatar_url"] = v
 	}
+	if cmd.Flags().Changed("route") {
+		v, _ := cmd.Flags().GetString("route")
+		if v == "off" {
+			v = ""
+		}
+		body["route_template"] = v
+	}
 
 	if len(body) == 0 {
-		return fmt.Errorf("no fields to update; use flags like --name, --description, --instructions, --leader")
+		return fmt.Errorf("no fields to update; use flags like --name, --description, --instructions, --leader, --route")
 	}
 
 	var result map[string]any
@@ -523,6 +530,7 @@ func init() {
 	squadUpdateCmd.Flags().String("instructions", "", "New instructions")
 	squadUpdateCmd.Flags().String("leader", "", "New leader agent (name or ID)")
 	squadUpdateCmd.Flags().String("avatar-url", "", "New avatar URL")
+	squadUpdateCmd.Flags().String("route", "", "Default route for issues assigned to the squad, as dev:Agent,qa:Agent,review:Agent,close:Agent (\"off\" clears it)")
 	squadUpdateCmd.Flags().String("output", "json", "Output format: table or json")
 
 	// delete

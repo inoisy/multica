@@ -175,18 +175,84 @@ Deleting a runtime that still has active agents bound to it is refused by defaul
 
 See [Daemon and runtimes](/daemon-runtimes) for how it works and for custom profiles.
 
+## Model profiles and account pools
+
+Agents choose models from a shared workspace profile or their personal profile.
+These commands change the next run; an active run keeps its model and account.
+
+```bash
+multica profile list --kind shared
+multica profile list --kind personal
+multica agent models <agent>
+multica agent models profile <agent> <shared-profile>
+multica agent models personal <agent> --from <shared-profile>
+multica agent models personal <agent> --row 'codex:sol:high' --row 'claude:opus'
+multica agent models single <agent> 'codex:sol:high'
+multica agent models reset <agent>
+```
+
+`personal --from` copies a shared profile on the server. Repeated `--row` replaces
+personal rows; `--when-exhausted <shared-profile|off>` sets their fallback.
+`reset` deletes the personal profile and returns to its shared base atomically.
+If that base was deleted, choose a shared profile first. The legacy `models set`
+command still edits personal rows. `profile list --kind personal` shows each
+owner, base, and whether the rows match or differ.
+
+Pools are shared ordered accounts, granted to workspaces. Pool and grant writes
+require an instance administrator signed in as a person.
+
+```bash
+multica pool list
+multica pool show <pool-id-or-name>
+multica pool create 'Codex accounts' --type codex --subs main,backup
+multica pool set <pool> --add backup --first
+multica pool set <pool> --subs backup,main --order balanced --revision 3
+multica pool grant <pool> --workspaces <workspace-id>,<other-workspace-id>
+multica pool grant <pool> --workspaces=
+```
+
+Create grants to the current workspace by default; `--workspaces` supplies exact
+workspace ids, or `--all-workspaces` includes every workspace and future ones.
+`set --all-workspaces=false` disables the latter before removing explicit grants.
+`set` and `grant` fetch the current revision unless `--revision` is supplied.
+A 409 conflict requires reading the pool again; the CLI does not retry the edit
+against a newer revision. Names must be unambiguous; ids always identify a pool.
+`runtime pool create|show|set` remain compatibility commands; `show` and `set`
+resolve the old runtime name to its pool id and use the same pool mutations.
+`runtime pool list|grant` accept pool references like the top-level commands.
+
+```bash
+multica subscription update main --cap 5h=75 --cap week=90
+multica subscription list
+```
+
+Each quota window has one agent cap. A cap of 75 leaves 25 percent for people;
+an omitted cap means 100. Legacy `--reserve` is accepted with a warning and the
+server folds it into `min(cap, 100-reserve)`, returning `reserve=0`. New commands
+need only `--cap`.
+
+Agent model output and run tables show the confirmed account, or `неизвестен`
+when the daemon/server cannot report it. Availability uses reason codes and
+marks estimated retry times. Unknown codes stay visible as unknown reasons.
+A new daemon confirms the selected account against the saved offer before
+launching a provider CLI. An old server's missing endpoint leaves the account
+unknown; assignment conflicts, access failures and exhausted retries stop launch.
+
 ## Command overview
 
 | Command | Purpose |
 | --- | --- |
 | `issue` | Create, update, assign, and search issues; manage comments, subscribers, labels, properties, and runs |
 | `project` | Manage projects and their resources |
+| `workflow` | Manage ordered status steps, handlers, and project workflow bindings |
 | `label`, `property` | Manage workspace labels and custom properties |
 | `agent`, `skill`, `squad` | Manage agents, skills, and squads |
 | `autopilot` | Manage automations, triggers, and run history |
 | `workspace` | Create, view, and switch workspaces, and invite members |
 | `repo` | Manage workspace repositories and check them out locally |
 | `daemon`, `runtime` | Start and stop the local daemon; view and manage runtimes |
+| `profile` | Manage shared and personal model profiles |
+| `subscription`, `pool` | Manage provider accounts, agent caps, ordered pools and workspace grants |
 | `attachment` | Upload or download attachments |
 | `user profile` | View or update the current user's profile |
 | `auth`, `login`, `setup` | Log in, check auth status, and initialize a connection |
@@ -229,7 +295,7 @@ multica config show
 multica config show --profile staging
 ```
 
-Do not set `MULTICA_DAEMON_PORT` in the host shell, Compose service, or container entrypoint that starts a daemon. The host daemon derives its health port from `--profile` and injects this variable into agent tasks itself. Remove the variable from older startup environments entirely: versions 0.4.22 and 0.4.23 otherwise mistake that shell for a managed task and reject login. Newer versions let guarded human login and `daemon status` recover when the port is the only task signal, but ordinary API and profile-resolving commands intentionally remain fail-closed until the variable is removed.
+Do not set `MULTICA_DAEMON_PORT` in the host shell, Compose service, or container entrypoint that starts a daemon. The host daemon normally derives its health port from `--profile`; if that port cannot be bound, it uses an available loopback port and injects the actual port into agent tasks itself. Remove the variable from older startup environments entirely: versions 0.4.22 and 0.4.23 otherwise mistake that shell for a managed task and reject login. Newer versions let guarded human login and `daemon status` recover when the port is the only task signal, but ordinary API and profile-resolving commands intentionally remain fail-closed until the variable is removed.
 
 When the CLI runs inside a daemon-managed agent task, it does not load or modify these human-owned profile files. Multica API commands authenticate with the task-scoped credential injected by the daemon. `config show` and `config set` use private task-local state; human/local commands such as `login`, `logout`, `setup`, `workspace switch`, local runtime profile path changes, `daemon start` / `stop` / `restart`, `daemon logs`, and `daemon probe-runtimes` are unavailable. `auth status` does not print token material in this context.
 
@@ -249,12 +315,12 @@ The tables below cover every current top-level command, grouped the way the CLI 
 
 | Command | Subcommand | Purpose | Key flags |
 | --- | --- | --- | --- |
-| `issue` | `list` | List issues | `--status`, `--priority`, `--assignee`, `--project`, `--metadata` (repeatable), `--property` (repeatable, `"Name=Value"`; `__none__` matches unset), `--limit`, `--offset`, `--sort` (incl. `property:<name-or-id>`), `--full-id`, `--resolve-properties` (JSON only; rows with property, option and member names beside the stored ids) |
+| `issue` | `list` | List issues | `--status`, `--priority`, `--assignee`, `--project`, `--metadata` (repeatable), `--property` (repeatable, `"Name=Value"` or a comparison such as `"Score>=3"`, `"Due<2026-01-01"`, `"Notes~=text"`; `__none__` matches unset), `--limit`, `--offset`, `--sort` (incl. `property:<name-or-id>`), `--full-id`, `--resolve-properties` (JSON only; rows with property, option and member names beside the stored ids) |
 | | `get <id>` | Show a single issue | `--resolve-properties` (JSON only; rows with property, option and member names beside the stored ids) |
 | | `create` | Create an issue | `--title` (required), `--description` / `--description-stdin` / `--description-file`, `--status`, `--priority`, `--assignee`, `--parent`, `--stage`, `--project`, `--start-date`, `--due-date`, `--attachment` (repeatable) |
-| | `update <id>` | Update issue fields | Same fields as `create`, plus `--position`, `--no-start` |
+| | `update <id>` | Update issue fields | Same fields as `create`, plus `--position`, `--no-start`, `--duplicate-of` |
 | | `assign <id>` | Assign or unassign | `--to` (fuzzy name match against members, agents, and squads), `--to-id`, `--unassign`, `--no-start` |
-| | `status <id> <status>` | Change status | `--no-start` |
+| | `status <id> <status>` | Change status | `--no-start`, `--duplicate-of` |
 | | `reorder <id>` | Move within a column | |
 | | `search <query>` | Search issues | `--limit`, `--include-closed` |
 | | `children <id>` | List sub-issues grouped by stage | |
@@ -272,8 +338,10 @@ The tables below cover every current top-level command, grouped the way the CLI 
 | `project` | `list/get/create/update/delete` | Manage projects | |
 | | `status <id> <status>` | Change project status | |
 | | `resource list/add/update/remove` | Manage project resources | `--type`, `--url`, `--local-path`, `--daemon-id`, `--execution-mode` (`in_place` / `worktree` for a local directory) |
+| | `workflow get/set <project-id>` | Inspect the effective workflow or change the binding | `set`: `--workflow <UUID\|default>` or `--default`, `--dry-run`, `--status-mapping <file>` |
+| `workflow` | `list/get/create/update/delete` | Manage workspace workflows | UUID or `default`; `get --definition` exports writable JSON; `create/update`: `--file`, `--name`, `--description`; `update`: `--dry-run`, `--status-mapping <file>` |
 | `label` | `list/get/create/update/delete` | Manage workspace labels | `list`: `--resource-type` (`issue` or `skill`), `--full-id`; `create`: `--name`, `--color`, `--resource-type` (`issue` or `skill`), `--description` |
-| `property` | `list/get/create/update/archive/unarchive` | Manage workspace custom properties | `create`: `--name`, `--type` (`text`, `number`, `select`, `multi_select`, `date`, `checkbox`, `url`, `actor`, `multi_actor`), `--option` (repeatable, select types only); `list`: `--include-archived`; the type cannot be changed after creation |
+| `property` | `list/get/create/update/archive/unarchive` | Manage workspace custom properties | `create`: `--name`, `--type` (`text`, `number`, `select`, `multi_select`, `date`, `checkbox`, `url`, `actor`, `multi_actor`, `multi_text`, `multi_url`), `--option` (repeatable, select types only); `list`: `--include-archived`; the type cannot be changed after creation |
 | `agent` | `list/get/create/update/archive/restore` | Manage agents | `--name`, `--runtime-id` (required for `create`), `--instructions`, `--conversation-starters`, `--model`, `--thinking-level`, `--mcp-config`, `--permission-mode`, `--max-concurrent-tasks` |
 | | `copy <agent-id>` | Copy into a new agent; the original is untouched | `--name` (defaults to the original name plus ` (copy)`), `--runtime-id` (copying to another runtime also requires `--model`), `--no-skills`; secret configuration such as `custom_env`, `mcp_config`, and `runtime_config` is not copied — re-provide it with the same flags as `create` |
 | | `tasks <id>` | View an agent's runs | |
@@ -310,6 +378,10 @@ The tables below cover every current top-level command, grouped the way the CLI 
 | `runtime` | `list/usage/activity/update/rename/delete` | View and manage runtimes | `delete`: `--cascade` (unbinds bound agents, preserves their data, and cancels their runs) |
 | | `profile list/create/update/delete` | Manage custom runtime profiles | |
 | | `profile set-path/unset-path <profile-id>` | Pin a local executable path (local only, never uploaded to the server) | |
+
+| `subscription` | `list/add/update/usage/login/rm` | Manage provider accounts | `--cap window=percent` (repeatable); people retain `100-cap` percent |
+| `pool` | `list/show/create/set/grant` | Manage shared ordered accounts and workspace grants | `--subs`, `--order`, `--workspaces`, `--all-workspaces`, `--revision` |
+| `profile` | `list/show/create/edit/delete/import` | Manage model profiles | `list --kind shared|personal` |
 
 ### Additional
 

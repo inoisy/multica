@@ -64,11 +64,12 @@ import {
   issueViewContainerKey,
   useActiveIssueViewStore,
 } from "@multica/core/issue-views/active-view-store";
-import { useCurrentWorkspace, useWorkspacePaths, paths } from "@multica/core/paths";
+import { useCurrentWorkspace, useWorkspacePaths, useWorkspaceSlug, paths, type WorkspacePaths } from "@multica/core/paths";
+import { sectionHrefsFor } from "./section-tabs";
 import { workspaceListOptions, myInvitationListOptions, workspaceKeys } from "@multica/core/workspace/queries";
 import { resolvePublicFileUrl } from "@multica/core/workspace/avatar-url";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { inboxUnreadSummaryOptions, useInboxUnreadCount, hasOtherWorkspaceUnread, unreadWorkspaceIds } from "@multica/core/inbox/queries";
+import { inboxUnreadSummaryEnabled, inboxUnreadSummaryOptions, useInboxUnreadCount, hasOtherWorkspaceUnread, unreadWorkspaceIds } from "@multica/core/inbox/queries";
 import { chatSessionsOptions } from "@multica/core/chat/queries";
 import { countUnreadChatMessages } from "@multica/core/chat/unread";
 import { useChatStore } from "@multica/core/chat";
@@ -83,6 +84,7 @@ import { useLogout } from "../auth";
 import { ProjectIcon } from "../projects/components/project-icon";
 import { routeIconForPath } from "./route-icon-components";
 import { useT } from "../i18n";
+import { customPagesOptions } from "../custom-pages";
 import {
   useShortcut,
 } from "@multica/core/shortcuts";
@@ -95,6 +97,11 @@ import { useAppForeground } from "../common/use-app-foreground";
 // sub-pages of itself.
 function isNavActive(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(href + "/");
+}
+
+/** A section entry stays active on the fork pages it hosts (see SectionTabs). */
+function isSectionActive(p: WorkspacePaths, pathname: string, href: string): boolean {
+  return sectionHrefsFor(p, href).some((h) => isNavActive(pathname, h));
 }
 
 // Stable empty arrays for query defaults. Using an inline `= []` default on
@@ -121,6 +128,9 @@ type NavKey =
   | "agents"
   | "squads"
   | "usage"
+  | "conveyor"
+  | "subscriptions"
+  | "modelProfiles"
   | "runtimes"
   | "skills"
   | "settings";
@@ -137,6 +147,9 @@ type NavLabelKey =
   | "agents"
   | "squads"
   | "usage"
+  | "conveyor"
+  | "subscriptions"
+  | "model_profiles"
   | "runtimes"
   | "skills"
   | "settings";
@@ -170,6 +183,42 @@ const utilityNav: { key: NavKey; labelKey: NavLabelKey }[] = [
 
 const NAV_ITEM_CLASS_NAME =
   "text-muted-foreground hover:not-data-active:bg-sidebar-accent/70 data-active:bg-sidebar-accent data-active:text-sidebar-accent-foreground";
+
+/** Workspace links; they are managed in Settings → Pages. */
+function CustomPagesGroup({ pathname }: { pathname: string }) {
+  const { t } = useT("layout");
+  const p = useWorkspacePaths();
+  const { data } = useQuery(customPagesOptions(useWorkspaceSlug()));
+  if (!data?.pages.length) return null;
+  const Icon = routeIconForPath(p.pages());
+  return (
+    <SidebarGroup>
+      <SidebarGroupLabel>{t(($) => $.nav.pages)}</SidebarGroupLabel>
+      <SidebarGroupContent>
+        <SidebarMenu className="gap-0.5">
+          {data.pages.map((page) => {
+            const href = p.customPage(page.id);
+            return (
+              <SidebarMenuItem key={page.id}>
+                <SidebarMenuButton
+                  isActive={isNavActive(pathname, href)}
+                  render={page.mode === "tab"
+                    ? <a href={page.url} target="_blank" rel="noopener noreferrer" />
+                    : <AppLink href={href} />}
+                  className={NAV_ITEM_CLASS_NAME}
+                  title={page.description || undefined}
+                >
+                  <Icon />
+                  <span>{page.title}</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            );
+          })}
+        </SidebarMenu>
+      </SidebarGroupContent>
+    </SidebarGroup>
+  );
+}
 
 function DraftDot() {
   const hasDraft = useIssueDraftStore((s) => s.hasDraft());
@@ -495,7 +544,7 @@ export function AppSidebar({ topSlot, searchSlot, headerClassName, headerStyle }
   // the endpoint resolves through the workspace-member middleware.
   const { data: unreadSummary = EMPTY_INBOX_SUMMARY } = useQuery({
     ...inboxUnreadSummaryOptions(),
-    enabled: !!wsId,
+    enabled: inboxUnreadSummaryEnabled(wsId),
   });
   const otherWorkspaceUnread = React.useMemo(
     () => hasOtherWorkspaceUnread(unreadSummary, wsId),
@@ -864,7 +913,7 @@ export function AppSidebar({ topSlot, searchSlot, headerClassName, headerStyle }
                 {workNav.map((item) => {
                   const href = p[item.key]();
                   const Icon = routeIconForPath(href);
-                  const isActive = !isActivePinnedRoute && isNavActive(pathname, href);
+                  const isActive = !isActivePinnedRoute && isSectionActive(p, pathname, href);
                   return (
                     <SidebarMenuItem key={item.key}>
                       <SidebarMenuButton
@@ -882,6 +931,8 @@ export function AppSidebar({ topSlot, searchSlot, headerClassName, headerStyle }
             </SidebarGroupContent>
           </SidebarGroup>
 
+          <CustomPagesGroup pathname={pathname} />
+
           <SidebarGroup>
             <SidebarGroupLabel>{t(($) => $.sidebar.ai_team_group)}</SidebarGroupLabel>
             <SidebarGroupContent>
@@ -889,7 +940,7 @@ export function AppSidebar({ topSlot, searchSlot, headerClassName, headerStyle }
                 {aiTeamNav.map((item) => {
                   const href = p[item.key]();
                   const Icon = routeIconForPath(href);
-                  const isActive = isNavActive(pathname, href);
+                  const isActive = isSectionActive(p, pathname, href);
                   return (
                     <SidebarMenuItem key={item.key}>
                       <SidebarMenuButton

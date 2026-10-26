@@ -17,3 +17,12 @@
  */
 export const CHIP_CLASS =
   "group flex min-w-0 cursor-pointer items-center gap-1.5 rounded-md px-1.5 py-0.5 text-caption transition-colors hover:bg-accent";
+
+/**
+ * Height and inset of a picker's `field` variant. `compact` matches the 32px
+ * kit Input and Select, for pickers inside a form; the default matches the
+ * 40px inspector fields.
+ */
+export function fieldControlSize(compact = false) {
+  return compact ? "min-h-8 px-2.5" : "min-h-10 px-3";
+}

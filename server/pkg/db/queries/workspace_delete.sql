@@ -559,6 +559,15 @@ WITH deleted_wakeup_receipts AS (
 deleted_child_events AS (
  DELETE FROM issue_child_event WHERE workspace_id=$1
 ),
+deleted_conveyor_events AS (
+ DELETE FROM issue_conveyor_event WHERE workspace_id=$1
+),
+deleted_workflow_artifacts AS (
+ DELETE FROM issue_workflow_artifact WHERE workspace_id=$1
+),
+deleted_conveyors AS (
+ DELETE FROM issue_conveyor WHERE workspace_id=$1
+),
 deleted_issues AS (
     DELETE FROM issue WHERE issue.workspace_id = $1
 ),
@@ -676,6 +685,9 @@ deleted_packages AS (
 DELETE FROM plugin_installation WHERE id IN (SELECT id FROM installations);
 
 -- name: DeleteWorkspaceAgents :exec
+WITH deleted_agent_model_options AS (
+    DELETE FROM agent_model_option WHERE agent_model_option.workspace_id = $1
+)
 DELETE FROM agent WHERE agent.workspace_id = $1;
 
 -- name: DeleteWorkspaceRuntimesAndProjects :exec
@@ -685,6 +697,21 @@ deleted_runtimes AS (
 ),
 deleted_profiles AS (
     DELETE FROM runtime_profile WHERE runtime_profile.workspace_id = $1
+),
+deleted_runtime_unavailable AS (
+    DELETE FROM runtime_unavailable WHERE runtime_unavailable.workspace_id = $1
+),
+deleted_model_idle_episodes AS (
+    DELETE FROM model_idle_episode WHERE model_idle_episode.workspace_id = $1
+),
+deleted_model_profile_options AS (
+    DELETE FROM model_profile_option WHERE model_profile_option.workspace_id = $1
+),
+deleted_model_profiles AS (
+    DELETE FROM model_profile WHERE model_profile.workspace_id = $1
+),
+deleted_pool_grants AS (
+    DELETE FROM subscription_pool_grant WHERE subscription_pool_grant.workspace_id = $1
 )
 DELETE FROM project WHERE project.workspace_id = $1;
 

@@ -10,6 +10,46 @@ import (
 	"testing"
 )
 
+// forkMigrations are the migrations of the Loodsen fork that are already applied
+// in production under these exact names (schema_migrations stores the full file
+// name, so they cannot be renumbered). Their numbers 564-594 overlap with the
+// upstream migrations of the same range; both sets build disjoint schema
+// objects and give an identical schema in either order. They are unique among
+// themselves; every other migration must be unique across the whole directory.
+var forkMigrations = map[string]bool{
+	"564_issue_conveyor":                         true,
+	"565_agent_task_queue_conveyor_action":       true,
+	"566_issue_conveyor_id_index":                true,
+	"567_issue_conveyor_issue_index":             true,
+	"568_issue_conveyor_event_id_index":          true,
+	"569_issue_conveyor_event_input_index":       true,
+	"570_issue_conveyor_event_action_index":      true,
+	"571_issue_conveyor_event_seq_index":         true,
+	"572_issue_conveyor_event_pending_index":     true,
+	"573_issue_conveyor_event_task_index":        true,
+	"574_agent_task_queue_conveyor_action_index": true,
+	"575_model_profile":                          true,
+	"576_model_profile_id_index":                 true,
+	"577_model_profile_name_index":               true,
+	"578_model_profile_option_index":             true,
+	"579_agent_model_option_index":               true,
+	"580_runtime_unavailable_index":              true,
+	"581_issue_model_profile_index":              true,
+	"582_agent_task_queue_model_choice_index":    true,
+	"583_model_idle_episode":                     true,
+	"584_model_idle_episode_open_index":          true,
+	"585_agent_task_queue_model_routed_index":    true,
+	"586_squad_route_template":                   true,
+	"587_issue_stage_dispatch":                   true,
+	"588_issue_stage_dispatch_index":             true,
+	"589_subscription":                           true,
+	"590_subscription_key_index":                 true,
+	"591_subscription_usage_index":               true,
+	"592_runtime_profile_share_key_index":        true,
+	"593_subscription_host_state":                true,
+	"594_subscription_host_state_index":          true,
+}
+
 func TestMigrationNumericPrefixesAreUnique(t *testing.T) {
 	files := migrationFilesForLint(t, "*.up.sql")
 
@@ -18,6 +58,7 @@ func TestMigrationNumericPrefixesAreUnique(t *testing.T) {
 	// operators can identify one schema change unambiguously by its number.
 	const firstUniqueMigrationNumber = 129
 	stemByNumber := make(map[int]string)
+	forkStemByNumber := make(map[int]string)
 	for _, file := range files {
 		stem, _, ok := splitMigrationFilename(filepath.Base(file))
 		if !ok {
@@ -31,11 +72,15 @@ func TestMigrationNumericPrefixesAreUnique(t *testing.T) {
 		if err != nil || number < firstUniqueMigrationNumber {
 			continue
 		}
-		if previous, exists := stemByNumber[number]; exists {
+		byNumber := stemByNumber
+		if forkMigrations[stem] {
+			byNumber = forkStemByNumber
+		}
+		if previous, exists := byNumber[number]; exists {
 			t.Errorf("migrations %s and %s share numeric prefix %s", previous, stem, prefix)
 			continue
 		}
-		stemByNumber[number] = stem
+		byNumber[number] = stem
 	}
 }
 

@@ -113,6 +113,71 @@ func TestCreateWorkspace_DisabledByConfig(t *testing.T) {
 	}
 }
 
+// TestCreateWorkspace_AllowedEmails guards the self-host allowlist added by
+// #9400: when WorkspaceCreationAllowedEmails is set, only matching accounts
+// (case-insensitive) may create workspaces; everyone else gets 403 and no row
+// is written. DisableWorkspaceCreation still wins over the allowlist.
+func TestCreateWorkspace_AllowedEmails(t *testing.T) {
+	if testHandler == nil {
+		t.Skip("database not available")
+	}
+
+	cases := []struct {
+		name     string
+		cfg      Config
+		wantCode int
+	}{
+		{
+			name:     "caller not in allowlist",
+			cfg:      Config{WorkspaceCreationAllowedEmails: []string{"someone-else@example.com"}},
+			wantCode: http.StatusForbidden,
+		},
+		{
+			name:     "caller in allowlist (case-insensitive)",
+			cfg:      Config{WorkspaceCreationAllowedEmails: []string{"other@example.com", strings.ToUpper(handlerTestEmail)}},
+			wantCode: http.StatusCreated,
+		},
+		{
+			name: "global disable overrides allowlist",
+			cfg: Config{
+				DisableWorkspaceCreation:       true,
+				WorkspaceCreationAllowedEmails: []string{handlerTestEmail},
+			},
+			wantCode: http.StatusForbidden,
+		},
+	}
+
+	for i, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			slug := fmt.Sprintf("handler-tests-create-allowlist-%d", i)
+			_, _ = testPool.Exec(context.Background(), `DELETE FROM workspace WHERE slug = $1`, slug)
+			dbfx.Cleanup(t, `DELETE FROM workspace WHERE slug = $1`, slug)
+
+			prev := testHandler.cfg
+			cfg := tc.cfg
+			cfg.AllowSignup = prev.AllowSignup
+			testHandler.cfg = cfg
+			t.Cleanup(func() { testHandler.cfg = prev })
+
+			req := newRequest("POST", "/api/workspaces", map[string]any{
+				"name": "Allowlist Create",
+				"slug": slug,
+			})
+			testutil.Call(t, testHandler.CreateWorkspace, req).Want(tc.wantCode)
+
+			var count int
+			dbfx.QueryRow(t, `SELECT count(*) FROM workspace WHERE slug = $1`, slug).Scan(&count)
+			wantCount := 0
+			if tc.wantCode == http.StatusCreated {
+				wantCount = 1
+			}
+			if count != wantCount {
+				t.Fatalf("expected %d workspace rows, found %d", wantCount, count)
+			}
+		})
+	}
+}
+
 // TestDeleteWorkspace_RequiresOwner exercises the in-handler authorization
 // added to DeleteWorkspace by calling the handler directly (bypassing the
 // router-level RequireWorkspaceRoleFromURL middleware). Without the handler
@@ -1511,5 +1576,23 @@ func TestUpdateWorkspace_RejectsInvalidIssuePrefix(t *testing.T) {
 	dbfx.QueryRow(t, `SELECT issue_prefix FROM workspace WHERE id = $1`, testWorkspaceID).Scan(&after)
 	if after != before {
 		t.Fatalf("issue_prefix changed on a rejected update: %q → %q", before, after)
+	}
+}
+
+func TestLocalGitRepoURL(t *testing.T) {
+	for url, want := range map[string]bool{
+		"file:///home/agents/resource-planning/service": true,
+		"file:///srv/repo.git":                          true,
+		"file://host/srv/repo":                          false,
+		"file:///":                                      false,
+		"file:///srv/../etc":                            false,
+		"file:///srv/re po":                             false,
+		"file:relative/path":                            false,
+		"/home/agents/service":                          false,
+		"https://github.com/o/r.git":                    false,
+	} {
+		if got := isLocalGitRepoURL(url); got != want {
+			t.Errorf("isLocalGitRepoURL(%q) = %v, want %v", url, got, want)
+		}
 	}
 }

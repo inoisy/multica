@@ -27,6 +27,7 @@ import { ApiError } from "@multica/core/api";
 import { agentListOptions, memberListOptions, squadListOptions } from "@multica/core/workspace/queries";
 import { shortcutMatchesEvent, useShortcut } from "@multica/core/shortcuts";
 import { Button } from "@multica/ui/components/ui/button";
+import { IconButton } from "@multica/ui/components/common/icon-button";
 import { Input } from "@multica/ui/components/ui/input";
 import { Textarea } from "@multica/ui/components/ui/textarea";
 import {
@@ -102,11 +103,11 @@ export function WakeupCreate({
     >
       <PopoverTrigger
         render={
-          <Button
+          <IconButton
             variant="ghost"
             size="icon-xs"
             className="text-muted-foreground"
-            aria-label={t(($) => $.wakeups.create.open)}
+            label={t(($) => $.wakeups.create.open)}
           />
         }
       >
@@ -394,10 +395,14 @@ function ConditionMenu({
   const option = (key: WakeupCondition) => {
     const Icon = items[key].icon;
     return (
-      <DropdownMenuItem key={key} onClick={() => onChange(key)} className="gap-2 py-1.5">
-        <Icon className="size-3.5 text-muted-foreground" aria-hidden="true" />
-        <span>{items[key].label}</span>
-        <span className="ml-auto pl-4 text-caption text-muted-foreground">{items[key].hint}</span>
+      <DropdownMenuItem key={key} onClick={() => onChange(key)} className="items-start gap-2 py-1.5">
+        <span className="flex h-5 shrink-0 items-center">
+          <Icon className="size-3.5 text-muted-foreground" aria-hidden="true" />
+        </span>
+        <span className="flex min-w-0 flex-col gap-0.5">
+          <span>{items[key].label}</span>
+          <span className="text-caption text-muted-foreground">{items[key].hint}</span>
+        </span>
       </DropdownMenuItem>
     );
   };
@@ -412,7 +417,7 @@ function ConditionMenu({
         </span>
         <ChevronDown className="size-3 text-muted-foreground" aria-hidden="true" />
       </DropdownMenuTrigger>
-      <DropdownMenuContent className="w-[22rem]">
+      <DropdownMenuContent className="w-72">
         {groups.map(([label, keys]) => (
           <DropdownMenuGroup key={label}>
             <DropdownMenuLabel>{label}</DropdownMenuLabel>
@@ -454,6 +459,7 @@ function ConditionParams({
           options={[
             { value: "checks_finished", label: t(($) => $.wakeups.create.pr_checks) },
             { value: "merged", label: t(($) => $.wakeups.create.pr_merged) },
+            { value: "conflicts", label: t(($) => $.wakeups.create.pr_conflicts) },
           ]}
           onChange={(prEvent) => update({ prEvent: prEvent as WakeupDraft["prEvent"] })}
         />

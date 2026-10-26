@@ -1,0 +1,119 @@
+{
+  "nav": {
+    "inbox": "Входящие",
+    "chat": "Чат",
+    "my_issues": "Мои задачи",
+    "issues": "Задачи",
+    "projects": "Проекты",
+    "autopilots": "Автопилот",
+    "agents": "Агенты",
+    "squads": "Команды",
+    "usage": "Аналитика",
+    "runtimes": "Среды выполнения",
+    "skills": "Навыки",
+    "settings": "Настройки",
+    "conveyor": "Эпики",
+    "subscriptions": "Подписки",
+    "pages": "Страницы",
+    "model_profiles": "Профили моделей"
+  },
+  "tab": {
+    "issue": "Задача",
+    "project": "Проект",
+    "autopilot": "Автопилот",
+    "agent": "Агент",
+    "member": "Участник",
+    "squad": "Команда",
+    "skill": "Навык",
+    "machine": "Машина",
+    "runtime": "Среда выполнения",
+    "attachment": "Вложение",
+    "create_agent": "Создать агента",
+    "unknown": "Неизвестная страница"
+  },
+  "help": {
+    "trigger": "Помощь",
+    "download_desktop": "Приложение для рабочего стола",
+    "docs": "Документация",
+    "changelog": "История изменений",
+    "discord": "Discord",
+    "feedback": "Обратная связь",
+    "server_version": "Версия сервера {{version}}"
+  },
+  "workspace_loader": {
+    "loading_workspace": "Загрузка рабочего пространства…",
+    "loading_named_prefix": "Загрузка"
+  },
+  "window": {
+    "go_back": "Назад",
+    "go_forward": "Вперёд",
+    "hold_for_history": "Удерживайте для просмотра истории",
+    "back_history": "История переходов назад",
+    "forward_history": "История переходов вперёд"
+  },
+  "sidebar": {
+    "unpin_tooltip": "Открепить",
+    "workspaces_label": "Рабочие пространства",
+    "create_workspace": "Создать рабочее пространство",
+    "pending_invitations_label": "Ожидающие приглашения",
+    "invitation_workspace_fallback": "Рабочее пространство",
+    "invitation_join": "Присоединиться",
+    "invitation_decline": "Отклонить",
+    "log_out": "Выйти",
+    "new_issue": "Новая задача",
+    "new_issue_shortcut": "C",
+    "pinned_label": "Закреплённые",
+    "work_group": "Работа",
+    "ai_team_group": "ИИ-команда",
+    "show_more_pins": "Показать ещё {{count}}…",
+    "show_fewer_pins": "Показать меньше",
+    "unread_overflow": "99+",
+    "discord_card": {
+      "title": "Присоединяйтесь к нашему Discord",
+      "dismiss": "Скрыть"
+    }
+  },
+  "custom_pages": {
+    "title": "Страницы",
+    "description": "Свои страницы рабочего пространства — пункты в сайдбаре. Открываются внутри Multica или в новой вкладке.",
+    "saved": "Страницы сохранены",
+    "save_failed": "Не удалось сохранить страницы",
+    "add": "Добавить",
+    "save": "Сохранить",
+    "saving": "Сохраняю…",
+    "loading": "Загрузка…",
+    "empty_readonly": "Страниц пока нет. Добавляют их владелец и админы.",
+    "empty_editable": "Страниц пока нет — нажмите «Добавить».",
+    "name": "Название",
+    "url": "/takes/ или https://…",
+    "open_mode": "Как открывать",
+    "embed": "Внутри Multica",
+    "tab": "Новой вкладкой",
+    "up": "Выше",
+    "down": "Ниже",
+    "open": "Открыть",
+    "delete": "Удалить",
+    "optional_description": "Описание (необязательно)",
+    "url_hint": "Адрес — путь на этом сайте (например, /takes/) или https://. Внешние сайты могут запрещать открытие во фрейме — для них выберите «Новой вкладкой».",
+    "configure": "Настроить",
+    "page": "Страница",
+    "load_failed": "Список страниц не загрузился: {{error}}",
+    "not_found": "Такой страницы нет.",
+    "all": "Все страницы",
+    "opens_in_tab": "Эта страница открывается в новой вкладке.",
+    "open_named": "Открыть «{{title}}»",
+    "add_page": "Добавить страницу"
+  },
+  "section_tabs": {
+    "issues": "Задачи",
+    "conveyor": "Эпики",
+    "agents": "Агенты",
+    "modelProfiles": "Профили моделей",
+    "runtimes": "Среды выполнения",
+    "subscriptions": "Подписки"
+  },
+  "section_tabs_short": {
+    "modelProfiles": "Профили",
+    "runtimes": "Среды"
+  }
+}

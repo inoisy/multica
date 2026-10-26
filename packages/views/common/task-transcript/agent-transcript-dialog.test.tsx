@@ -249,6 +249,61 @@ afterEach(() => {
 });
 
 describe("AgentTranscriptDialog", () => {
+  it.each([
+    { type: "text", label: "Agent", icon: ".lucide-bot" },
+    { type: "thinking", label: "Thinking", icon: ".lucide-brain" },
+    { type: "error", label: "Error", icon: ".lucide-circle-alert" },
+  ] as const)("labels a $type step correctly when opened from the timeline", ({ type, label, icon }) => {
+    renderDialog([
+      { seq: 1, type, content: "Final delivered reply", created_at: baseTask.started_at! },
+    ]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Model 1m 00s" }));
+
+    const inspector = screen.getByRole("complementary");
+    expect(within(inspector).getByRole("heading", { name: label })).toBeInTheDocument();
+    expect(inspector.querySelector(icon)).not.toBeNull();
+    expect(inspector).toHaveTextContent("Final delivered reply");
+    if (type === "text") {
+      expect(within(inspector).queryByText("Error")).not.toBeInTheDocument();
+      expect(inspector.querySelector(".text-destructive, .bg-destructive")).toBeNull();
+    }
+  });
+
+  it("shows what was asked, whole, under the header", () => {
+    // The lists that open this dialog cut the ask to one line; here it wraps.
+    const ask = "Merge the three split-out sub-issues back into this PR &amp; ship conditions, history and runaway protection together";
+    renderDialog(items, { task: { ...baseTask, trigger_comment_id: "comment-1", trigger_summary: ask } });
+
+    expect(screen.getByText("Trigger")).toBeInTheDocument();
+    expect(
+      screen.getByText("Merge the three split-out sub-issues back into this PR & ship conditions, history and runaway protection together"),
+    ).toBeInTheDocument();
+  });
+
+  it.each([
+    { locale: "en", label: "Agent", model: "Model" },
+    { locale: "zh-Hans", label: "智能体", model: "模型" },
+    { locale: "ja", label: "エージェント", model: "モデル" },
+    { locale: "ko", label: "에이전트", model: "모델" },
+    { locale: "fr", label: "Agent", model: "Modèle" },
+  ] as const)("localizes the text step inspector in $locale", ({ locale, label, model }) => {
+    renderDialog([
+      { seq: 1, type: "text", content: "Final delivered reply", created_at: baseTask.started_at! },
+    ], { locale });
+
+    fireEvent.click(screen.getByRole("button", { name: `${model} 1m 00s` }));
+
+    const inspector = screen.getByRole("complementary");
+    expect(within(inspector).getByRole("heading", { name: label })).toBeInTheDocument();
+    expect(inspector.firstElementChild).toHaveTextContent(label);
+  });
+
+  it("has no trigger row for a run with no snapshot", () => {
+    renderDialog(items, { task: { ...baseTask, trigger_summary: undefined } });
+    expect(screen.queryByText("Trigger")).not.toBeInTheDocument();
+  });
+
   it("opens the matching result and duration for parallel same-tool calls", () => {
     const at = (seconds: number) =>
       new Date(Date.parse(baseTask.started_at!) + seconds * 1000).toISOString();
@@ -793,7 +848,7 @@ describe("AgentTranscriptDialog — work directory handoff", () => {
     expect(screen.getByText("Project directory")).toBeInTheDocument();
     expect(screen.getByText("project")).toBeInTheDocument();
 
-    await userEvent.click(screen.getByTitle("Copy project directory"));
+    await userEvent.click(screen.getByRole("button", { name: /^Project directory/ }));
     expect(copyTextMock).toHaveBeenCalledWith("/Users/dev/project");
   });
 
@@ -812,7 +867,7 @@ describe("AgentTranscriptDialog — work directory handoff", () => {
     expect(screen.getByText("Workdir")).toBeInTheDocument();
     expect(screen.getByText("workspace/task/worktree")).toBeInTheDocument();
 
-    await userEvent.click(screen.getByTitle("Copy working directory"));
+    await userEvent.click(screen.getByRole("button", { name: /^Workdir/ }));
     expect(copyTextMock).toHaveBeenCalledWith("/managed/task/worktree");
   });
 
@@ -830,7 +885,7 @@ describe("AgentTranscriptDialog — work directory handoff", () => {
     expect(screen.getByText("Workdir")).toBeInTheDocument();
     expect(screen.getByText("workspace/task/worktree")).toBeInTheDocument();
 
-    await userEvent.click(screen.getByTitle("Copy working directory"));
+    await userEvent.click(screen.getByRole("button", { name: /^Workdir/ }));
     expect(copyTextMock).toHaveBeenCalledWith("/managed/preserved/worktree");
   });
 });
@@ -850,7 +905,7 @@ describe("AgentTranscriptDialog — delivered branch", () => {
     // Also shown as a produced artifact in the outcome row, hence getAllByText.
     expect(screen.getAllByText("agent/j/abc12345").length).toBeGreaterThan(0);
 
-    await userEvent.click(screen.getByTitle("Copy branch name"));
+    await userEvent.click(screen.getByRole("button", { name: /^Branch/ }));
     expect(copyTextMock).toHaveBeenCalledWith("agent/j/abc12345");
   });
 
@@ -859,7 +914,52 @@ describe("AgentTranscriptDialog — delivered branch", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Run details" }));
 
-    expect(screen.queryByTitle("Copy branch name")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Branch/ })).not.toBeInTheDocument();
+  });
+});
+
+// The account of a run is a fact of the moment it started: the daemon's
+// confirmation, as saved. A run without one — an older daemon, or one from
+// before confirmation existed — says "unknown" instead of guessing from today's pool.
+describe("AgentTranscriptDialog — model and account of the run", () => {
+  const picked = {
+    source: "agent_profile", profile_id: "p1", profile_name: "Strong", issue_id: "", excluded_family: "", reason: "fallback_row", position: 2,
+    chosen: null, runtime_name: "claude", provider: "claude", exhausted_profiles: [], wait_until: null, wait_reason_code: null,
+    wait_until_estimated: false, profile_personal: false,
+    rows: [
+      { position: 1, runtime_id: "rt-1", runtime_name: "codex", provider: "codex", model: "sol", thinking_level: "high", custom_args: null, state: "limited", until: "2026-06-08T09:00:00Z", reason_code: "agent_cap", until_estimated: false, chosen: false },
+      { position: 2, runtime_id: "rt-2", runtime_name: "claude", provider: "claude", model: "opus", thinking_level: "", custom_args: null, state: "available", until: null, reason_code: null, until_estimated: false, chosen: true },
+    ],
+  };
+  const fact = { subscription_id: "s1", subscription_key: "claude-3", account_group: "g", pool_id: "pool1", pool_revision: 12, daemon_id: "d1", confirmed_at: "2026-06-08T08:00:00Z" };
+
+  it("shows the confirmed account with the pool version of that moment", async () => {
+    renderDialog(items, { task: { ...baseTask, model_choice: picked, account_fact: fact } });
+    await userEvent.click(screen.getByRole("button", { name: "Run details" }));
+    expect(screen.getByText("claude·opus")).toBeInTheDocument();
+    expect(screen.getByText(/claude-3 · confirmed by the daemon · pool version 12 at the time of the run/)).toBeInTheDocument();
+    expect(screen.getByText(/row 1 unavailable \(Agent limit reached/)).toBeInTheDocument();
+  });
+
+  it("says unknown when the run has no confirmed account", async () => {
+    renderDialog(items, { task: { ...baseTask, model_choice: picked, account_fact: null } });
+    await userEvent.click(screen.getByRole("button", { name: "Run details" }));
+    expect(screen.getByText("unknown")).toBeInTheDocument();
+  });
+
+  it("shows the confirmed account of a run on plain agent fields", async () => {
+    renderDialog(items, { task: { ...baseTask, model_choice: null, account_fact: fact } });
+    await userEvent.click(screen.getByRole("button", { name: "Run details" }));
+    expect(screen.getByText("Account")).toBeInTheDocument();
+    expect(screen.getByText(/claude-3 · confirmed by the daemon · pool version 12/)).toBeInTheDocument();
+    expect(screen.queryByText("Choice")).not.toBeInTheDocument();
+  });
+
+  it("shows neither row for a run that never chose a model", async () => {
+    renderDialog(items, { task: { ...baseTask, branch_name: "agent/j/abc12345" } });
+    await userEvent.click(screen.getByRole("button", { name: "Run details" }));
+    expect(screen.queryByText("Account")).not.toBeInTheDocument();
+    expect(screen.queryByText("Choice")).not.toBeInTheDocument();
   });
 });
 
