@@ -42,7 +42,7 @@ const agent = { id: "agent-1", name: "Dev" } as unknown as Agent;
 function row(position: number, runtime_name: string, model: string, state = "available", extra: Partial<ModelRowState> = {}): ModelRowState {
   return {
     position, runtime_id: `rt-${position}`, runtime_name, provider: "codex", model, thinking_level: "", custom_args: null, state,
-    until: null, reason_code: null, until_estimated: false, chosen: false, ...extra,
+    until: null, reason_code: null, until_estimated: false, chosen: false, effective_model: model, model_at_run: false, ...extra,
   };
 }
 
