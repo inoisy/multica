@@ -1573,6 +1573,9 @@ func printDaemonStatusReport(w io.Writer, label string, health map[string]any) {
 	if reason, ok := health["reload_pending_reason"].(string); ok && reason != "" {
 		rows = append(rows, row{"Restart pending", reason})
 	}
+	for _, r := range runMemoryRows(health) {
+		rows = append(rows, row{r[0], r[1]})
+	}
 	if agents, ok := health["agents"].([]any); ok && len(agents) > 0 {
 		parts := make([]string, len(agents))
 		for i, a := range agents {
@@ -1593,6 +1596,56 @@ func printDaemonStatusReport(w io.Writer, label string, health map[string]any) {
 	for _, r := range rows {
 		fmt.Fprintf(w, "%-*s  %s\n", keyWidth+1, r.key+":", r.value)
 	}
+}
+
+// runMemoryRows summarises the daemon's per-run memory guard: the heaviest
+// runs and any process it had to stop. Nothing is printed until the guard has
+// reported at least once.
+func runMemoryRows(health map[string]any) [][2]string {
+	mem, ok := health["run_memory"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	mb := func(v any) int64 {
+		f, _ := v.(float64)
+		return int64(f) >> 20
+	}
+	var rows [][2]string
+	runs, _ := mem["runs"].([]any)
+	summary := fmt.Sprintf("%d runs, %d MB", len(runs), mb(mem["total_runs_bytes"]))
+	if limit := mb(mem["run_max_bytes"]); limit > 0 {
+		summary += fmt.Sprintf(" (limit per run %d MB)", limit)
+	}
+	rows = append(rows, [2]string{"Run memory", summary})
+	for i, r := range runs {
+		run, _ := r.(map[string]any)
+		if run == nil || i >= 3 {
+			break
+		}
+		id, _ := run["task_id"].(string)
+		if len(id) > 8 {
+			id = id[:8]
+		}
+		line := fmt.Sprintf("%s %d MB", id, mb(run["bytes"]))
+		if top, _ := run["top"].([]any); len(top) > 0 {
+			if p, _ := top[0].(map[string]any); p != nil {
+				line += fmt.Sprintf(" (%v %d MB)", p["comm"], mb(p["bytes"]))
+			}
+		}
+		rows = append(rows, [2]string{"  top run", line})
+	}
+	if kills, _ := mem["kill_count"].(float64); kills > 0 {
+		line := fmt.Sprintf("%d", int64(kills))
+		if k, _ := mem["last_kill"].(map[string]any); k != nil {
+			id, _ := k["task_id"].(string)
+			if len(id) > 8 {
+				id = id[:8]
+			}
+			line += fmt.Sprintf(", last: %v %v in %s at %v", k["comm"], k["reason"], id, k["at"])
+		}
+		rows = append(rows, [2]string{"Memory kills", line})
+	}
+	return rows
 }
 
 // --- daemon logs ---

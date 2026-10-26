@@ -72,6 +72,9 @@ type HealthResponse struct {
 	FailedTerminalReportCount  int      `json:"failed_terminal_report_count"`
 	FailedTerminalReportBytes  int64    `json:"failed_terminal_report_bytes"`
 	Agents                     []string `json:"agents"`
+	// RunMemory is the last per-run memory scan (see runmem.go); omitted until
+	// the first scan or when the guard is off.
+	RunMemory *RunMemoryStatus `json:"run_memory,omitempty"`
 	// SkippedAgents maps a provider that WAS discovered on this machine to the
 	// reason the last registration round dropped it (version undetectable,
 	// below the minimum supported version). Purely diagnostic, and omitted when
@@ -365,6 +368,7 @@ func (d *Daemon) healthHandler(startedAt time.Time) http.HandlerFunc {
 			ReloadPendingReason: d.reloadPending(),
 			Workspaces:          wsList,
 		}
+		resp.RunMemory = d.runMemoryGuard().Snapshot()
 		if reporter, ok := d.repoCache.(interface{ Activity() repocache.Activity }); ok {
 			activity := reporter.Activity()
 			resp.RepoMaintenanceActive = activity.MaintenanceActive
