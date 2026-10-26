@@ -738,6 +738,7 @@ func init() {
 	issueCommentAddCmd.Flags().String("content-file", "", "Read comment content from a UTF-8 file (preserves multi-line content verbatim; use this on Windows when stdin piping mangles non-ASCII bytes). The path must be inside the current working directory unless --allow-external-file is set.")
 	issueCommentAddCmd.Flags().Bool("allow-external-file", false, "Allow --content-file / --attachment to read a path outside the current working directory. Off by default so a stale file from another run/environment can't be picked up (MUL-4252).")
 	issueCommentAddCmd.Flags().String("parent", "", "Parent comment ID to reply under. A comment-triggered agent run must reply under its trigger comment; omitting --parent to post a top-level comment is rejected")
+	issueCommentAddCmd.Flags().Bool("steer", false, "Deliver the comment into the running turn of each agent it triggers on this issue instead of queueing a follow-up run. Use only for a correction to the work in progress (a wrong requirement, a new constraint), not for new work. A recipient with no running turn, or a comment with attachments, falls back to the normal trigger")
 	issueCommentAddCmd.Flags().StringSlice("attachment", nil, "File path(s) to attach (can be specified multiple times). Non-image files, HTML included, show as file cards that open in the viewer; to render a chart inside the comment, put a ```html or ```mermaid block in the content instead")
 	issueCommentAddCmd.Flags().String("output", "json", "Output format: table or json")
 
@@ -2608,12 +2609,19 @@ func runIssueCommentAdd(cmd *cobra.Command, args []string) error {
 	if len(attachmentIDs) > 0 {
 		body["attachment_ids"] = attachmentIDs
 	}
+	steer, _ := cmd.Flags().GetBool("steer")
+	if steer {
+		body["steer"] = true
+	}
 	var result map[string]any
 	if err := client.PostJSON(ctx, "/api/issues/"+issueID+"/comments", body, &result); err != nil {
 		return fmt.Errorf("add comment: %w", err)
 	}
 
 	fmt.Fprintf(os.Stderr, "Comment added to issue %s.\n", issueRef.Display)
+	if steer {
+		reportSteerOutcomes(os.Stderr, result)
+	}
 
 	output, _ := cmd.Flags().GetString("output")
 	if output == "table" {
@@ -3655,4 +3663,25 @@ func childRouteStep(c map[string]any) string {
 		return step
 	}
 	return step + " (" + status + ")"
+}
+
+// reportSteerOutcomes tells a --steer author which recipients took the comment
+// into their running turn and which fell back to the normal trigger, so the
+// author never assumes a correction reached a turn that had already ended.
+func reportSteerOutcomes(w io.Writer, result map[string]any) {
+	outcomes, _ := result["trigger_outcomes"].([]any)
+	if len(outcomes) == 0 {
+		fmt.Fprintln(w, "Steer: no agent was triggered by this comment.")
+		return
+	}
+	for _, o := range outcomes {
+		m, _ := o.(map[string]any)
+		target, _ := m["target_id"].(string)
+		status, _ := m["status"].(string)
+		if status == "steered" {
+			fmt.Fprintf(w, "Steer: delivered into the running turn of %s.\n", target)
+			continue
+		}
+		fmt.Fprintf(w, "Steer: %s had no turn to take it; handled as %s.\n", target, status)
+	}
 }
