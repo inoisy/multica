@@ -66,6 +66,21 @@ func (q *Queries) CloseModelIdleEpisode(ctx context.Context, agentID pgtype.UUID
 	return i, err
 }
 
+const compactModelProfileOptionPositions = `-- name: CompactModelProfileOptionPositions :exec
+UPDATE model_profile_option o
+SET position = ranked.n
+FROM (
+    SELECT m.position, row_number() OVER (ORDER BY m.position)::int AS n
+    FROM model_profile_option m WHERE m.profile_id = $1
+) ranked
+WHERE o.profile_id = $1 AND o.position = ranked.position
+`
+
+func (q *Queries) CompactModelProfileOptionPositions(ctx context.Context, profileID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, compactModelProfileOptionPositions, profileID)
+	return err
+}
+
 const countModelProfileReferences = `-- name: CountModelProfileReferences :one
 SELECT
  (SELECT count(*) FROM agent a WHERE a.workspace_id = $1 AND a.model_profile_id = $2 AND a.archived_at IS NULL)::bigint AS agents,
@@ -489,6 +504,69 @@ func (q *Queries) InsertRuntimeUnavailable(ctx context.Context, arg InsertRuntim
 		&i.SubscriptionID,
 	)
 	return i, err
+}
+
+const listActiveAgentsByModelProfiles = `-- name: ListActiveAgentsByModelProfiles :many
+SELECT id, workspace_id, name, avatar_url, runtime_mode, runtime_config, visibility, status, max_concurrent_tasks, owner_id, created_at, updated_at, description, runtime_id, instructions, archived_at, archived_by, custom_env, custom_args, mcp_config, model, thinking_level, composio_toolkit_allowlist, permission_mode, kind, system_key, disabled_runtime_skills, service_tier, conversation_starters, model_profile_id, disallowed_tools FROM agent
+WHERE workspace_id = $1 AND model_profile_id = ANY($2::uuid[]) AND archived_at IS NULL
+ORDER BY name
+`
+
+type ListActiveAgentsByModelProfilesParams struct {
+	WorkspaceID pgtype.UUID   `json:"workspace_id"`
+	ProfileIds  []pgtype.UUID `json:"profile_ids"`
+}
+
+func (q *Queries) ListActiveAgentsByModelProfiles(ctx context.Context, arg ListActiveAgentsByModelProfilesParams) ([]Agent, error) {
+	rows, err := q.db.Query(ctx, listActiveAgentsByModelProfiles, arg.WorkspaceID, arg.ProfileIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Agent{}
+	for rows.Next() {
+		var i Agent
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.Name,
+			&i.AvatarUrl,
+			&i.RuntimeMode,
+			&i.RuntimeConfig,
+			&i.Visibility,
+			&i.Status,
+			&i.MaxConcurrentTasks,
+			&i.OwnerID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Description,
+			&i.RuntimeID,
+			&i.Instructions,
+			&i.ArchivedAt,
+			&i.ArchivedBy,
+			&i.CustomEnv,
+			&i.CustomArgs,
+			&i.McpConfig,
+			&i.Model,
+			&i.ThinkingLevel,
+			&i.ComposioToolkitAllowlist,
+			&i.PermissionMode,
+			&i.Kind,
+			&i.SystemKey,
+			&i.DisabledRuntimeSkills,
+			&i.ServiceTier,
+			&i.ConversationStarters,
+			&i.ModelProfileID,
+			&i.DisallowedTools,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listActiveLocalRefusals = `-- name: ListActiveLocalRefusals :many
@@ -940,6 +1018,38 @@ func (q *Queries) ListModelProfileOptionsByWorkspace(ctx context.Context, worksp
 	return items, nil
 }
 
+const listModelProfileOptionsOfRuntime = `-- name: ListModelProfileOptionsOfRuntime :many
+SELECT workspace_id, profile_id, position, runtime_id, model, thinking_level, custom_args FROM model_profile_option WHERE runtime_id = $1 ORDER BY profile_id, position
+`
+
+func (q *Queries) ListModelProfileOptionsOfRuntime(ctx context.Context, runtimeID pgtype.UUID) ([]ModelProfileOption, error) {
+	rows, err := q.db.Query(ctx, listModelProfileOptionsOfRuntime, runtimeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ModelProfileOption{}
+	for rows.Next() {
+		var i ModelProfileOption
+		if err := rows.Scan(
+			&i.WorkspaceID,
+			&i.ProfileID,
+			&i.Position,
+			&i.RuntimeID,
+			&i.Model,
+			&i.ThinkingLevel,
+			&i.CustomArgs,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listModelProfiles = `-- name: ListModelProfiles :many
 
 SELECT id, workspace_id, name, description, when_exhausted_profile_id, created_by, created_at, updated_at, owner_agent_id, based_on_profile_id FROM model_profile
@@ -1307,6 +1417,42 @@ func (q *Queries) OpenModelIdleEpisode(ctx context.Context, arg OpenModelIdleEpi
 	return i, err
 }
 
+const projectModelProfileRow1OnAgents = `-- name: ProjectModelProfileRow1OnAgents :execrows
+UPDATE agent a
+SET runtime_id = o.runtime_id,
+    runtime_mode = r.runtime_mode,
+    model = NULLIF(o.model, ''),
+    thinking_level = NULLIF(o.thinking_level, ''),
+    updated_at = now()
+FROM model_profile_option o
+JOIN agent_runtime r ON r.id = o.runtime_id
+WHERE a.model_profile_id = $1
+  AND a.workspace_id = $2
+  AND o.profile_id = $1
+  AND o.position = (SELECT min(m.position) FROM model_profile_option m WHERE m.profile_id = $1)
+  AND (a.runtime_id IS DISTINCT FROM o.runtime_id
+    OR a.runtime_mode IS DISTINCT FROM r.runtime_mode
+    OR a.model IS DISTINCT FROM NULLIF(o.model, '')
+    OR a.thinking_level IS DISTINCT FROM NULLIF(o.thinking_level, ''))
+`
+
+type ProjectModelProfileRow1OnAgentsParams struct {
+	ProfileID   pgtype.UUID `json:"profile_id"`
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+}
+
+// Row 1 of a profile is the projection every agent on it carries in
+// runtime_id/model/thinking_level (old clients read those fields). The raw row
+// is copied: the model an API-key account sets is decided at launch, not here.
+// A profile without rows leaves the fields alone; such an agent does not run.
+func (q *Queries) ProjectModelProfileRow1OnAgents(ctx context.Context, arg ProjectModelProfileRow1OnAgentsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, projectModelProfileRow1OnAgents, arg.ProfileID, arg.WorkspaceID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const reassignRuntimeModelReferences = `-- name: ReassignRuntimeModelReferences :exec
 WITH moved_profile_rows AS (
  UPDATE model_profile_option SET runtime_id = $1 WHERE model_profile_option.runtime_id = $2
@@ -1603,6 +1749,17 @@ func (q *Queries) SetTaskModelRoute(ctx context.Context, arg SetTaskModelRoutePa
 		&i.AccountOffer,
 	)
 	return i, err
+}
+
+const shiftModelProfileOptionPositions = `-- name: ShiftModelProfileOptionPositions :exec
+UPDATE model_profile_option SET position = position + 1000 WHERE profile_id = $1
+`
+
+// First half of closing the gaps a deleted row leaves: the unique index on
+// (profile_id, position) forbids renumbering in place.
+func (q *Queries) ShiftModelProfileOptionPositions(ctx context.Context, profileID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, shiftModelProfileOptionPositions, profileID)
+	return err
 }
 
 const updateModelProfile = `-- name: UpdateModelProfile :one

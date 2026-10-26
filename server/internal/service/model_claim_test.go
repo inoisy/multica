@@ -48,7 +48,7 @@ func newModelClaimRig(t *testing.T) *modelClaimRig {
 		if name == "glm" || name == "spare" {
 			provider = "claude"
 		}
-		r.rt[name] = fx.Runtime(t, "models-"+name, testutil.Cols{"provider": provider, "visibility": "public"})
+		r.rt[name] = fx.EnvironmentRuntime(t, "models-"+name, testutil.Cols{"provider": provider, "visibility": "public"})
 	}
 	for _, table := range []string{"runtime_unavailable", "model_profile_option", "model_profile", "agent_model_option", "model_idle_episode", "inbox_item"} {
 		fx.Cleanup(t, "DELETE FROM "+table+" WHERE workspace_id=$1", ws)
@@ -470,7 +470,7 @@ func TestQuotaOnRouteStepRetriesUnderTheSameAction(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	spare := r.f.Runtime(t, "models route spare", testutil.Cols{"provider": "claude", "visibility": "public"})
+	spare := r.f.EnvironmentRuntime(t, "models route spare", testutil.Cols{"provider": "claude", "visibility": "public"})
 	r.f.Cleanup(t, "DELETE FROM runtime_unavailable WHERE workspace_id=$1", r.f.WorkspaceID)
 	r.f.Cleanup(t, "DELETE FROM agent_model_option WHERE agent_id=$1", dev.ID)
 	profiles := &ModelProfileService{Queries: r.f.q, TxStarter: r.f.Pool}
@@ -585,7 +585,7 @@ func (r *modelClaimRig) poolOn(runtime, spend string, accts ...acct) (string, []
 		r.fx.Exec(r.t, `INSERT INTO subscription_usage (subscription_id, window_key, used_percent, resets_at, limit_reached, observed_at) VALUES ($1, 'week', $2, $3, $4, $5)`,
 			id, a.used, resets, a.limit, observed)
 	}
-	r.fx.QueryRow(r.t, `INSERT INTO runtime_profile (workspace_id, display_name, protocol_family, command_name, pool_id) VALUES ($1, $2, 'codex', 'codex', $3) RETURNING id::text`,
+	r.fx.QueryRow(r.t, `INSERT INTO runtime_profile (workspace_id, display_name, protocol_family, command_name, runtime_type, pool_id) VALUES ($1, $2, 'codex', 'codex', 'codex', $3) RETURNING id::text`,
 		r.ws, "env "+suffix, pool).Scan(&profile)
 	r.fx.Exec(r.t, `UPDATE agent_runtime SET profile_id = $2 WHERE id = $1`, r.rt[runtime], profile)
 	r.t.Cleanup(func() {
