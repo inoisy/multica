@@ -725,6 +725,8 @@ export const SquadSchema: z.ZodType<Squad> = z.object({
   name: z.string().default(""),
   description: z.string().default(""),
   instructions: z.string().default(""),
+  // Fork field (default squad route); older backends and upstream omit it.
+  route_template: z.string().default(""),
   avatar_url: z.string().nullable().default(null),
   leader_id: z.string().default(""),
   creator_id: z.string().default(""),
