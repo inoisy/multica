@@ -984,8 +984,8 @@ describe("AttachmentPreviewModal — open-in-new-tab", () => {
         onClose={() => {}}
       />,
     );
-    expect(screen.queryByTitle("Open in new tab")).toBeNull();
-    expect(screen.getByTitle("Download")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Open in new tab" })).toBeNull();
+    expect(screen.getAllByRole("button", { name: "Download" }).length).toBeGreaterThan(0);
   });
 
   it("does not render the new-tab button when there is no workspace slug", async () => {
