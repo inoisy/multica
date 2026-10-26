@@ -50,7 +50,6 @@ func newStageRig(t *testing.T) *stageRig {
 	for _, id := range ids {
 		id := id
 		t.Cleanup(func() { cleanupChildDoneIssue(id) })
-		dbfx.Cleanup(t, "DELETE FROM issue_conveyor WHERE issue_id=$1", id)
 	}
 	dbfx.Cleanup(t, "DELETE FROM squad WHERE id=$1", r.squad)
 	return r
@@ -110,20 +109,15 @@ func TestStageDispatchAssignsStagesInOrder(t *testing.T) {
 		t.Fatalf("epic owner woken %d times by a dispatched stage", n)
 	}
 
-	// A sub-issue the route merged through accept counts as closed, and one
-	// waiting for the customer does not hold the stage: the sweep opens stage 3
-	// without anyone marking stage 2 done.
-	dbfx.Insert(t, "issue_conveyor", testutil.Cols{
-		"workspace_id": testWorkspaceID, "issue_id": r.kids["s2"], "status": "completed", "cur_idx": 2,
-		"route":                testutil.Raw(`'[{"idx":0,"step":"review","agent_id":"` + r.leader + `"},{"idx":1,"step":"accept","agent_id":"` + r.leader + `"},{"idx":2,"step":"close","agent_id":"` + r.leader + `"}]'::jsonb`),
-		"coordinator_agent_id": r.leader, "enabled_by": testUserID,
-	})
+	// A sub-issue waiting for the customer does not hold the stage: once the
+	// rest of stage 2 is done, the sweep opens stage 3.
+	dbfx.Exec(t, "UPDATE issue SET status='done' WHERE id=$1", r.kids["s2"])
 	sweep := &service.StageDispatchService{Issues: testHandler.IssueService}
 	if err := sweep.Sweep(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	if !r.onSquad("s3") {
-		t.Fatal("a route merged through accept did not close its stage")
+		t.Fatal("a done stage with a waiting sub-issue did not open the next one")
 	}
 
 	// Off: nothing further is assigned.

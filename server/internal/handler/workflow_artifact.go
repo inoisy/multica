@@ -9,7 +9,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/multica-ai/multica/server/internal/issueworkflow"
 	"github.com/multica-ai/multica/server/internal/logger"
 	db "github.com/multica-ai/multica/server/pkg/db/generated"
@@ -36,10 +35,7 @@ type workflowArtifactWrite struct {
 
 type workflowArtifactWriteKey struct{}
 
-var (
-	errWorkflowArtifactChanged = errors.New("the pinned commit changed after this run started; review the current commit before handing off")
-	errWorkflowLegacyRoute     = errors.New("finish or disable the legacy route before adopting Workflow execution")
-)
+var errWorkflowArtifactChanged = errors.New("the pinned commit changed after this run started; review the current commit before handing off")
 
 // writeWorkflowArtifact runs in the status write's transaction. A project
 // move drops the pin (it belongs to the old workflow); a status change by the
@@ -52,19 +48,6 @@ func writeWorkflowArtifact(ctx context.Context, q *db.Queries, issue db.Issue) e
 	}
 	prev := write.Previous
 	if prev.ProjectID != issue.ProjectID {
-		def, _, err := issueworkflow.ForProject(ctx, q, issue.WorkspaceID, issue.ProjectID)
-		if err != nil {
-			return err
-		}
-		if def != nil && def.ControlsExecution() {
-			cv, err := q.GetIssueConveyor(ctx, issue.ID)
-			if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-				return err
-			}
-			if err == nil && cv.Status != "disabled" && cv.Status != "completed" {
-				return errWorkflowLegacyRoute
-			}
-		}
 		return q.DeleteIssueWorkflowArtifact(ctx, issue.ID)
 	}
 	if prev.Status == issue.Status {
@@ -141,7 +124,7 @@ func (h *Handler) prepareWorkflowArtifact(w http.ResponseWriter, r *http.Request
 	// Only the assignee's own run may pin, and only its snapshot is checked:
 	// other agents work on the issue as observers.
 	var ownRun *db.AgentTaskQueue
-	if run != nil && run.Status == "running" && !run.ConveyorActionID.Valid && taskRunsForAssignee(prev, run) {
+	if run != nil && run.Status == "running" && taskRunsForAssignee(prev, run) {
 		ownRun = run
 	}
 	actorType, _ := h.resolveActor(r, requestUserID(r), uuidToString(prev.WorkspaceID))
@@ -156,31 +139,7 @@ func writeWorkflowArtifactError(w http.ResponseWriter, err error) bool {
 	switch {
 	case errors.Is(err, errWorkflowArtifactChanged):
 		writeErrorCode(w, http.StatusConflict, "workflow_artifact_changed", err.Error())
-	case errors.Is(err, errWorkflowLegacyRoute):
-		writeErrorCode(w, http.StatusConflict, "legacy_route_active", err.Error())
 	default:
-		return false
-	}
-	return true
-}
-
-// requireLegacyRoutesFinished refuses to let a workflow take over execution
-// while a legacy route still drives an issue it would cover: one issue, one
-// execution owner. An invalid projectID checks the whole workspace.
-func requireLegacyRoutesFinished(w http.ResponseWriter, ctx context.Context, q *db.Queries, workspaceID, projectID pgtype.UUID) bool {
-	var exists bool
-	var err error
-	if projectID.Valid {
-		exists, err = q.ProjectHasLegacyRoutes(ctx, db.ProjectHasLegacyRoutesParams{ProjectID: projectID, WorkspaceID: workspaceID})
-	} else {
-		exists, err = q.WorkspaceHasLegacyRoutes(ctx, workspaceID)
-	}
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to check legacy routes")
-		return false
-	}
-	if exists {
-		writeErrorCode(w, http.StatusConflict, "legacy_route_active", errWorkflowLegacyRoute.Error())
 		return false
 	}
 	return true

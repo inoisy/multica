@@ -461,56 +461,6 @@ func TestModelOptionPlainAgentAndKillSwitchUnchanged(t *testing.T) {
 	}
 }
 
-// A route step that hits a quota is repeated by the backend on the next model:
-// one successor under the same route action, and the route keeps going
-// instead of waiting for the provider.
-func TestQuotaOnRouteStepRetriesUnderTheSameAction(t *testing.T) {
-	r := newConveyorRig(t)
-	dev, err := r.f.q.GetAgent(r.ctx, r.agents["dev"])
-	if err != nil {
-		t.Fatal(err)
-	}
-	spare := r.f.Runtime(t, "models route spare", testutil.Cols{"provider": "claude", "visibility": "public"})
-	r.f.Cleanup(t, "DELETE FROM runtime_unavailable WHERE workspace_id=$1", r.f.WorkspaceID)
-	r.f.Cleanup(t, "DELETE FROM agent_model_option WHERE agent_id=$1", dev.ID)
-	profiles := &ModelProfileService{Queries: r.f.q, TxStarter: r.f.Pool}
-	rows := []ModelOptionInput{{RuntimeID: util.UUIDToString(dev.RuntimeID), Model: "sol"}, {RuntimeID: spare, Model: "opus"}}
-	if _, err := profiles.SaveAgentModels(r.ctx, dev, AgentModelsInput{Options: &rows}); err != nil {
-		t.Fatal(err)
-	}
-	r.enable()
-	step := r.start(r.only("dev"))
-	if step.ModelChoice == nil {
-		t.Fatal("the route's run was not routed by the model list")
-	}
-	r.fail(step, "", "You've hit your limit · resets 3pm (UTC)")
-
-	runs := r.tasksOf("dev")
-	if len(runs) != 2 {
-		t.Fatalf("dev has %d runs, want the failed one and one repeat", len(runs))
-	}
-	repeat := runs[1]
-	if repeat.ConveyorActionID != step.ConveyorActionID || !repeat.RetryOfTaskID.Valid || repeat.RetryOfTaskID != step.ID {
-		t.Fatalf("repeat is not the route's run: %+v", repeat)
-	}
-	if util.UUIDToString(repeat.RuntimeID) != spare {
-		t.Fatalf("repeat not on the next model's runtime")
-	}
-	if view := r.view(); view.Status != ConveyorActive {
-		t.Fatalf("route waits for the provider instead of continuing: %s", view.Status)
-	}
-	if got := len(r.tasksOf("lead")); got != 0 {
-		t.Fatalf("the coordinator was woken (%d runs)", got)
-	}
-	// A manual rerun meanwhile does not add a second successor.
-	if again, err := r.f.svc.TaskSvc.RerunIssue(r.ctx, r.issue, step.ID, pgtype.UUID{}, r.owner, nil); err != nil || again.ID != repeat.ID {
-		t.Fatalf("rerun next to the repeat: %v %v", err, again)
-	}
-}
-
-// The daemon's reported reset parks the runtime, not a time read back from
-// the refusal text; without one, a reset that has just passed holds the
-// runtime minutes, not until the same clock tomorrow (TOON-274).
 func TestQuotaRefusalParksUntilReportedReset(t *testing.T) {
 	r := newModelClaimRig(t)
 	agent := r.agent("models reported reset", r.strong)

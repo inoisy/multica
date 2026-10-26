@@ -131,9 +131,6 @@ func TestOnlyTheOwnerUsesAPersonalProfile(t *testing.T) {
 	if err := r.profiles.DeleteProfile(r.ctx, r.ws, owner.ModelProfileID); !errors.Is(err, ErrModelProfileNotFound) {
 		t.Fatalf("delete of a personal profile through the shared API: %v", err)
 	}
-	if _, err := resolveNodeProfile(r.ctx, r.q, r.ws, personal); err == nil {
-		t.Fatal("a route step named a personal profile")
-	}
 }
 
 func TestDeletingTheBaseKeepsThePersonalProfile(t *testing.T) {

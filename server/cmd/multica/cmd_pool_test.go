@@ -105,7 +105,7 @@ func TestPoolCLIRoundTripRevisionAndGrants(t *testing.T) {
 
 func TestPersonalModelCLIUsesServerMutations(t *testing.T) {
 	t.Chdir(t.TempDir())
-	var writes []conveyorCall
+	var writes []apiCall
 	modelsServer(t, &writes)
 	run := func(args ...string) {
 		t.Helper()

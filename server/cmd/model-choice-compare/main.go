@@ -6,7 +6,7 @@
 //	model-choice-compare diff --before before.json --after after.json
 //
 // The snapshot asks the server's own choice code what every agent, open
-// issue, route step, workflow step and queued run would get at the fixed time
+// issue, workflow step and queued run would get at the fixed time
 // --now. The same command is built from the commit before the choice is
 // switched and from the commit after, and the two files are diffed.
 package main
