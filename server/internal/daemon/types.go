@@ -3,6 +3,7 @@ package daemon
 import (
 	"encoding/json"
 
+	"github.com/multica-ai/multica/server/internal/daemon/subscriptions"
 	"github.com/multica-ai/multica/server/internal/runtimeapps"
 	"github.com/multica-ai/multica/server/pkg/remotemcp"
 )
@@ -65,6 +66,13 @@ type IssueStatusData struct {
 	Description string `json:"description,omitempty"`
 }
 
+// ProjectWorkflowData mirrors the claim payload's project workflow (MUL-7420).
+// Brief is rendered by the server for this run — the assignee's or an
+// observer's — and goes into the per-turn prompt as is.
+type ProjectWorkflowData struct {
+	Brief string `json:"brief"`
+}
+
 // Task represents a claimed task from the server.
 // Agent data (name, skills) is populated by the claim endpoint.
 type Task struct {
@@ -91,6 +99,9 @@ type Task struct {
 	// regardless of task kind so the daemon can inject `## Workspace Context`
 	// into the brief. Empty when the owner hasn't set one.
 	WorkspaceContext string `json:"workspace_context,omitempty"`
+	// SubscriptionPool is the runtime's subscriptions in spend order (stage B).
+	// The daemon picks one and launches the provider CLI on its credential.
+	SubscriptionPool *subscriptions.Pool `json:"subscription_pool,omitempty"`
 	// IssueStatuses mirrors the claim payload's active CUSTOM status catalog
 	// (MUL-6460): key/name/category/description per status, already in catalog
 	// order. Rendered into the brief's status-command line; empty (including on
@@ -98,6 +109,7 @@ type Task struct {
 	// the built-in-only form. IssueStatusesOmitted is the cap overflow count.
 	IssueStatuses                 []IssueStatusData      `json:"issue_statuses,omitempty"`
 	IssueStatusesOmitted          int                    `json:"issue_statuses_omitted,omitempty"`
+	ProjectWorkflow               *ProjectWorkflowData   `json:"project_workflow,omitempty"`
 	ThreadName                    string                 `json:"thread_name,omitempty"` // semantic title for provider-native session/thread history
 	Agent                         *AgentData             `json:"agent,omitempty"`
 	ConnectedApps                 []ConnectedAppData     `json:"connected_apps,omitempty"` // per-run app capabilities mounted through runtime MCP overlays

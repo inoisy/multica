@@ -1,0 +1,9 @@
+[Unit]
+Description=Multica autodeploy trigger from the GitHub webhook
+
+[Path]
+PathChanged=/run/multica-autodeploy/trigger
+Unit=multica-autodeploy.service
+
+[Install]
+WantedBy=multi-user.target

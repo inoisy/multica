@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { createMemoryRouter, Outlet, useMatches } from "react-router-dom";
+import { createMemoryRouter, Outlet, useMatches, useParams } from "react-router-dom";
 import type { RouteObject } from "react-router-dom";
 import { IssueDetailPage } from "./pages/issue-detail-page";
 import { ProjectDetailPage } from "./pages/project-detail-page";
@@ -16,6 +16,10 @@ import { AttachmentPreviewRoute } from "./pages/attachment-preview-page";
 import { IssuesPage } from "@multica/views/issues/components";
 import { ProjectsPage } from "@multica/views/projects/components";
 import { DashboardPage } from "@multica/views/dashboard";
+import { ConveyorPage } from "@multica/views/conveyor";
+import { SubscriptionsPage } from "@multica/views/subscriptions";
+import { CustomPagesPage, CustomPageView } from "@multica/views/custom-pages";
+import { ModelProfilesPage } from "@multica/views/model-profiles";
 import { AutopilotsPage } from "@multica/views/autopilots/components";
 import { MyIssuesPage } from "@multica/views/my-issues";
 import { SkillsPage } from "@multica/views/skills";
@@ -23,9 +27,10 @@ import { DesktopRuntimesPage } from "./components/desktop-runtimes-page";
 import { DesktopAgentsPage } from "./components/desktop-agents-page";
 import {
   AiCreateAgentPage,
-  ChooseCreateMethodPage,
   ManualCreateAgentPage,
 } from "@multica/views/agents";
+import { DesktopChooseRuntimePage } from "./components/desktop-choose-runtime-page";
+import { AgentCreatedPage } from "./pages/agent-created-page";
 import { SquadsPage, SquadDetailPage as SquadDetailPageView } from "@multica/views/squads/components";
 import { InboxPage } from "@multica/views/inbox";
 import { ChatPage } from "@multica/views/chat";
@@ -42,6 +47,11 @@ import { DesktopRouteErrorPage } from "./components/route-error-page";
  * from i18n. The route element has to be a component (not a literal JSX
  * value) for `useT` to run.
  */
+function CustomPageRoute() {
+  const { id } = useParams<{ id: string }>();
+  return id ? <CustomPageView pageId={id} /> : null;
+}
+
 function DesktopSettingsRoute() {
   const { t } = useT("settings");
   return (
@@ -186,7 +196,12 @@ export const appRoutes: RouteObject[] = [
           { path: "agents", element: <DesktopAgentsPage />, handle: { title: "Agents" } },
           {
             path: "agents/new",
-            element: <ChooseCreateMethodPage />,
+            element: <DesktopChooseRuntimePage />,
+            handle: { title: "Create Agent" },
+          },
+          {
+            path: "agents/new/done/:agentId",
+            element: <AgentCreatedPage />,
             handle: { title: "Create Agent" },
           },
           {
@@ -231,6 +246,31 @@ export const appRoutes: RouteObject[] = [
             path: "usage",
             element: <DashboardPage />,
             handle: { title: "Usage" },
+          },
+          {
+            path: "conveyor",
+            element: <ConveyorPage />,
+            handle: { title: "Conveyor" },
+          },
+          {
+            path: "subscriptions",
+            element: <SubscriptionsPage />,
+            handle: { title: "Subscriptions" },
+          },
+          {
+            path: "pages",
+            element: <CustomPagesPage />,
+            handle: { title: "Pages" },
+          },
+          {
+            path: "pages/:id",
+            element: <CustomPageRoute />,
+            handle: { title: "Page" },
+          },
+          {
+            path: "profiles",
+            element: <ModelProfilesPage />,
+            handle: { title: "Profiles" },
           },
           {
             path: "settings",

@@ -8,6 +8,7 @@ import frAgents from "../../../locales/fr/agents.json";
 import jaAgents from "../../../locales/ja/agents.json";
 import koAgents from "../../../locales/ko/agents.json";
 import zhHansAgents from "../../../locales/zh-Hans/agents.json";
+import ruAgents from "../../../locales/ru/agents.json";
 
 import {
   FAILURE_REASON_I18N_KEYS,
@@ -25,6 +26,7 @@ const AGENT_RESOURCES = {
   ja: jaAgents,
   ko: koAgents,
   fr: frAgents,
+  ru: ruAgents,
 } as const;
 
 function fixedT(locale: SupportedLocale): TFunction<"agents"> {
@@ -73,6 +75,12 @@ describe("cancellationActorLabel", () => {
 // it must hold: a SERVER-cancelled row (persisted reason) reads like a failed
 // row. Actor provenance is handled independently by cancellationActorLabel.
 describe("cancelReasonLabel", () => {
+  it("localizes access revocation without calling the cancelled run a failure", () => {
+    for (const locale of Object.keys(AGENT_RESOURCES) as SupportedLocale[]) {
+      expect(cancelReasonLabel({ status: "cancelled", failure_reason: "runtime_access_revoked" }, fixedT(locale)))
+        .toBe(AGENT_RESOURCES[locale].task_failure.reasons.runtime_access_revoked);
+    }
+  });
   it("returns null for a user-initiated cancel", () => {
     expect(
       cancelReasonLabel(
@@ -111,6 +119,7 @@ describe("cancelReasonLabel", () => {
       ja: "システムによってキャンセルされました",
       ko: "시스템에서 취소함",
       fr: "Annulée par le système",
+      ru: "Отменено системой",
     };
 
     for (const locale of Object.keys(expected) as SupportedLocale[]) {

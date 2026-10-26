@@ -185,10 +185,12 @@ func childDoneRuns(t *testing.T, parentID string) []childDoneRunRow {
 	return runs
 }
 
-// runWakeupTick is one scheduler pass over ready wakeups.
+// runWakeupTick is one scheduler pass over this package's ready wakeups. It is
+// scoped to the test workspace: other packages' tests share the database, and
+// dispatching their rules would consume receipts they are asserting on.
 func runWakeupTick(t *testing.T) {
 	t.Helper()
-	if err := (&service.IssueWakeupService{Tasks: testHandler.TaskService}).Tick(context.Background()); err != nil {
+	if err := (&service.IssueWakeupService{Tasks: testHandler.TaskService}).TickWorkspaces(context.Background(), parseUUID(testWorkspaceID)); err != nil {
 		t.Logf("wakeup tick: %v", err)
 	}
 }
@@ -297,6 +299,44 @@ func TestChildDoneHeldWhileParentInBacklog(t *testing.T) {
 	runWakeupTick(t)
 	if got := len(childDoneEntries(t, fx.parent.ID)); got != 1 {
 		t.Fatalf("parking again repeated the wake: %d entries", got)
+	}
+}
+
+// A pass on a parked parent evaluates nothing but still commits, so it clears
+// an earlier pass's error instead of holding it until the parent leaves backlog.
+func TestChildDoneParkedPassClearsEarlierError(t *testing.T) {
+	ctx := context.Background()
+	fx := newChildDoneFixture(t, "backlog")
+	setIssueAssigneeDirect(t, fx.parent.ID, "agent", handlerTestAgentID(t))
+	updateChildStatus(t, fx.child.ID, "done") // creates the parent's rule
+	runWakeupTick(t)
+	tag, err := testPool.Exec(ctx, `UPDATE issue_wakeup SET last_error = 'earlier failure'
+		WHERE issue_id = $1 AND system_rule IS NOT NULL`, fx.parent.ID)
+	if err != nil || tag.RowsAffected() != 1 {
+		t.Fatalf("seed the parent's rule error: %v (%d rows)", err, tag.RowsAffected())
+	}
+
+	receipts := func() (n int) {
+		t.Helper()
+		if err := testPool.QueryRow(ctx, `SELECT count(*) FROM issue_wakeup_receipt r JOIN issue_wakeup w ON w.id = r.wakeup_id
+			WHERE w.issue_id = $1 AND w.system_rule IS NOT NULL`, fx.parent.ID).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	before := receipts()
+	updateChildStatus(t, fx.child.ID, "in_progress") // its hint dispatches the parked pass inline
+	runWakeupTick(t)
+	if receipts() == before {
+		t.Fatal("reopening the sub-issue sent the parked parent's rule no hint")
+	}
+	var lastError *string
+	if err := testPool.QueryRow(ctx, `SELECT last_error FROM issue_wakeup
+		WHERE issue_id = $1 AND system_rule IS NOT NULL`, fx.parent.ID).Scan(&lastError); err != nil {
+		t.Fatal(err)
+	}
+	if lastError != nil {
+		t.Fatalf("the parked pass kept the earlier error %q", *lastError)
 	}
 }
 

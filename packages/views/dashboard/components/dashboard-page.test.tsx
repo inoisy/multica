@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import { cleanup, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderWithI18n } from "../../test/i18n";
 import { NavigationProvider } from "../../navigation";
 import type { NavigationAdapter } from "../../navigation";
@@ -70,9 +71,6 @@ vi.mock("@tanstack/react-query", async () => {
     );
   return {
     ...actual,
-    // The page reads the client only to invalidate the dashboard keys from
-    // the refresh button; there is no provider in these renders.
-    useQueryClient: () => ({ invalidateQueries: vi.fn() }),
     useQuery: (opts: { queryKey: unknown[] }) => {
       queryKeys.push(opts.queryKey);
       if (dashboardDataRef.current) {
@@ -270,6 +268,9 @@ const replaceSpy = vi.fn();
  * runs and each failure's reason.
  */
 function DashboardHarness({ initialSearch = "" }: { initialSearch?: string }) {
+  const [queryClient] = useState(() => new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  }));
   const [search, setSearch] = useState(initialSearch);
   const adapter = useMemo<NavigationAdapter>(
     () => ({
@@ -287,9 +288,11 @@ function DashboardHarness({ initialSearch = "" }: { initialSearch?: string }) {
     [search],
   );
   return (
-    <NavigationProvider value={adapter}>
-      <DashboardPage />
-    </NavigationProvider>
+    <QueryClientProvider client={queryClient}>
+      <NavigationProvider value={adapter}>
+        <DashboardPage />
+      </NavigationProvider>
+    </QueryClientProvider>
   );
 }
 
@@ -684,6 +687,25 @@ describe("DashboardPage — the two questions are separate tabs", () => {
     renderDashboard("tab=errors");
 
     expect(screen.getByRole("list", { name: "Top offenders" })).toBeInTheDocument();
+  });
+
+  it("opens subscriptions in Analytics without project or period filters", async () => {
+    const user = userEvent.setup();
+    renderDashboard("tab=subscriptions");
+
+    expect(screen.getByRole("tab", { name: "Subscriptions" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("heading", { name: "Analytics" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "State" })).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Search accounts and pools")).toBeInTheDocument();
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: "Project" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Period" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "Usage" }));
+    expect(screen.getByRole("button", { name: "Project" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Period" })).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "Subscriptions" }));
+    expect(replaceSpy).toHaveBeenLastCalledWith("/acme/usage?tab=subscriptions");
   });
 
   it("falls back to Usage for a tab value it does not recognise", () => {

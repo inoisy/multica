@@ -1,0 +1,1 @@
+DROP INDEX CONCURRENTLY IF EXISTS subscription_pool_member_account_idx;

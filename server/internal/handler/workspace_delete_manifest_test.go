@@ -19,6 +19,7 @@ const (
 // teardown. Adding a table requires an explicit ownership decision here; the
 // handler deletion graph must then implement that decision before CI passes.
 var workspaceDeletionManifest = map[string]workspaceDeleteAction{
+	"cloud_agent_connection":             workspaceDelete,
 	"activity_log":                       workspaceDelete,
 	"agent":                              workspaceDelete,
 	"agent_builder_draft":                workspaceDelete,
@@ -47,6 +48,7 @@ var workspaceDeletionManifest = map[string]workspaceDeleteAction{
 	"channel_outbound_message":           workspaceDelete,
 	"channel_reply_delivery":             workspaceDelete,
 	"channel_task_delivery":              workspaceDelete,
+	"channel_typing_reaction":            workspaceDeleteSettle, // Source deletion makes retained anchors eligible for the cleanup worker.
 	"channel_user_binding":               workspaceDelete,
 	"chat_draft_restore":                 workspaceDelete,
 	"chat_message":                       workspaceDelete,
@@ -74,6 +76,14 @@ var workspaceDeletionManifest = map[string]workspaceDeleteAction{
 	"issue_wakeup":                       workspaceDelete,
 	"issue_wakeup_receipt":               workspaceDelete,
 	"issue_child_event":                  workspaceDelete,
+	"issue_conveyor":                     workspaceDelete,
+	"issue_conveyor_event":               workspaceDelete,
+	"issue_workflow_artifact":            workspaceDelete,
+	"model_profile":                      workspaceDelete,
+	"model_profile_option":               workspaceDelete,
+	"agent_model_option":                 workspaceDelete,
+	"runtime_unavailable":                workspaceDelete,
+	"model_idle_episode":                 workspaceDelete,
 	"issue_view":                         workspaceDelete,
 	"issue_view_preference":              workspaceDelete,
 	"issue_dependency":                   workspaceDelete,
@@ -86,6 +96,7 @@ var workspaceDeletionManifest = map[string]workspaceDeleteAction{
 	"issue_source_context":               workspaceDelete,
 	"issue_source_context_object_intent": workspaceDeleteSettle,
 	"issue_status":                       workspaceDelete,
+	"issue_workflow":                     workspaceDelete,
 	"issue_subscriber":                   workspaceDelete,
 	"issue_to_label":                     workspaceDelete,
 	"issue_vcs_pull_request":             workspaceDelete,
@@ -98,6 +109,7 @@ var workspaceDeletionManifest = map[string]workspaceDeleteAction{
 	"lark_user_binding":                  workspaceDelete,
 	"maintenance_job":                    workspaceDeleteKeep, // Global maintenance audit history, not workspace-owned.
 	"member":                             workspaceDelete,
+	"member_delegation_day":              workspaceDeleteKeep, // user-scoped telemetry ledger, no workspace_id
 	"agent_mcp_server":                   workspaceDelete,
 	"workspace_mcp_server":               workspaceDelete,
 	"notification_preference":            workspaceDelete,
@@ -116,12 +128,21 @@ var workspaceDeletionManifest = map[string]workspaceDeleteAction{
 	"quick_action":                       workspaceDelete,
 	"runtime_profile":                    workspaceDelete,
 	"schema_migrations":                  workspaceDeleteKeep,
+	"search_index_change":                workspaceDelete,
+	"search_index_prune_mark":            workspaceDeleteKeep,
 	"seat_capacity_outbox":               workspaceDeleteSettle,
 	"skill":                              workspaceDelete,
 	"skill_file":                         workspaceDelete,
 	"skill_to_label":                     workspaceDelete,
 	"squad":                              workspaceDelete,
 	"squad_member":                       workspaceDelete,
+	"subscription":                       workspaceDeleteKeep, // Instance-level provider accounts, shared by every workspace.
+	"subscription_host_state":            workspaceDeleteKeep, // Daemon hosts' view of instance-level credentials.
+	"subscription_usage":                 workspaceDeleteKeep, // Usage of instance-level subscriptions.
+	"subscription_limit_backup":          workspaceDeleteKeep, // Saved limits of instance-level subscriptions, kept for the rollback.
+	"subscription_pool":                  workspaceDeleteKeep, // Instance-level pools of accounts, shared by every workspace.
+	"subscription_pool_member":           workspaceDeleteKeep, // Accounts of an instance-level pool.
+	"subscription_pool_grant":            workspaceDelete,
 	"sys_cron_executions":                workspaceDeleteKeep,
 	"task_message":                       workspaceDelete,
 	"task_supplement":                    workspaceDelete,

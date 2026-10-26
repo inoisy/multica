@@ -80,6 +80,9 @@
         "runtimes",
         "skills",
         "settings",
+        "conveyor",
+        "subscriptions",
+        "profiles",
         "workspaces",
         "teams"
       ]

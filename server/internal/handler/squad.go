@@ -3,9 +3,11 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -13,6 +15,7 @@ import (
 	"github.com/multica-ai/multica/server/internal/analytics"
 	"github.com/multica-ai/multica/server/internal/logger"
 	obsmetrics "github.com/multica-ai/multica/server/internal/metrics"
+	"github.com/multica-ai/multica/server/internal/service"
 	"github.com/multica-ai/multica/server/internal/util"
 	db "github.com/multica-ai/multica/server/pkg/db/generated"
 	"github.com/multica-ai/multica/server/pkg/dbid"
@@ -27,6 +30,7 @@ type SquadResponse struct {
 	Name          string                       `json:"name"`
 	Description   string                       `json:"description"`
 	Instructions  string                       `json:"instructions"`
+	RouteTemplate string                       `json:"route_template"`
 	AvatarURL     *string                      `json:"avatar_url"`
 	LeaderID      string                       `json:"leader_id"`
 	CreatorID     string                       `json:"creator_id"`
@@ -67,6 +71,7 @@ func (h *Handler) squadToResponse(s db.Squad) SquadResponse {
 		Name:          s.Name,
 		Description:   s.Description,
 		Instructions:  s.Instructions,
+		RouteTemplate: s.RouteTemplate,
 		AvatarURL:     h.resolveAvatarURLPtr(textToPtr(s.AvatarUrl)),
 		LeaderID:      uuidToString(s.LeaderID),
 		CreatorID:     uuidToString(s.CreatorID),
@@ -362,6 +367,8 @@ func (h *Handler) UpdateSquad(w http.ResponseWriter, r *http.Request) {
 		Instructions *string `json:"instructions"`
 		LeaderID     *string `json:"leader_id"`
 		AvatarURL    *string `json:"avatar_url"`
+		// RouteTemplate is the squad's default route; "" clears it.
+		RouteTemplate *string `json:"route_template"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
@@ -377,6 +384,18 @@ func (h *Handler) UpdateSquad(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Instructions != nil {
 		params.Instructions = pgtype.Text{String: *req.Instructions, Valid: true}
+	}
+	if req.RouteTemplate != nil {
+		template, err := service.NormalizeSquadRouteTemplate(r.Context(), h.Queries, wsUUID, *req.RouteTemplate)
+		if errors.Is(err, service.ErrConveyorInvalid) {
+			writeError(w, http.StatusBadRequest, "route_template: "+strings.TrimPrefix(err.Error(), service.ErrConveyorInvalid.Error()+": "))
+			return
+		}
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to update squad")
+			return
+		}
+		params.RouteTemplate = pgtype.Text{String: template, Valid: true}
 	}
 	if req.AvatarURL != nil {
 		accepted, ok := h.acceptAvatarURL(w, r, *req.AvatarURL, squad.AvatarUrl.String)
@@ -1215,6 +1234,15 @@ func (h *Handler) enqueueSquadLeaderTask(ctx context.Context, issue db.Issue, tr
 		return false
 	}
 
+	// A squad with a default route runs the issue along it: the route starts
+	// the first step itself and wakes the leader only for a return, a stop
+	// or the end. A template that cannot start leaves the issue to the leader.
+	if routed, rerr := h.startSquadRoute(ctx, issue, squad, authorType, authorID); routed {
+		return true
+	} else if rerr != nil {
+		handoffNote = joinHandoffNotes(service.SquadRouteHandoffNote(rerr), handoffNote)
+	}
+
 	hasPending, err := h.Queries.HasPendingTaskForIssueAndAgent(ctx, db.HasPendingTaskForIssueAndAgentParams{
 		IssueID: issue.ID,
 		AgentID: squad.LeaderID,
@@ -1240,4 +1268,29 @@ func (h *Handler) enqueueSquadLeaderTask(ctx context.Context, issue db.Issue, tr
 		return false
 	}
 	return true
+}
+
+// startSquadRoute enables the squad's default route on the issue. The member
+// who assigned is the route's human; an agent assignment inherits the issue's
+// originating human, as the leader run would.
+func (h *Handler) startSquadRoute(ctx context.Context, issue db.Issue, squad db.Squad, authorType, authorID string) (bool, error) {
+	invoker := memberActorUserID(authorType, authorID)
+	if !invoker.Valid {
+		invoker = h.TaskService.OriginatorForIssueTask(ctx, issue, pgtype.UUID{})
+	}
+	svc := h.conveyorService()
+	routed, err := svc.StartSquadRoute(ctx, issue, squad, invoker)
+	if err != nil {
+		slog.Warn("squad default route not enabled; waking the leader",
+			"issue_id", uuidToString(issue.ID), "squad_id", uuidToString(squad.ID), "error", err)
+	}
+	return routed, err
+}
+
+// joinHandoffNotes puts the server's note ahead of the caller's.
+func joinHandoffNotes(note, extra string) string {
+	if strings.TrimSpace(extra) == "" {
+		return note
+	}
+	return note + "\n\n" + extra
 }

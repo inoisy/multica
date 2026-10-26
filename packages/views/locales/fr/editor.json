@@ -60,6 +60,7 @@
     "preview_too_large": "Le fichier est trop volumineux pour un aperçu. Veuillez le télécharger.",
     "preview_unsupported": "Ce type de fichier ne peut pas être prévisualisé.",
     "close": "Fermer",
+    "back": "Retour",
     "open_in_new_tab": "Ouvrir dans un nouvel onglet",
     "remove": "Supprimer la pièce jointe",
     "previous": "Précédent",
@@ -121,6 +122,7 @@
   },
   "code_block": {
     "html_preview": "Aperçu HTML",
+    "close_preview": "Fermer",
     "copy_code": "Copier le code",
     "show_preview": "Afficher l'aperçu",
     "show_source": "Afficher la source",
@@ -168,5 +170,18 @@
     "export_png": "Télécharger en PNG",
     "export_svg": "Télécharger en SVG",
     "export_source": "Télécharger le .mmd"
+  },
+  "table": {
+    "reset_widths": "Réinitialiser les largeurs",
+    "expand": "Agrandir le tableau",
+    "copy_markdown": "Copier en Markdown",
+    "copy_csv": "Copier en CSV",
+    "copied": "Copié",
+    "resize_column": "Redimensionner la colonne {{name}}",
+    "expanded_title": "Tableau",
+    "filter_placeholder": "Filtrer les lignes",
+    "clear_filter": "Effacer le filtre",
+    "no_matches": "Aucune ligne correspondante",
+    "close": "Fermer"
   }
 }

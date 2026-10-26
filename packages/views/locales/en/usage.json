@@ -1,5 +1,6 @@
 {
   "title": "Analytics",
+  "tab_subscriptions": "Subscriptions",
   "tab_usage": "Usage",
   "header": {
     "timezone_and_updated": "{{tz}} · updated {{time}}",
