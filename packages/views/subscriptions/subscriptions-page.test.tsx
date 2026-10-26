@@ -27,7 +27,7 @@ vi.mock("@multica/core/paths", async (importOriginal) => {
 });
 
 import { NavigationProvider, type NavigationAdapter } from "../navigation";
-import { entry, limitedVerdict, pool, poolList, sub, subscriptionList } from "../runtimes/accounts/accounts.fixtures";
+import { entry, limitedVerdict, pool, poolList, subscriptionList } from "../runtimes/accounts/accounts.fixtures";
 import { SubscriptionsContent, SubscriptionsPage } from "./subscriptions-page";
 
 function renderPage(search = "", locale: "en" | "ru" = "en") {
