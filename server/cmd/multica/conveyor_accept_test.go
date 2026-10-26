@@ -355,3 +355,89 @@ func TestAcceptRepositoryNamesTheWorkspaceRepository(t *testing.T) {
 		}
 	}
 }
+
+// In a repository with CI the platform merges: acceptance confirms the pinned
+// commit reached the base and never merges, pushes or runs the commands.
+func TestAcceptCIConfirmsTheCommitIsInTheBase(t *testing.T) {
+	r := newAcceptRig(t)
+	marker := filepath.Join(t.TempDir(), "ran")
+	sha := r.branch("t-ci-1", acceptConfig{Mode: "ci", Commands: []string{"touch " + marker}}, map[string]string{"f.txt": "x\n"})
+
+	// The platform's merge: a merge commit on the base, made outside acceptance.
+	r.git(r.dev, "checkout", "--quiet", "-B", "platform", "origin/test/base")
+	r.git(r.dev, "merge", "--quiet", "--no-ff", "-m", "platform merge", sha)
+	r.git(r.dev, "push", "--quiet", "origin", "HEAD:test/base")
+	before := r.main()
+
+	out, log := r.accept(sha, "t-ci-1")
+	if out.Outcome != "pass" || out.Skipped || out.Merged != before {
+		t.Fatalf("outcome %s skipped %v merged %s: %s\n%s", out.Outcome, out.Skipped, out.Merged, out.Reason, log)
+	}
+	if r.main() != before {
+		t.Fatal("CI acceptance changed the base")
+	}
+	if _, err := os.Stat(marker); err == nil {
+		t.Fatal("CI acceptance ran the acceptance commands")
+	}
+	if strings.Contains(log, "$ ") {
+		t.Fatalf("CI acceptance ran a command:\n%s", log)
+	}
+}
+
+func TestAcceptCIDoesNotPassACommitOutsideTheBase(t *testing.T) {
+	r := newAcceptRig(t)
+	marker := filepath.Join(t.TempDir(), "ran")
+	sha := r.branch("t-ci-2", acceptConfig{Mode: "ci", Commands: []string{"touch " + marker}, WaitPollSeconds: 1, WaitMaxSeconds: 3}, nil)
+	before := r.main()
+
+	out, log := r.accept(sha, "t-ci-2")
+	if out.Outcome != "blocked" || !strings.Contains(out.Reason, "not merged") {
+		t.Fatalf("an unmerged commit: %s (%s)", out.Outcome, out.Reason)
+	}
+	if got := acceptWorkflowTarget(out, workflowAcceptView{Status: "merge", NextStatus: "done", BackStatus: "dev"}); got != "blocked" {
+		t.Fatalf("an unmerged commit moves the issue to %q", got)
+	}
+	if strings.Count(log, "waiting") != 3 {
+		t.Fatalf("the wait was not bounded by the configured limit:\n%s", log)
+	}
+	if r.main() != before {
+		t.Fatal("CI acceptance merged or pushed")
+	}
+	if _, err := os.Stat(marker); err == nil {
+		t.Fatal("CI acceptance ran the acceptance commands")
+	}
+	if got := r.git(r.origin, "branch", "--list", "test/base", "--contains", sha); got != "" {
+		t.Fatalf("the commit reached the base: %q", got)
+	}
+}
+
+func TestAcceptCIWaitsForTheMerge(t *testing.T) {
+	r := newAcceptRig(t)
+	sha := r.branch("t-ci-3", acceptConfig{Mode: "ci", WaitPollSeconds: 1, WaitMaxSeconds: 10}, map[string]string{"f.txt": "x\n"})
+	var log bytes.Buffer
+	sleeps := 0
+	out := runAcceptance(context.Background(), acceptSpec{
+		Dir: r.work, Repo: r.origin, Commit: sha, Branch: "t-ci-3", Issue: "test-issue", Log: &log,
+		Sleep: func(context.Context, time.Duration) error {
+			if sleeps++; sleeps == 2 {
+				r.git(r.dev, "checkout", "--quiet", "-B", "platform", "origin/test/base")
+				r.git(r.dev, "merge", "--quiet", "--no-ff", "-m", "platform merge", sha)
+				r.git(r.dev, "push", "--quiet", "origin", "HEAD:test/base")
+			}
+			return nil
+		},
+	})
+	if out.Outcome != "pass" || sleeps != 2 {
+		t.Fatalf("outcome %s after %d waits: %s\n%s", out.Outcome, sleeps, out.Reason, log.String())
+	}
+}
+
+func TestAcceptRejectsAnUnknownMode(t *testing.T) {
+	r := newAcceptRig(t)
+	sha := r.branch("t-ci-4", acceptConfig{Mode: "squash", Commands: []string{"true"}}, nil)
+	before := r.main()
+	out, _ := r.accept(sha, "t-ci-4")
+	if out.Outcome != "needs_coordinator" || r.main() != before {
+		t.Fatalf("outcome %s (%s), base moved: %v", out.Outcome, out.Reason, r.main() != before)
+	}
+}
