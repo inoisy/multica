@@ -92,8 +92,7 @@
   },
   "detail_tabs": {
     "members": "Members",
-    "instructions": "Instructions",
-    "route": "Route"
+    "instructions": "Instructions"
   },
   "details": {
     "leader": "Leader",
@@ -112,9 +111,7 @@
     "leader_updated": "Leader updated",
     "leader_update_failed": "Failed to update leader",
     "archive_failed": "Failed to archive squad",
-    "instructions_saved": "Instructions saved",
-    "route_saved": "Route saved",
-    "route_save_failed": "Failed to save the route"
+    "instructions_saved": "Instructions saved"
   },
   "profile_card": {
     "unavailable": "Squad unavailable",
@@ -147,11 +144,5 @@
     "filter_active_count_one": "{{count}} filter",
     "filter_active_count_other": "{{count}} filters",
     "clear_filters": "Clear filters"
-  },
-  "route_tab": {
-    "description": "An issue assigned to this squad runs along this route on the server: each step starts by itself, and the leader is woken only for a return, a stop or the end.",
-    "placeholder": "dev:Backend,qa:Tester,review:Reviewer,accept:Acceptor,close:Lead",
-    "rules": "Steps as step:Agent separated by commas, ending with close:<coordinator>. qa follows dev; accept stands once, right before close, after review, and merges the accepted commit.",
-    "clear_button": "Turn off"
   }
 }
