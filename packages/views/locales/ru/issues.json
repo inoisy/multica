@@ -1867,12 +1867,5 @@
   "stage_dispatch": {
     "label": "Стадии",
     "off": "Не назначаются"
-  },
-  "route_step": {
-    "title": "Шаг маршрута, круг {{round}}",
-    "paused": "на паузе",
-    "awaiting_coordinator": "у координатора",
-    "waiting_provider": "ждёт провайдера",
-    "disabled": "выключен"
   }
 }

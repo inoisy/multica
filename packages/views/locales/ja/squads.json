@@ -91,8 +91,7 @@
   },
   "detail_tabs": {
     "members": "メンバー",
-    "instructions": "指示",
-    "route": "ルート"
+    "instructions": "指示"
   },
   "details": {
     "leader": "リーダー",
@@ -111,9 +110,7 @@
     "leader_updated": "リーダーを更新しました",
     "leader_update_failed": "リーダーを更新できませんでした",
     "archive_failed": "スクワッドをアーカイブできませんでした",
-    "instructions_saved": "指示を保存しました",
-    "route_saved": "ルートを保存しました",
-    "route_save_failed": "ルートを保存できませんでした"
+    "instructions_saved": "指示を保存しました"
   },
   "profile_card": {
     "unavailable": "スクワッドを利用できません",
@@ -143,11 +140,5 @@
     "filter_label": "フィルター",
     "filter_active_count_other": "{{count}} 件のフィルター",
     "clear_filters": "フィルターをクリア"
-  },
-  "route_tab": {
-    "description": "このスクワッドに割り当てられた課題はサーバー上でこのルートに沿って進みます。各ステップは自動で始まり、リーダーが起こされるのは差し戻し・停止・完了のときだけです。",
-    "placeholder": "dev:Backend,qa:Tester,review:Reviewer,accept:Acceptor,close:Lead",
-    "rules": "ステップは step:Agent をカンマ区切りで書き、close:<コーディネーター> で終えます。qa は dev の後。accept は review の後、close の直前に一度だけ置き、承認済みのコミットをマージします。",
-    "clear_button": "オフにする"
   }
 }

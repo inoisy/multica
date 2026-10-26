@@ -91,7 +91,7 @@ func TestRunSquadMemberSetRoleValidatesRequiredFlags(t *testing.T) {
 	}
 }
 
-func TestRunSquadUpdateSendsRouteTemplate(t *testing.T) {
+func TestRunSquadUpdateOnlyClearsRouteTemplate(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("MULTICA_TOKEN", "test-token")
 	t.Setenv("MULTICA_WORKSPACE_ID", "workspace-123")
@@ -112,21 +112,22 @@ func TestRunSquadUpdateSendsRouteTemplate(t *testing.T) {
 	defer srv.Close()
 	t.Setenv("MULTICA_SERVER_URL", srv.URL)
 
-	for _, route := range []string{"dev:Бэкенд,qa:Тестировщик,review:Техдиректор,close:Тимлид", "off"} {
+	run := func(route string) error {
 		cmd := &cobra.Command{Use: "update"}
 		for _, f := range []string{"server-url", "workspace-id", "profile", "name", "description", "instructions", "leader", "avatar-url", "route"} {
 			cmd.Flags().String(f, "", "")
 		}
 		cmd.Flags().String("output", "json", "")
 		_ = cmd.Flags().Set("route", route)
-		if err := runSquadUpdate(cmd, []string{"squad-123"}); err != nil {
-			t.Fatalf("runSquadUpdate(%q): %v", route, err)
-		}
+		return runSquadUpdate(cmd, []string{"squad-123"})
 	}
-	if len(bodies) != 2 || bodies[0]["route_template"] != "dev:Бэкенд,qa:Тестировщик,review:Техдиректор,close:Тимлид" || bodies[1]["route_template"] != "" {
-		t.Fatalf("bodies = %#v, want the route and then an empty template", bodies)
+	if err := run("dev:Бэкенд,qa:Тестировщик,review:Техдиректор,close:Тимлид"); err == nil {
+		t.Fatal("a route template was accepted; squad routes are removed")
 	}
-	if len(bodies[0]) != 1 {
-		t.Fatalf("update sent fields beyond the route: %#v", bodies[0])
+	if err := run("off"); err != nil {
+		t.Fatalf("runSquadUpdate(off): %v", err)
+	}
+	if len(bodies) != 1 || len(bodies[0]) != 1 || bodies[0]["route_template"] != "" {
+		t.Fatalf("bodies = %#v, want one request clearing the template", bodies)
 	}
 }

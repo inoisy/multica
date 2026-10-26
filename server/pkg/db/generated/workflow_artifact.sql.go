@@ -43,25 +43,6 @@ func (q *Queries) GetIssueWorkflowArtifact(ctx context.Context, arg GetIssueWork
 	return i, err
 }
 
-const projectHasLegacyRoutes = `-- name: ProjectHasLegacyRoutes :one
-SELECT EXISTS (
-    SELECT 1 FROM issue_conveyor c JOIN issue i ON i.id = c.issue_id
-    WHERE i.project_id = $1 AND i.workspace_id = $2 AND c.status NOT IN ('disabled', 'completed')
-)
-`
-
-type ProjectHasLegacyRoutesParams struct {
-	ProjectID   pgtype.UUID `json:"project_id"`
-	WorkspaceID pgtype.UUID `json:"workspace_id"`
-}
-
-func (q *Queries) ProjectHasLegacyRoutes(ctx context.Context, arg ProjectHasLegacyRoutesParams) (bool, error) {
-	row := q.db.QueryRow(ctx, projectHasLegacyRoutes, arg.ProjectID, arg.WorkspaceID)
-	var exists bool
-	err := row.Scan(&exists)
-	return exists, err
-}
-
 const putIssueWorkflowArtifact = `-- name: PutIssueWorkflowArtifact :exec
 INSERT INTO issue_workflow_artifact (issue_id, workspace_id, project_id, workflow_id, artifact)
 VALUES ($1, $2, $3, $4, $5)
@@ -87,18 +68,4 @@ func (q *Queries) PutIssueWorkflowArtifact(ctx context.Context, arg PutIssueWork
 		arg.Artifact,
 	)
 	return err
-}
-
-const workspaceHasLegacyRoutes = `-- name: WorkspaceHasLegacyRoutes :one
-SELECT EXISTS (
-    SELECT 1 FROM issue_conveyor c JOIN issue i ON i.id = c.issue_id
-    WHERE i.workspace_id = $1 AND c.status NOT IN ('disabled', 'completed')
-)
-`
-
-func (q *Queries) WorkspaceHasLegacyRoutes(ctx context.Context, workspaceID pgtype.UUID) (bool, error) {
-	row := q.db.QueryRow(ctx, workspaceHasLegacyRoutes, workspaceID)
-	var exists bool
-	err := row.Scan(&exists)
-	return exists, err
 }
