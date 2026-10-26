@@ -2798,3 +2798,15 @@ RETURNING *;
 
 -- name: GetCommentThreadRootID :one
 SELECT comment_thread_root_id(@comment_id::uuid)::uuid AS id;
+
+-- name: ListRunFacts24Hours :many
+-- Count attempts once, by the runtime the claim recorded and the account the
+-- daemon confirmed, never from quota observations or today's mutable
+-- agent/profile configuration.
+SELECT COALESCE(NULLIF(account_fact ->> 'subscription_id', ''), '')::text AS subscription_id,
+       count(*)::bigint AS runs
+FROM agent_task_queue
+WHERE COALESCE(started_at, dispatched_at) >= @since::timestamptz
+  AND COALESCE(started_at, dispatched_at) < @until::timestamptz
+  AND COALESCE(NULLIF(model_choice #>> '{chosen,runtime_id}', ''), runtime_id::text) = @runtime_id::text
+GROUP BY 1;

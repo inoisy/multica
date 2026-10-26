@@ -49,6 +49,8 @@ const unknownResetWait = time.Hour
 
 // Account is an account as the rule reads it.
 type Account struct {
+	Auth          string
+	Model         string
 	ID            string
 	Key           string
 	Windows       []string
@@ -252,6 +254,19 @@ func EvaluateAccount(a Account, daemonID string, now time.Time) AccountVerdict {
 	return v
 }
 
+// OverAgentCap says whether the account was at or past the limit agents may
+// spend in some window, by a measurement that is still fresh. A manual run is
+// allowed over it; the journal only records that it was.
+func OverAgentCap(a Account, now time.Time) bool {
+	mark := accountMark(a, now)
+	for _, w := range mark.State.Windows {
+		if limit, capped := mark.Sub.EffectiveCaps[w.Key]; capped && w.Used >= float64(limit) {
+			return true
+		}
+	}
+	return false
+}
+
 // AccountRefusedUntil is the latest active provider refusal of the account,
 // independent of any other reason that may keep it unavailable for longer.
 func AccountRefusedUntil(a Account, now time.Time) time.Time {
@@ -323,7 +338,7 @@ func LoadAccounts(ctx context.Context, q *db.Queries, ids []pgtype.UUID, now tim
 		return nil, err
 	}
 	for _, s := range subs {
-		a := Account{ID: util.UUIDToString(s.ID), Key: s.Key, Windows: decodeStringListJSON(s.Windows), Caps: decodeCapsJSON(s.Caps)}
+		a := Account{Auth: s.Auth, Model: SubscriptionModel(s), ID: util.UUIDToString(s.ID), Key: s.Key, Windows: decodeStringListJSON(s.Windows), Caps: decodeCapsJSON(s.Caps)}
 		if s.DisabledUntil.Valid {
 			a.DisabledUntil = s.DisabledUntil.Time
 		}

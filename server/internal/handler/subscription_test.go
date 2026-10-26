@@ -27,6 +27,7 @@ func subscriptionTestHandler(t *testing.T) *Handler {
 // accounts, usage, pools with their members and grants, and environments.
 func cleanSubtestPools() {
 	ctx := context.Background()
+	testPool.Exec(ctx, `DELETE FROM subscription_manual_run WHERE subscription_id IN (SELECT id FROM subscription WHERE key LIKE 'subtest-%')`)
 	testPool.Exec(ctx, `DELETE FROM runtime_unavailable WHERE subscription_id IN (SELECT id FROM subscription WHERE key LIKE 'subtest-%')`)
 	testPool.Exec(ctx, `DELETE FROM subscription_usage WHERE subscription_id IN (SELECT id FROM subscription WHERE key LIKE 'subtest-%')`)
 	testPool.Exec(ctx, `DELETE FROM subscription_host_state WHERE subscription_id IN (SELECT id FROM subscription WHERE key LIKE 'subtest-%')`)

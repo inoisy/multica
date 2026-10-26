@@ -196,3 +196,41 @@ WHERE ar.profile_id = ANY(@profile_ids::uuid[]) AND a.archived_at IS NULL;
 SELECT * FROM runtime_profile
 WHERE share_key IS NOT NULL
 ORDER BY workspace_id, created_at;
+
+-- name: CreateSubscriptionManualRun :one
+INSERT INTO subscription_manual_run (subscription_id, user_id, daemon_id, command, agent_cap_exceeded)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING *;
+
+-- name: GetSubscriptionManualRun :one
+SELECT * FROM subscription_manual_run
+WHERE id = $1 AND subscription_id = $2;
+
+-- name: CloseSubscriptionManualRun :one
+-- Closes a record once; a record that is already closed is left as it is.
+UPDATE subscription_manual_run
+SET finished_at = now(), exit_code = @exit_code
+WHERE id = @id AND subscription_id = @subscription_id AND finished_at IS NULL
+RETURNING *;
+
+-- name: ListSubscriptionManualRuns :many
+SELECT r.*, COALESCE(u.name, '')::text AS user_name
+FROM subscription_manual_run r
+LEFT JOIN "user" u ON u.id = r.user_id
+WHERE r.subscription_id = @subscription_id
+  AND (sqlc.narg('before')::timestamptz IS NULL OR r.started_at < sqlc.narg('before')::timestamptz)
+ORDER BY r.started_at DESC, r.id DESC
+LIMIT @row_limit;
+
+-- name: DeleteSubscriptionManualRuns :exec
+DELETE FROM subscription_manual_run
+WHERE subscription_id = $1;
+
+-- name: DeleteExpiredSubscriptionManualRuns :execrows
+DELETE FROM subscription_manual_run
+WHERE id IN (
+    SELECT id FROM subscription_manual_run
+    WHERE started_at < @before::timestamptz
+    ORDER BY started_at
+    LIMIT @batch_size
+);

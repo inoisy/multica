@@ -1720,6 +1720,10 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 			r.Post("/{key}/login", h.StartSubscriptionLogin)
 			r.Get("/{key}/login", h.GetSubscriptionLogin)
 			r.Delete("/{key}/login", h.CancelSubscriptionLogin)
+			// Journal of the commands an instance admin ran by hand.
+			r.Get("/{key}/manual-runs", h.ListSubscriptionManualRuns)
+			r.Post("/{key}/manual-runs", h.OpenSubscriptionManualRun)
+			r.Post("/{key}/manual-runs/{runId}/finish", h.FinishSubscriptionManualRun)
 		})
 		r.Post("/api/runtime-pools", h.CreateRuntimePool)
 		// Pools of accounts: readable by members of any workspace for the
@@ -2446,6 +2450,7 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 					r.Patch("/", h.UpdateAgentRuntime)
 					r.Get("/usage", h.GetRuntimeUsage)
 					r.Get("/model-usage", h.GetRuntimeModelUsage)
+					r.Get("/run-facts", h.GetRuntimeRunFacts)
 					r.Get("/usage/by-agent", h.GetRuntimeUsageByAgent)
 					r.Get("/usage/by-hour", h.GetRuntimeUsageByHour)
 					r.Get("/activity", h.GetRuntimeTaskActivity)
