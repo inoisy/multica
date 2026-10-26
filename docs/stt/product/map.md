@@ -64,11 +64,17 @@ workspace; `runtime_profile` — настройка CLI workspace; `agent_runtim
 
 ## Граница с прежним конвейером
 
-В коде одновременно есть Project Workflow и `issue_conveyor`. Их нельзя считать
-синонимами. `accept` Workflow использует существующий CLI приёмки; удаление
-старого маршрута не должно удалить этот сценарий и stage-dispatch. Источники:
+Уточнение 26.10 по `main@82448ded6`: старый маршрут удалён в PR #77,
+приёмка Workflow и stage-dispatch сохранены. Основная команда —
+`multica workflow accept`, прежнее имя `issue conveyor accept` оставлено
+временным алиасом. PR #98 добавил режим `ci`: приёмка подтверждает наличие
+закреплённого коммита в базе, локальное слияние и acceptance-команды не запускает.
+Для локальных репозиториев без CI сохранён прежний путь. Реальный сквозной
+цикл CI-режима ещё проверяется в зависимости от перехода РП;
+код и merge сами по себе его не доказывают. Источники:
 [STT-429](https://multica.yakutov.com/stt/issues/STT-429),
-[issueworkflow/handler.go](../../../server/internal/issueworkflow/issueworkflow.go),
+[issueworkflow.go](../../../server/internal/issueworkflow/issueworkflow.go),
+[workflow_accept.go](../../../server/cmd/multica/workflow_accept.go),
 [cmd_issue_conveyor_accept.go](../../../server/cmd/multica/cmd_issue_conveyor_accept.go),
 [stage_dispatch.go](../../../server/internal/service/stage_dispatch.go).
 
