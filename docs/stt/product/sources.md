@@ -1,0 +1,35 @@
+# Источники и границы среза
+
+База собрана 26.10.2026 в STT-436. Текущие описания задач прочитаны через
+`multica issue get`, все треды сначала просмотрены через
+`comment list --roots-only --summary --compact`, значимые — раскрыты отдельно.
+Сырые ответы CLI, токены и содержимое входов в репозиторий не включены.
+
+| Источник | Что из него взято |
+| --- | --- |
+| [STT-436](https://multica.yakutov.com/stt/issues/STT-436), уточнение Евгения 26.10, комментарий `01a17785-b2fa-7c79-b059-3744b1b783a4` | Объём базы и инструмента; готовые решения проверены до выбора Codebase Memory как основы |
+| [STT-420](https://multica.yakutov.com/stt/issues/STT-420), `01a16eb1-be38-7cc6-b073-a404ae18914e` | Назначение упрощения моделей, итог релиза, окно наблюдения; приоритет у актуального верхнего раздела описания |
+| [STT-424](https://multica.yakutov.com/stt/issues/STT-424), `01a16ed2-e6c5-7257-9947-d01367fcf06d` | Приёмка, исправления, прод-копия, фактическая установка |
+| STT-424: комментарии `01a17077-dd4e-7572-a24d-bb15a8b24ea3`, `01a17227-12f6-7cfd-9cb7-20ee8bff0c11` | Первые дефекты и последующий отчёт об исправлениях |
+| STT-424: `01a17244-db12-789d-af1d-b5fa2d2b7eb5`, `01a1737b-56a6-7079-af28-507de27f2404` | 156 контекстов, исключения проверки, установленный SHA и последующие слияния |
+| [STT-429](https://multica.yakutov.com/stt/issues/STT-429), `01a1724b-0032-756d-a54e-852cd99809b2` | Граница старого маршрута / Workflow / accept / stage-dispatch |
+| [STT-433](https://multica.yakutov.com/stt/issues/STT-433), `01a17727-e7d6-7897-a6e3-cd232ced34d1` | Актуальное целевое решение и план 613–615; комментарий `01a17777-90af-7766-b714-1c1e1cb7459f` — окончательное размещение управления |
+| [STT-435](https://multica.yakutov.com/stt/issues/STT-435), `01a1776e-23d4-7978-9577-c6dce775eb2e` | Очерёдность работы с апстримом и условия публикации |
+| [model-selection-and-accounts.md](../../engineering/model-selection-and-accounts.md), [server API](../../engineering/model-accounts-server-api.md) | Словарь и контракт схемы 612 |
+| [PR форка #53](https://github.com/inoisy/multica/pull/53), head `4e62e5e2d6ec373296fe5d924fde9bf2a90c6939` | Прочитан `docs/engineering/model-tables.md` из ветки `t-12345-model-tables`; PR OPEN, в базовой ветке файла ещё нет. Не считаем описанную проекцию полей уже реализованной без проверки кода |
+| [docs/stt](..) | История ТЗ моделей, импорта и конвейера; более поздние STT-420/429/433 заменяют соответствующие старые положения |
+| [Архив STT-423](https://multica.yakutov.com/stt/issues/STT-423), STT-424, [v5](https://art-multica-kiss-v5-0da4e4.stand.yakutov.com) | Визуальные источники, перечисленные в [ui.md](ui.md) |
+| [RFC #6650](https://github.com/multica-ai/multica/issues/6650), [#8931](https://github.com/multica-ai/multica/pull/8931), [#8579](https://github.com/multica-ai/multica/pull/8579), [#7413](https://github.com/multica-ai/multica/pull/7413) | Направление и актуальные статусы апстрима, проверены GitHub API |
+
+Порядок при противоречиях: актуальное решение автора с условиями → текущее
+описание задачи → проверяемое поведение кода нужного SHA → историческая
+спецификация и ранние отчёты. Будущее поведение из решения не объявлять текущим
+поведением кода. В частности, фраза из раннего комментария о PR «в main»
+не актуальна: финальный отчёт STT-424 фиксирует целевую `runtime/0.6.1-live`.
+
+`docs/stt/tz-model-tiers.md` и `models-import.md` описывают прежнюю свою цепочку;
+`conveyor-auto.md`, `conveyor-accept.md`, `tz-conveyor-in-multica.md` — старый
+маршрут; `stage-dispatch.md` — отдельную диспетчеризацию стадий. Это источники
+истории и остаточных зависимостей, не разрешение возрождать снятые механизмы.
+Основание: [STT-429](https://multica.yakutov.com/stt/issues/STT-429),
+[STT-433](https://multica.yakutov.com/stt/issues/STT-433).

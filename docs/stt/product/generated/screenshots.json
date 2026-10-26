@@ -1,0 +1,2417 @@
+{
+  "source_sha": "f12d2020efe929ac670ba1bf10be67c8013b65f5",
+  "note": "SHA is the product-code reference, not a per-image code revision. Archives and mockup are separate evidence kinds.",
+  "sources": [
+    {
+      "version": 1,
+      "mode": "archive",
+      "images": [
+        {
+          "file": "01-subscriptions-dark-1440.webp",
+          "sha256": "2da6e0d4c4b5bdb5d2a140cab7dbbf5a9794395321db6b1c3c0a306cc8be4aad"
+        },
+        {
+          "file": "01-subscriptions-dark-375.webp",
+          "sha256": "38212b3ea2899277afa9c286de58f4c58172297b11060a88709a9cf9f6024b33"
+        },
+        {
+          "file": "01-subscriptions-light-1440.webp",
+          "sha256": "26dc015fc804e43aa15dfc86ad8101c00cb0082cb50ce54fa10f07163b4d2c70"
+        },
+        {
+          "file": "01-subscriptions-light-375.webp",
+          "sha256": "bd5d65b5e397be638905da4e3a11e366d38e46acd75ab7d6e7240daa3974bba2"
+        },
+        {
+          "file": "02-subscription-account-dark-1440.webp",
+          "sha256": "5d4e5dbd020acd3a709b01de26b90e32ac6c86c588f2c897e4565d021aec354d"
+        },
+        {
+          "file": "02-subscription-account-dark-375.webp",
+          "sha256": "927660c026f2c7870ae18c2623ad4ed8d0aee757b49ff691ac632acfd8699cdc"
+        },
+        {
+          "file": "02-subscription-account-light-1440.webp",
+          "sha256": "f5a395685b44995bb1123c329a6a3f98c3295e4941ddf55dcc6b99816c45d312"
+        },
+        {
+          "file": "02-subscription-account-light-375.webp",
+          "sha256": "e55f3168fe2be692cca404fee38d1eefda7f8ae08278f2cf477a074f2602d533"
+        },
+        {
+          "file": "03-subscriptions-filtered-dark-1440.webp",
+          "sha256": "5bac0e0502db0d08a6e5c654cd85d996954c7435c3ffd9b8b2f7ced24a7f3685"
+        },
+        {
+          "file": "03-subscriptions-filtered-dark-375.webp",
+          "sha256": "37dd3f18633c8fd5c1f83dabb01b614e00dcc2446d38359e6fae44a641cfc08c"
+        },
+        {
+          "file": "03-subscriptions-filtered-light-1440.webp",
+          "sha256": "802de8455b280b7932e4a2a6fab538a66c32bd01f0a56d9f7483bbb69605e8a0"
+        },
+        {
+          "file": "03-subscriptions-filtered-light-375.webp",
+          "sha256": "b272c5c33a5ca0494f852e086a90b40f22342a38171e768b7d1bfa47d2e72542"
+        },
+        {
+          "file": "04-pool-editor-dark-1440.webp",
+          "sha256": "ef31700190672402fe55ef6663ef8996e4ed98f5c3e3e47e65b40dc29f5f8924"
+        },
+        {
+          "file": "04-pool-editor-dark-375.webp",
+          "sha256": "44ea8b342b434192d4a75247366e3b50873ea36ebef8853ee614c3801d643add"
+        },
+        {
+          "file": "04-pool-editor-light-1440.webp",
+          "sha256": "4c7ea4a3c335a8173ade5cc93dd19e818402ab83929c5f62d1fee690846b1a77"
+        },
+        {
+          "file": "04-pool-editor-light-375.webp",
+          "sha256": "10cabbe92bad647acd945314bc297c10bdd01f0c94eff4acf18d79eb511f0b23"
+        },
+        {
+          "file": "05-profiles-dark-1440.webp",
+          "sha256": "3af0b1636d694df455670f9e0c0a08433c8e513ff4ecec77e0c56995de50975d"
+        },
+        {
+          "file": "05-profiles-dark-375.webp",
+          "sha256": "29579cf4df6e33d1f89ebd98801032ecf1c0a458efa7a819baf2d8859c3eef4c"
+        },
+        {
+          "file": "05-profiles-light-1440.webp",
+          "sha256": "6e0e03adb59bda144243868fb9eea87f984e0da0225777f83ce5b041d006ba3a"
+        },
+        {
+          "file": "05-profiles-light-375.webp",
+          "sha256": "e54f97d2d2797fb86f2b9d73ce69826f96f612c38855e6d64114e599d50cb111"
+        },
+        {
+          "file": "06-profiles-personal-dark-1440.webp",
+          "sha256": "41419c532f21430dfde03b6c54447fad1a1549c21a4f52df04fd70b1696e074e"
+        },
+        {
+          "file": "06-profiles-personal-dark-375.webp",
+          "sha256": "055cdfafd112dee47d7625f272a90bfaf5277652f073ce57d028d6b2b9df1344"
+        },
+        {
+          "file": "06-profiles-personal-light-1440.webp",
+          "sha256": "1f831e524584b8046066f4fdf9b1cfbf41667d1f6d4f78d1777281793fc7bace"
+        },
+        {
+          "file": "06-profiles-personal-light-375.webp",
+          "sha256": "c58b5ca3835d572c75e3f4f17b09ec3cf60d56d4c818add889a7fa8a7117071b"
+        },
+        {
+          "file": "07-agent-shared-dark-1440.webp",
+          "sha256": "85b6bf4308be5d325d55dd9aceafa083b418c925c96c5e03b55fa0ebb3849451"
+        },
+        {
+          "file": "07-agent-shared-dark-375.webp",
+          "sha256": "97dc9c01e1befdbbfd20bdbaf7de095b25b2978ecec376af16333e96579ce8f4"
+        },
+        {
+          "file": "07-agent-shared-light-1440.webp",
+          "sha256": "34f9fbfec4be89d9654a054be6210cfd15874cb0c52eba5306c32545ee531c85"
+        },
+        {
+          "file": "07-agent-shared-light-375.webp",
+          "sha256": "829bfc867890e45a8ee98779eaac81762b5f00e928ddd21d3ee5cc241a7a2af8"
+        },
+        {
+          "file": "08-agent-personal-match-dark-1440.webp",
+          "sha256": "4e98acc5c8073f3410bc8b8cd2cad08c8a4a853e5bfbfdccc96766f989676e7a"
+        },
+        {
+          "file": "08-agent-personal-match-dark-375.webp",
+          "sha256": "90aa20f38ea34aa4aca226f9ffe66e9efee698626ed2645b30f690c6b2544665"
+        },
+        {
+          "file": "08-agent-personal-match-light-1440.webp",
+          "sha256": "9de4aac5da4ae61701ad725bddb62283a2ce8804022bb2fb9de3d7972ebba4e4"
+        },
+        {
+          "file": "08-agent-personal-match-light-375.webp",
+          "sha256": "6ad92002ac94521ef973d3ffc10bf60e4a24d77cd252f42efed8650bf146ebff"
+        },
+        {
+          "file": "09-agent-personal-diff-dark-1440.webp",
+          "sha256": "e81d7414ad7ea1b02a86f2ca397ebb29043a368c269a417cbc7de3646deb42d8"
+        },
+        {
+          "file": "09-agent-personal-diff-dark-375.webp",
+          "sha256": "b44700462ca217d2baadce09501a6449b280d7a281e7c3c062914f3a9035ef09"
+        },
+        {
+          "file": "09-agent-personal-diff-light-1440.webp",
+          "sha256": "a017c7e39c873d13bbaf6361877fdb9e6fb6f6a495e859aa378bb4a4b1a6e592"
+        },
+        {
+          "file": "09-agent-personal-diff-light-375.webp",
+          "sha256": "bc3465c723046c3bcf41d6c5f90887fe2ffbb60c1abeea956805af4ff7e84a57"
+        },
+        {
+          "file": "10-agent-single-dark-1440.webp",
+          "sha256": "379c31d7e8328eed75e9fc26418e901bc14f278fb6277174f992637e5de72e6d"
+        },
+        {
+          "file": "10-agent-single-dark-375.webp",
+          "sha256": "7104f21bd4abeed6fa16827b590207df2077cfb87f88460e942d4cc1db97427d"
+        },
+        {
+          "file": "10-agent-single-light-1440.webp",
+          "sha256": "af762c2cbd3cfc946a35fdfcdbdfb42b98a407bfa8426c1f222d078a3f0f10f4"
+        },
+        {
+          "file": "10-agent-single-light-375.webp",
+          "sha256": "9edebbd13920faf8ae37d5eb3c4a1ef6e49af8d58f1815daabd6ea6c98191799"
+        },
+        {
+          "file": "11-runtime-pool-dark-1440.webp",
+          "sha256": "5b758c27f90bca080730bf039a654883fbb10e9ab67e11aba0719eee817bb546"
+        },
+        {
+          "file": "11-runtime-pool-dark-375.webp",
+          "sha256": "a1f78e621a3409526d0045d51c03ebf09f0920cc7006616cbdeb9e8b2b069dc5"
+        },
+        {
+          "file": "11-runtime-pool-light-1440.webp",
+          "sha256": "92da45c1975392fe67aa13c52b61d1034c9739e65eea3665cb77b62cc33ed131"
+        },
+        {
+          "file": "11-runtime-pool-light-375.webp",
+          "sha256": "fde533a6d5670b41729242e95f8426f016b86308b137577fd1bcc65f6dd5e216"
+        },
+        {
+          "file": "12-issue-waiting-dark-1440.webp",
+          "sha256": "2953224aa108fb0d69924ebc788e400989e9e17452c986886a7b0a708778f072"
+        },
+        {
+          "file": "12-issue-waiting-dark-375.webp",
+          "sha256": "6dd2586b33ccfdbd161c2c01feb4200ad52c14a262a75e872a61695f73f7e7db"
+        },
+        {
+          "file": "12-issue-waiting-light-1440.webp",
+          "sha256": "497b9b0d4fa4a07c5970d126607217bc9a5d6fd2d29dfa6a78d4b7599cb0b462"
+        },
+        {
+          "file": "12-issue-waiting-light-375.webp",
+          "sha256": "327f6cfec9dfff6ea53f98252d376fa638e40b9203ad036562f5b8c954ff23cd"
+        },
+        {
+          "file": "13-run-details-dark-1440.webp",
+          "sha256": "015ff6a74ee8d3c4d9a7d653ebb64cae1486232c8d8b6e8648a1c17ea9286ed4"
+        },
+        {
+          "file": "13-run-details-dark-375.webp",
+          "sha256": "10559a91f9d8f1804be63586992aa948327e13fed850bf21bee33f04e5fa51f3"
+        },
+        {
+          "file": "13-run-details-light-1440.webp",
+          "sha256": "3cf9bc8f8c031061bb3559d038f5e27c14e8bafa17394acc1a0478793f6f0757"
+        },
+        {
+          "file": "13-run-details-light-375.webp",
+          "sha256": "6e17a57233b468e0e159b550c1c21630cc831863036e768865cc064048287e31"
+        },
+        {
+          "file": "14-wizard-1-account-dark-1440.webp",
+          "sha256": "42b3db174eb2d53175cc854b8269f4fb91d89e0e2cfb0f6ec984f9cc98c283ad"
+        },
+        {
+          "file": "14-wizard-1-account-dark-375.webp",
+          "sha256": "05f190b179682cdb45c1e783fdbb8f2f4c36b85feeae7c8a0153554c19d5ca67"
+        },
+        {
+          "file": "14-wizard-1-account-light-1440.webp",
+          "sha256": "2ae6d64a7c58d18c93ebfc08d542ee2f9ac89a71e7fd8b1562b7d0d1430bfb3b"
+        },
+        {
+          "file": "14-wizard-1-account-light-375.webp",
+          "sha256": "a5fe00e3b8a7b26fedac31c560f8839485b34496c3f8d9ba581ca43753e72373"
+        },
+        {
+          "file": "15-wizard-2-pool-dark-1440.webp",
+          "sha256": "1aee606dbb91330f93d036aff5a42419d72b20817c26908579778924a3571b5c"
+        },
+        {
+          "file": "15-wizard-2-pool-dark-375.webp",
+          "sha256": "655a4d61329e487e979fa10c23a3aa86a2590d91964e1c9de1bc56d5e5f5f48d"
+        },
+        {
+          "file": "15-wizard-2-pool-light-1440.webp",
+          "sha256": "b2e446ac6b2ab21f170cd30b03f2a052893271a7e4f8acbed6681ad0b93e5223"
+        },
+        {
+          "file": "15-wizard-2-pool-light-375.webp",
+          "sha256": "fc64c088a34f79645a7a3142148817edd331fa9c1520fffbbcdafe69ad84a6e5"
+        },
+        {
+          "file": "16-wizard-2-new-pool-dark-1440.webp",
+          "sha256": "290272f688f9fc93363dce1f5d332c8c8bff526c31a2f82bd0940419c1851f3f"
+        },
+        {
+          "file": "16-wizard-2-new-pool-dark-375.webp",
+          "sha256": "6508447a560292e766081dd04a8b9c5adfe4bac0a500401a0061a3da8735fa35"
+        },
+        {
+          "file": "16-wizard-2-new-pool-light-1440.webp",
+          "sha256": "f30e7aecbcb56313bf911a97e4eef220a87be58143ba82f66b47cd62eafabab9"
+        },
+        {
+          "file": "16-wizard-2-new-pool-light-375.webp",
+          "sha256": "f12ec153e591d1d814aa613508639a14f1240667c0c1fb1e7549f58b1d4f333a"
+        },
+        {
+          "file": "17-wizard-3-usage-dark-1440.webp",
+          "sha256": "f964234bdef8f41de93f7cfd5db81d942e58ee5c3e4cb7abb1119f06fdcb2429"
+        },
+        {
+          "file": "17-wizard-3-usage-dark-375.webp",
+          "sha256": "a9597911613cd201c36c46cfe141a4e15be5e1947320affdb0b9403b21fe7d2b"
+        },
+        {
+          "file": "17-wizard-3-usage-light-1440.webp",
+          "sha256": "f84d93c40e33db5cdbccb91f390fe3f9261a31968696a146900fbe08ef74cf51"
+        },
+        {
+          "file": "17-wizard-3-usage-light-375.webp",
+          "sha256": "8f522594b30361cd95855b7edbd23d80c9a1a3246e1a324544da79d04dd691bd"
+        },
+        {
+          "file": "18-profile-edit-dark-1440.webp",
+          "sha256": "dda4d283ca1501ffc69c603319bad93c29b98f257f4bee34aab4a9307b6ab2d5"
+        },
+        {
+          "file": "18-profile-edit-dark-375.webp",
+          "sha256": "dac85dc68a2fcce7ec118a80eafdfd8b043235dd801b0c4158223af7e1b82a45"
+        },
+        {
+          "file": "18-profile-edit-light-1440.webp",
+          "sha256": "ada4464649ce843ce9d983dc9815d2e1e39f279fd5874d926d54afed04fa1830"
+        },
+        {
+          "file": "18-profile-edit-light-375.webp",
+          "sha256": "82d0b7e705e67d0b2122446f920631a2f51fcc4962133130614be0f4a5a35490"
+        },
+        {
+          "file": "19-agent-personal-edit-dark-1440.webp",
+          "sha256": "4cf783eab1bfface4e2dfa84c0f7f02e434a5f2c8f254c3c2651e920f4af919c"
+        },
+        {
+          "file": "19-agent-personal-edit-dark-375.webp",
+          "sha256": "3862ed42c62ec7986b6bbc36409c44fa73c1debca574c12d0a37f773ae4fbcc2"
+        },
+        {
+          "file": "19-agent-personal-edit-light-1440.webp",
+          "sha256": "d3bbce4b7bc78fb693499e4123429998e7fd672b862eafa2bdbfc7955b6f3ecf"
+        },
+        {
+          "file": "19-agent-personal-edit-light-375.webp",
+          "sha256": "1e4f582e46e81a952f69629b18ba3851de48711c0fbc7e65192a14f4e4db94c0"
+        },
+        {
+          "file": "20-agent-reset-confirm-dark-1440.webp",
+          "sha256": "6c4a40735afc6238cec3375741d71f32a653933305ed277e5cbf3bbd710cbf53"
+        },
+        {
+          "file": "20-agent-reset-confirm-dark-375.webp",
+          "sha256": "7f707099dfa6fabd399bd17175a73dff7ef3b2d57307f7d27d35c00c0e5c06bd"
+        },
+        {
+          "file": "20-agent-reset-confirm-light-1440.webp",
+          "sha256": "6f27d144eb203b7896c313dd6250802d329284775c066709b12d1cefcda70281"
+        },
+        {
+          "file": "20-agent-reset-confirm-light-375.webp",
+          "sha256": "98230daae8d5ac17e14e8a926312f068112521c8816a3859c75e8085626771d0"
+        },
+        {
+          "file": "21-pool-select-open-dark-1440.webp",
+          "sha256": "2e93a08faf1b317b4c8171537fefc2686accffd785e020959d19801032033436"
+        },
+        {
+          "file": "21-pool-select-open-dark-375.webp",
+          "sha256": "0b0976c19e497277c828ab1b68202ad32d5b00d5824aebb6583c6260406a4ffc"
+        },
+        {
+          "file": "21-pool-select-open-light-1440.webp",
+          "sha256": "f0a7bd848340d937694714af07a7a7c5d753bf3a0dbbedc9e2d5a50291d1d2ec"
+        },
+        {
+          "file": "21-pool-select-open-light-375.webp",
+          "sha256": "101fe1d5d1f27db6b18b37a59713c8eef6397c8b679fb8db31d551948549692f"
+        },
+        {
+          "file": "22-agent-profile-select-open-dark-1440.webp",
+          "sha256": "f5cadcd45362213f7152a55c32f4e90ea8e78ec72aaef93ec4a14f71fa270ef2"
+        },
+        {
+          "file": "22-agent-profile-select-open-dark-375.webp",
+          "sha256": "99c41370f79d1a2b91fd0ffcd8d19f9583461f74ca5cda9432a174133a1c9deb"
+        },
+        {
+          "file": "22-agent-profile-select-open-light-1440.webp",
+          "sha256": "24d8ae4bca25b4402b18763bab05ce8a5f72cae34c716cbc2a38025bd5a74c92"
+        },
+        {
+          "file": "22-agent-profile-select-open-light-375.webp",
+          "sha256": "5336e8cbec30f1bf0d4a4b11b4aa34912ad34e497d1351a7434799ce60351d12"
+        },
+        {
+          "file": "23-profile-select-open-dark-1440.webp",
+          "sha256": "1650ca0b4753df265fc9619e99f54781da2388334090ada30f7029e9354c8b65"
+        },
+        {
+          "file": "23-profile-select-open-dark-375.webp",
+          "sha256": "3f6349319648b6f3e7917cbf5a95f92ebdff678c1723aea4718011ce62a6be63"
+        },
+        {
+          "file": "23-profile-select-open-light-1440.webp",
+          "sha256": "e345351bc3ec9757389059225a36013c7b350c3df861654b4d2a0d7f0c21de16"
+        },
+        {
+          "file": "23-profile-select-open-light-375.webp",
+          "sha256": "5f8426fc15a2ea16ddfaa5cba13ac81601126e63a270229802f5fc6a8e6f9525"
+        },
+        {
+          "file": "24-subscription-limit-edit-dark-1440.webp",
+          "sha256": "b0ab38621e02269dbf4e527ff23da8157f49b9f2da43747ad80004732575f621"
+        },
+        {
+          "file": "24-subscription-limit-edit-dark-375.webp",
+          "sha256": "07a4df7c319090c317a154edfb4f95dac1e3c64cb6a74a44359e0455fa72b1dd"
+        },
+        {
+          "file": "24-subscription-limit-edit-light-1440.webp",
+          "sha256": "4b3d14451f2a56b95e8bde44597825082a6be2ee4ecb501e4b305e2582db1a8d"
+        },
+        {
+          "file": "24-subscription-limit-edit-light-375.webp",
+          "sha256": "e86fe6b7eba0a9d776e02bec623f1a03d0e1589da466ca614767b348bcf91a18"
+        }
+      ],
+      "issue": "STT-423",
+      "evidence_kind": "acceptance-archive",
+      "source_revision": "UI acceptance archive; per-file SHA unverified"
+    },
+    {
+      "version": 1,
+      "mode": "archive",
+      "images": [
+        {
+          "file": "issue-forecast-expanded-dark-1440.png",
+          "sha256": "181c19d8f4e63a1d7a8b12ad1fef036c1972d7be73ce55756f0674c1c91e1a23"
+        },
+        {
+          "file": "issue-wait-dark-1440.png",
+          "sha256": "9e854baaaf67a2c652b2f148809a8b7686c90ac8219580c8daa1d4fbf648bfae"
+        },
+        {
+          "file": "issue-wait-dark-375.png",
+          "sha256": "a7cbcef948ee36fae4f777fdf5f6ce1b5859a3080ffc8caad010c1916ba53562"
+        },
+        {
+          "file": "issue-wait-light-1440.png",
+          "sha256": "46310c0b217bb393975f279d04f651bab3586d73f4236881f4b183a406888ae4"
+        },
+        {
+          "file": "issue-wait-light-375.png",
+          "sha256": "c90cf18e97c7d23eb7b58f82c2e9378922668c19eb91ddb803e1441551c77018"
+        },
+        {
+          "file": "issue-wait2-dark-1440.png",
+          "sha256": "17aa5b6d00ac3c36c592435ffe30755385a416a827ac8d98562172f1956496c3"
+        },
+        {
+          "file": "issue-wait2-dark-375.png",
+          "sha256": "8a7fe36ebda2702450efd4d39c86cb10453779e76c7ec0299270c0536a720a58"
+        },
+        {
+          "file": "issue-wait2-light-1440.png",
+          "sha256": "42785c91a11da8401b622cb95e5bd9b46c9efcae161569380773c37fffec1d1c"
+        },
+        {
+          "file": "issue-wait2-light-375.png",
+          "sha256": "1a4104a2a930782fb5dec88a6d13b0f7ae755a017253a18d129a3c673b191136"
+        },
+        {
+          "file": "m375-panel.png",
+          "sha256": "67eef24a3a66d9834702bf9fca677bc973866993a37fde619e58fd1ebd4c51cc"
+        },
+        {
+          "file": "pooledit-dark-1440.png",
+          "sha256": "2e7b7beacd8cdc4fb1c3b720ff501803b41211c4bf4827596879dd85e7e6bfc5"
+        },
+        {
+          "file": "pooledit-dark-375.png",
+          "sha256": "4621837ee23e831fb2c182552941321a92c80dc1868b2c361cf79151a6cce3da"
+        },
+        {
+          "file": "pooledit-light-1440.png",
+          "sha256": "0762291b9328dca652ed8b272012b8b092d6f6413ed22ddc2f79f907a9be22d3"
+        },
+        {
+          "file": "pooledit-light-375.png",
+          "sha256": "f4c7daf045dad7817c1b10400fab02ffbfdafb17f65ac955eb6a23ec025cc8e3"
+        },
+        {
+          "file": "poolnew-dark-1440.png",
+          "sha256": "ebd3f71a55945772208d5e8d56106994ec186a126730cc0cf9a4f4652efe0e23"
+        },
+        {
+          "file": "poolnew-dark-375.png",
+          "sha256": "a5acb80ed9611cd9a69e00f07f084321c47e5f0e6c10713ce6d362362a75bcd5"
+        },
+        {
+          "file": "poolnew-light-1440.png",
+          "sha256": "4e13bfb058aa90625474506b3f5c76eeb5c17f5406877d5c305f8fc707093502"
+        },
+        {
+          "file": "poolnew-light-375.png",
+          "sha256": "5d093f758dd5c4ca3cbb724d673ae019cb7d3e936b5b09886a38f9839150789d"
+        },
+        {
+          "file": "profile-editor-dark-1440.png",
+          "sha256": "75f11a2da40ad5247ae178615b9bb149a2bfb6570d5517ac9a8e99d9f2e1e9dd"
+        },
+        {
+          "file": "profile-editor-dark-375.png",
+          "sha256": "d8b9bdb26d6d8aec39dfa743b43040ae2c5ad1731f494900d6f41f1a0b160e13"
+        },
+        {
+          "file": "profile-editor-light-1440.png",
+          "sha256": "0321fd05a327c93e882b9996b12775ae874ee6731e63abec8701ed95db23360c"
+        },
+        {
+          "file": "profile-editor-light-375.png",
+          "sha256": "1063c551db3bffe161b5dfb1c8df04801e71f3d09b9ec230d3db1ffb5f4e2e84"
+        },
+        {
+          "file": "profile-row-select-dark-1440.png",
+          "sha256": "5e9298e32b2020e3f4696f92fdaa4488ed8469c2433b6c85e3991a744f320d89"
+        },
+        {
+          "file": "profile-row-select-dark-375.png",
+          "sha256": "c187b24b32d00f8c7fd9766feb86b883a634524bd3db408f51bf346160e309e9"
+        },
+        {
+          "file": "profile-row-select-light-1440.png",
+          "sha256": "e416102b1eb4d156deca878dbeb5f546e126d8c77a4dd4dadf3cc0a5e5659eb5"
+        },
+        {
+          "file": "profile-row-select-light-375.png",
+          "sha256": "e2d3eb6d84e576ce4574d5486466edf8e30a2bbc7efa99eb60feec01eeaa46ae"
+        },
+        {
+          "file": "profiles-dark-1440.png",
+          "sha256": "779cb5af96e28ed44f951883f4a531ac6acc4ed3a49f49c87214c2701e6d5b31"
+        },
+        {
+          "file": "profiles-dark-375.png",
+          "sha256": "937357016c5e643fc5d5127498c632b9379326d7621ea7462b4d002c9a12b74f"
+        },
+        {
+          "file": "profiles-light-1440.png",
+          "sha256": "b0fa191c0e7afa444d6efc54857d5de425c5ea5bed8d48bc4c62e1eb7f75867f"
+        },
+        {
+          "file": "profiles-light-375.png",
+          "sha256": "7f014ac46ba4340b3090612d01f58c9b7f562c3c70f7e5b2ff449194b244afa9"
+        },
+        {
+          "file": "rundetails-new-dark-1440.png",
+          "sha256": "0eead8e97951d6eee426e363671cf9510899b8e2a6ca12d987a592329fd3ee47"
+        },
+        {
+          "file": "rundetails-new-dark-375.png",
+          "sha256": "1c2ff45e1f8af7561e260b31a781230964b8ef9395903eed8ea12f246f7b2cdd"
+        },
+        {
+          "file": "rundetails-new-light-1440.png",
+          "sha256": "cb127c6b742e9b00edaa8c612ae7745d9bd2ffd6f8a920ed863d0886d60ea985"
+        },
+        {
+          "file": "rundetails-new-light-375.png",
+          "sha256": "89848e12e53410df3eb715a84c7de7d70c6387f182fb297fa44bb01c55d61273"
+        },
+        {
+          "file": "rundetails-old-dark-1440.png",
+          "sha256": "dcba065cf219f9575001c4f9ebe5b40ac9de185b91abbc84c20f5d946377e62a"
+        },
+        {
+          "file": "rundetails-old-dark-375.png",
+          "sha256": "c12483a0d231eccca019dabc036864bea005faac4f33710724435de56f4a710e"
+        },
+        {
+          "file": "rundetails-old-light-1440.png",
+          "sha256": "8a263db203adf09dac473e656cbd12febcc73400518f6baf7fd1226b57fe46fc"
+        },
+        {
+          "file": "rundetails-old-light-375.png",
+          "sha256": "bfb321c7cccd6e17fa84fa65a585902a2ba283a5d7f2ae132a506f06bd028f7a"
+        },
+        {
+          "file": "rundetails-probe.png",
+          "sha256": "e91544b54edeb9ceef343dba8f6ebfd0f0dc31e6ed8e3d7cf9af8d7a92503d72"
+        },
+        {
+          "file": "rundetails-probe2.png",
+          "sha256": "18d895f9c84e627bf33ae17900737e7428121c10d00e650b1b83fc240cb7eeec"
+        },
+        {
+          "file": "rundetails2-new-dark-1440.png",
+          "sha256": "b6f67ff3a6070268ab084b4f257fdda4abd5426fcfdd89f7145f16041477ad36"
+        },
+        {
+          "file": "rundetails2-new-dark-375.png",
+          "sha256": "ca31c438a3e1117056be95abe1c4e58b0685fc55a4f6ed78e03223f25e7ec079"
+        },
+        {
+          "file": "rundetails2-new-light-1440.png",
+          "sha256": "0a2b46851ae74bd4572694f0df2d99f980c772ca93b894119a95505dd2a98cd8"
+        },
+        {
+          "file": "rundetails2-new-light-375.png",
+          "sha256": "6b129d5206adfe19393d985103137fb4d919461d1c6f24987cb68b16ed4562ec"
+        },
+        {
+          "file": "rundetails2-old-dark-1440.png",
+          "sha256": "87d6499b7a53a51234cdbb459fe1c4519d3bc456b9951593fb12058fbd859d2b"
+        },
+        {
+          "file": "rundetails2-old-light-1440.png",
+          "sha256": "80a8747300981623f83c574592aa2425eb49e22f9eaa730cbce6f9c592f74a1c"
+        },
+        {
+          "file": "runtimes-dark-1440.png",
+          "sha256": "5ecbc99ba330dbac0e50f0b3837769b6d4dba9117cbae6173922cb18320a4dd3"
+        },
+        {
+          "file": "runtimes-dark-375.png",
+          "sha256": "d9d82809b6476519f7f63dd0eefbb28b4b75414b7d702a22ec3e4ad748d7aa0d"
+        },
+        {
+          "file": "runtimes-light-1440.png",
+          "sha256": "700f70a9197cbf1068f039ec341a0650b03c68274637f58222eea114ac31653d"
+        },
+        {
+          "file": "runtimes-light-375.png",
+          "sha256": "0f69e8708223343e9fea73257bcdd8c599c281e9c75747a1e92e8a9a887882af"
+        },
+        {
+          "file": "subs-dark-1440.png",
+          "sha256": "ea64641ce523f22ba7f2d1e2dbf91d859be7c270c0ba8751c86bc30ea1ce014d"
+        },
+        {
+          "file": "subs-dark-375.png",
+          "sha256": "c34c149cda80d338051d10fa66b4559d6ad87ef831cda97cadf6cc945d744b33"
+        },
+        {
+          "file": "subs-light-1440.png",
+          "sha256": "3bc3ed7210971763bde69a0787742fb15e59429e480387c18d119f3fb37bcf90"
+        },
+        {
+          "file": "subs-light-375.png",
+          "sha256": "5ed5bfb568d57b3e8c162d859ca9c280d0b502d4a760f6c65101353fe6aee628"
+        },
+        {
+          "file": "subs2-light-1440.png",
+          "sha256": "b4997af8f749eeca501f6dcebc6ccd70f63ec34410d99a5ab36ac0a22b099622"
+        },
+        {
+          "file": "wizard1-dark-1440.png",
+          "sha256": "c93a1704a6732810aa2901f171c250862731e9450ddc4cea4618cf9ef19f9c0e"
+        },
+        {
+          "file": "wizard1-dark-375.png",
+          "sha256": "5bae5e3e1a8806952823e51c49622e9541c581952bf9ace619453ecce3e6f854"
+        },
+        {
+          "file": "wizard1-light-1440.png",
+          "sha256": "1fc6af9a5447e0f7f97aebfbe01559a7ad7fcdd36cb28f442e549510244625c3"
+        },
+        {
+          "file": "wizard1-light-375.png",
+          "sha256": "cf6b0671f8a215666fa7a0f7134ea2be5797add885c7f7868fa42f6817d084a7"
+        },
+        {
+          "file": "wizard2-dark-375.png",
+          "sha256": "70aef7d8ef2c6a104fbba9e43a39127a5f0e9c9d59230ae52d240b6da50377f7"
+        },
+        {
+          "file": "wizard2-light-1440.png",
+          "sha256": "531fe360b17af02aff598df6d13476a1b2aebb464b153221cebfa87f6bab8760"
+        },
+        {
+          "file": "wizard3-dark-375.png",
+          "sha256": "203706be1c7e3700c2619189698faba3b4e2ad165c781bc1a39c7a52e688661b"
+        },
+        {
+          "file": "wizard3-light-1440.png",
+          "sha256": "55dd55f4386f02a712c3c2eb22d9930d9315c374d69d05ab90ce57442492fb40"
+        }
+      ],
+      "issue": "STT-424",
+      "evidence_kind": "acceptance-archive",
+      "source_revision": "mixed acceptance runs; per-file SHA not encoded in archive",
+      "candidate_code_shas": [
+        "8c6916181d87d769bf3199c3f929fedab36729d8",
+        "55c632613c81cb395e8be4a7aac2c183a233de42"
+      ],
+      "limitation": "Historical screenshots, not a new live-production capture. Per-file code provenance must be checked in STT-424 reports."
+    },
+    {
+      "version": 1,
+      "mode": "capture",
+      "images": [
+        {
+          "file": "runtime-pool-light-1440.png",
+          "theme": "light",
+          "width": 1440,
+          "sha256": "aa7026ed7b89d99f18cbe9495c88f4a1e484761b37f26335a0baf6e2153ab83b",
+          "audit": {
+            "document_overflow": false,
+            "controls": [
+              {
+                "tag": "button",
+                "role": null,
+                "width": 48.265625,
+                "height": 32,
+                "right": 1420,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 32,
+                "height": 32,
+                "right": 897.28125,
+                "padding_right": "0px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 32,
+                "height": 32,
+                "right": 933.28125,
+                "padding_right": "0px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 32,
+                "height": 32,
+                "right": 969.28125,
+                "padding_right": "0px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "select",
+                "role": null,
+                "width": 336.640625,
+                "height": 38,
+                "right": 618.640625,
+                "padding_right": "34px",
+                "appearance": "none",
+                "background_image": false
+              },
+              {
+                "tag": "select",
+                "role": null,
+                "width": 336.640625,
+                "height": 38,
+                "right": 969.28125,
+                "padding_right": "34px",
+                "appearance": "none",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 80.90625,
+                "height": 32,
+                "right": 969.28125,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              }
+            ]
+          },
+          "errors": []
+        },
+        {
+          "file": "runtime-pool-light-375.png",
+          "theme": "light",
+          "width": 375,
+          "sha256": "09050e83665df0eb3ba85aafb80ad35beae37b2a237c04ebbdaaf9cee963a1a8",
+          "audit": {
+            "document_overflow": false,
+            "controls": [
+              {
+                "tag": "button",
+                "role": null,
+                "width": 48.265625,
+                "height": 32,
+                "right": 62.265625,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 32,
+                "height": 32,
+                "right": 262,
+                "padding_right": "0px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 32,
+                "height": 32,
+                "right": 298,
+                "padding_right": "0px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 32,
+                "height": 32,
+                "right": 334,
+                "padding_right": "0px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "select",
+                "role": null,
+                "width": 313,
+                "height": 38,
+                "right": 344,
+                "padding_right": "34px",
+                "appearance": "none",
+                "background_image": false
+              },
+              {
+                "tag": "select",
+                "role": null,
+                "width": 313,
+                "height": 38,
+                "right": 344,
+                "padding_right": "34px",
+                "appearance": "none",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 80.90625,
+                "height": 32,
+                "right": 111.90625,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              }
+            ]
+          },
+          "errors": []
+        },
+        {
+          "file": "runtime-pool-dark-1440.png",
+          "theme": "dark",
+          "width": 1440,
+          "sha256": "cb085f87c92300d4064e3bec1d92eee27b507e0fa53744374872d94c9d952c97",
+          "audit": {
+            "document_overflow": false,
+            "controls": [
+              {
+                "tag": "button",
+                "role": null,
+                "width": 48.265625,
+                "height": 32,
+                "right": 1420,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 32,
+                "height": 32,
+                "right": 897.28125,
+                "padding_right": "0px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 32,
+                "height": 32,
+                "right": 933.28125,
+                "padding_right": "0px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 32,
+                "height": 32,
+                "right": 969.28125,
+                "padding_right": "0px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "select",
+                "role": null,
+                "width": 336.640625,
+                "height": 38,
+                "right": 618.640625,
+                "padding_right": "34px",
+                "appearance": "none",
+                "background_image": false
+              },
+              {
+                "tag": "select",
+                "role": null,
+                "width": 336.640625,
+                "height": 38,
+                "right": 969.28125,
+                "padding_right": "34px",
+                "appearance": "none",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 80.90625,
+                "height": 32,
+                "right": 969.28125,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              }
+            ]
+          },
+          "errors": []
+        },
+        {
+          "file": "runtime-pool-dark-375.png",
+          "theme": "dark",
+          "width": 375,
+          "sha256": "cc5560c9a3e429dcec12518dce6056a03ee9bb098a8f3d0d170a98ce3527076a",
+          "audit": {
+            "document_overflow": false,
+            "controls": [
+              {
+                "tag": "button",
+                "role": null,
+                "width": 48.265625,
+                "height": 32,
+                "right": 62.265625,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 32,
+                "height": 32,
+                "right": 262,
+                "padding_right": "0px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 32,
+                "height": 32,
+                "right": 298,
+                "padding_right": "0px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 32,
+                "height": 32,
+                "right": 334,
+                "padding_right": "0px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "select",
+                "role": null,
+                "width": 313,
+                "height": 38,
+                "right": 344,
+                "padding_right": "34px",
+                "appearance": "none",
+                "background_image": false
+              },
+              {
+                "tag": "select",
+                "role": null,
+                "width": 313,
+                "height": 38,
+                "right": 344,
+                "padding_right": "34px",
+                "appearance": "none",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 80.90625,
+                "height": 32,
+                "right": 111.90625,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              }
+            ]
+          },
+          "errors": []
+        },
+        {
+          "file": "accounts-light-1440.png",
+          "theme": "light",
+          "width": 1440,
+          "sha256": "56fef20209243c10f013af8e1430b3ee027a22f4f69d673dfe9d747d4e5b075c",
+          "audit": {
+            "document_overflow": false,
+            "controls": [
+              {
+                "tag": "button",
+                "role": null,
+                "width": 48.265625,
+                "height": 32,
+                "right": 1420,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 119.734375,
+                "height": 32,
+                "right": 1407,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 102.9375,
+                "height": 32,
+                "right": 1206,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 96.78125,
+                "height": 32,
+                "right": 1310.78125,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 87.171875,
+                "height": 32,
+                "right": 1378.984375,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 102.9375,
+                "height": 32,
+                "right": 1206,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 96.78125,
+                "height": 32,
+                "right": 1310.78125,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 87.171875,
+                "height": 32,
+                "right": 1378.984375,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 102.9375,
+                "height": 32,
+                "right": 1206,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 96.78125,
+                "height": 32,
+                "right": 1310.78125,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 87.171875,
+                "height": 32,
+                "right": 1378.984375,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 102.9375,
+                "height": 32,
+                "right": 1206,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 96.78125,
+                "height": 32,
+                "right": 1310.78125,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 87.171875,
+                "height": 32,
+                "right": 1378.984375,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 102.9375,
+                "height": 32,
+                "right": 1206,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 96.78125,
+                "height": 32,
+                "right": 1310.78125,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 87.171875,
+                "height": 32,
+                "right": 1378.984375,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 102.9375,
+                "height": 32,
+                "right": 1206,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 96.78125,
+                "height": 32,
+                "right": 1310.78125,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 87.171875,
+                "height": 32,
+                "right": 1378.984375,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 102.9375,
+                "height": 32,
+                "right": 1206,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 96.78125,
+                "height": 32,
+                "right": 1310.78125,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 87.171875,
+                "height": 32,
+                "right": 1378.984375,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 102.9375,
+                "height": 32,
+                "right": 1206,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 96.78125,
+                "height": 32,
+                "right": 1310.78125,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 87.171875,
+                "height": 32,
+                "right": 1378.984375,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 102.9375,
+                "height": 32,
+                "right": 1206,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 96.78125,
+                "height": 32,
+                "right": 1310.78125,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 87.171875,
+                "height": 32,
+                "right": 1378.984375,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 102.9375,
+                "height": 32,
+                "right": 1206,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 96.78125,
+                "height": 32,
+                "right": 1310.78125,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 87.171875,
+                "height": 32,
+                "right": 1378.984375,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              }
+            ]
+          },
+          "errors": []
+        },
+        {
+          "file": "accounts-light-375.png",
+          "theme": "light",
+          "width": 375,
+          "sha256": "ce3155ee360fa78f520c79087c5f1179aaad38265d769ae1fed6bcdbd1d1a17f",
+          "audit": {
+            "document_overflow": false,
+            "controls": [
+              {
+                "tag": "button",
+                "role": null,
+                "width": 48.265625,
+                "height": 32,
+                "right": 62.265625,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 119.734375,
+                "height": 32,
+                "right": 133.734375,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 102.9375,
+                "height": 32,
+                "right": 133.9375,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 96.78125,
+                "height": 32,
+                "right": 238.71875,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 87.171875,
+                "height": 32,
+                "right": 333,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 102.9375,
+                "height": 32,
+                "right": 133.9375,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 96.78125,
+                "height": 32,
+                "right": 238.71875,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 87.171875,
+                "height": 32,
+                "right": 333,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 102.9375,
+                "height": 32,
+                "right": 133.9375,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 96.78125,
+                "height": 32,
+                "right": 238.71875,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 87.171875,
+                "height": 32,
+                "right": 333,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 102.9375,
+                "height": 32,
+                "right": 133.9375,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 96.78125,
+                "height": 32,
+                "right": 238.71875,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 87.171875,
+                "height": 32,
+                "right": 333,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 102.9375,
+                "height": 32,
+                "right": 133.9375,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 96.78125,
+                "height": 32,
+                "right": 238.71875,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 87.171875,
+                "height": 32,
+                "right": 333,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 102.9375,
+                "height": 32,
+                "right": 133.9375,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 96.78125,
+                "height": 32,
+                "right": 238.71875,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 87.171875,
+                "height": 32,
+                "right": 333,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 102.9375,
+                "height": 32,
+                "right": 133.9375,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 96.78125,
+                "height": 32,
+                "right": 238.71875,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 87.171875,
+                "height": 32,
+                "right": 333,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 102.9375,
+                "height": 32,
+                "right": 133.9375,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 96.78125,
+                "height": 32,
+                "right": 238.71875,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 87.171875,
+                "height": 32,
+                "right": 333,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 102.9375,
+                "height": 32,
+                "right": 133.9375,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 96.78125,
+                "height": 32,
+                "right": 238.71875,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 87.171875,
+                "height": 32,
+                "right": 333,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 102.9375,
+                "height": 32,
+                "right": 133.9375,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 96.78125,
+                "height": 32,
+                "right": 238.71875,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 87.171875,
+                "height": 32,
+                "right": 333,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              }
+            ]
+          },
+          "errors": []
+        },
+        {
+          "file": "accounts-dark-1440.png",
+          "theme": "dark",
+          "width": 1440,
+          "sha256": "6723e6eacd534289d5e31f9a2d34e4d3419cb4d0a0d13e4267b247932779ce8f",
+          "audit": {
+            "document_overflow": false,
+            "controls": [
+              {
+                "tag": "button",
+                "role": null,
+                "width": 48.265625,
+                "height": 32,
+                "right": 1420,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 119.734375,
+                "height": 32,
+                "right": 1407,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 102.9375,
+                "height": 32,
+                "right": 1206,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 96.78125,
+                "height": 32,
+                "right": 1310.78125,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 87.171875,
+                "height": 32,
+                "right": 1378.984375,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 102.9375,
+                "height": 32,
+                "right": 1206,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 96.78125,
+                "height": 32,
+                "right": 1310.78125,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 87.171875,
+                "height": 32,
+                "right": 1378.984375,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 102.9375,
+                "height": 32,
+                "right": 1206,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 96.78125,
+                "height": 32,
+                "right": 1310.78125,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 87.171875,
+                "height": 32,
+                "right": 1378.984375,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 102.9375,
+                "height": 32,
+                "right": 1206,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 96.78125,
+                "height": 32,
+                "right": 1310.78125,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 87.171875,
+                "height": 32,
+                "right": 1378.984375,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 102.9375,
+                "height": 32,
+                "right": 1206,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 96.78125,
+                "height": 32,
+                "right": 1310.78125,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 87.171875,
+                "height": 32,
+                "right": 1378.984375,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 102.9375,
+                "height": 32,
+                "right": 1206,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 96.78125,
+                "height": 32,
+                "right": 1310.78125,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 87.171875,
+                "height": 32,
+                "right": 1378.984375,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 102.9375,
+                "height": 32,
+                "right": 1206,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 96.78125,
+                "height": 32,
+                "right": 1310.78125,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 87.171875,
+                "height": 32,
+                "right": 1378.984375,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 102.9375,
+                "height": 32,
+                "right": 1206,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 96.78125,
+                "height": 32,
+                "right": 1310.78125,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 87.171875,
+                "height": 32,
+                "right": 1378.984375,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 102.9375,
+                "height": 32,
+                "right": 1206,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 96.78125,
+                "height": 32,
+                "right": 1310.78125,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 87.171875,
+                "height": 32,
+                "right": 1378.984375,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 102.9375,
+                "height": 32,
+                "right": 1206,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 96.78125,
+                "height": 32,
+                "right": 1310.78125,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 87.171875,
+                "height": 32,
+                "right": 1378.984375,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              }
+            ]
+          },
+          "errors": []
+        },
+        {
+          "file": "accounts-dark-375.png",
+          "theme": "dark",
+          "width": 375,
+          "sha256": "471ccbc81be1eb6e200f94a20011eab89af81add19dda2da61eec7acd081ca23",
+          "audit": {
+            "document_overflow": false,
+            "controls": [
+              {
+                "tag": "button",
+                "role": null,
+                "width": 48.265625,
+                "height": 32,
+                "right": 62.265625,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 119.734375,
+                "height": 32,
+                "right": 133.734375,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 102.9375,
+                "height": 32,
+                "right": 133.9375,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 96.78125,
+                "height": 32,
+                "right": 238.71875,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 87.171875,
+                "height": 32,
+                "right": 333,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 102.9375,
+                "height": 32,
+                "right": 133.9375,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 96.78125,
+                "height": 32,
+                "right": 238.71875,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 87.171875,
+                "height": 32,
+                "right": 333,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 102.9375,
+                "height": 32,
+                "right": 133.9375,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 96.78125,
+                "height": 32,
+                "right": 238.71875,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 87.171875,
+                "height": 32,
+                "right": 333,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 102.9375,
+                "height": 32,
+                "right": 133.9375,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 96.78125,
+                "height": 32,
+                "right": 238.71875,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 87.171875,
+                "height": 32,
+                "right": 333,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 102.9375,
+                "height": 32,
+                "right": 133.9375,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 96.78125,
+                "height": 32,
+                "right": 238.71875,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 87.171875,
+                "height": 32,
+                "right": 333,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 102.9375,
+                "height": 32,
+                "right": 133.9375,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 96.78125,
+                "height": 32,
+                "right": 238.71875,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 87.171875,
+                "height": 32,
+                "right": 333,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 102.9375,
+                "height": 32,
+                "right": 133.9375,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 96.78125,
+                "height": 32,
+                "right": 238.71875,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 87.171875,
+                "height": 32,
+                "right": 333,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 102.9375,
+                "height": 32,
+                "right": 133.9375,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 96.78125,
+                "height": 32,
+                "right": 238.71875,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 87.171875,
+                "height": 32,
+                "right": 333,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 102.9375,
+                "height": 32,
+                "right": 133.9375,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 96.78125,
+                "height": 32,
+                "right": 238.71875,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 87.171875,
+                "height": 32,
+                "right": 333,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 102.9375,
+                "height": 32,
+                "right": 133.9375,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 96.78125,
+                "height": 32,
+                "right": 238.71875,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              },
+              {
+                "tag": "button",
+                "role": null,
+                "width": 87.171875,
+                "height": 32,
+                "right": 333,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              }
+            ]
+          },
+          "errors": []
+        },
+        {
+          "file": "subscriptions-light-1440.png",
+          "theme": "light",
+          "width": 1440,
+          "sha256": "6a6971cec4c05a09f621d0fbd4bee01e86cf1fb303d3a06b656028b1d4afc731",
+          "audit": {
+            "document_overflow": false,
+            "controls": [
+              {
+                "tag": "button",
+                "role": null,
+                "width": 48.265625,
+                "height": 32,
+                "right": 1420,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              }
+            ]
+          },
+          "errors": []
+        },
+        {
+          "file": "subscriptions-light-375.png",
+          "theme": "light",
+          "width": 375,
+          "sha256": "24757b4581c21e34c51a65104d9e1631c5235c9a8ea99ed2100f5d9944900efb",
+          "audit": {
+            "document_overflow": false,
+            "controls": [
+              {
+                "tag": "button",
+                "role": null,
+                "width": 48.265625,
+                "height": 32,
+                "right": 62.265625,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              }
+            ]
+          },
+          "errors": []
+        },
+        {
+          "file": "subscriptions-dark-1440.png",
+          "theme": "dark",
+          "width": 1440,
+          "sha256": "d2a4e52ab4387377eafccaaf43ada14be9b013aaaae6350669ca7cc26de1886d",
+          "audit": {
+            "document_overflow": false,
+            "controls": [
+              {
+                "tag": "button",
+                "role": null,
+                "width": 48.265625,
+                "height": 32,
+                "right": 1420,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              }
+            ]
+          },
+          "errors": []
+        },
+        {
+          "file": "subscriptions-dark-375.png",
+          "theme": "dark",
+          "width": 375,
+          "sha256": "9d90a465dda055495a1eced17264c8b26890abf57f5d8dd35dc250ed50a491ef",
+          "audit": {
+            "document_overflow": false,
+            "controls": [
+              {
+                "tag": "button",
+                "role": null,
+                "width": 48.265625,
+                "height": 32,
+                "right": 62.265625,
+                "padding_right": "10px",
+                "appearance": "auto",
+                "background_image": false
+              }
+            ]
+          },
+          "errors": []
+        }
+      ],
+      "evidence_kind": "mockup-stt433-v5",
+      "source_revision": "v5 updated 2026-10-26; not deployed code"
+    }
+  ]
+}
