@@ -997,30 +997,6 @@ func (s *IssueService) enqueueSquadLeaderTask(ctx context.Context, issue db.Issu
 	if err != nil || hasPending {
 		return
 	}
-	// A squad with a default route runs the issue along it instead of waking
-	// the leader; a template that cannot start leaves the issue to the leader.
-	actor := pgtype.UUID{}
-	if authorType == "member" {
-		actor, _ = util.ParseUUID(authorID)
-	}
-	invoker := actor
-	if !invoker.Valid {
-		invoker = s.TaskService.OriginatorForIssueTask(ctx, issue, triggerCommentID)
-	}
-	conveyor := &IssueConveyorService{Tasks: s.TaskService}
-	routed, rerr := conveyor.StartSquadRoute(ctx, issue, squad, invoker)
-	if routed {
-		return
-	}
-	if rerr != nil {
-		slog.Warn("squad default route not enabled on create; waking the leader",
-			"issue_id", util.UUIDToString(issue.ID), "squad_id", util.UUIDToString(squad.ID), "error", rerr)
-		if _, err := s.TaskService.EnqueueTaskForSquadLeaderWithHandoff(ctx, issue, squad.LeaderID, squad.ID, SquadRouteHandoffNote(rerr), actor); err != nil {
-			slog.Warn("enqueue squad leader task on create failed",
-				"issue_id", util.UUIDToString(issue.ID), "squad_id", util.UUIDToString(squad.ID), "error", err)
-		}
-		return
-	}
 	if _, err := s.TaskService.EnqueueTaskForSquadLeader(ctx, issue, squad.LeaderID, squad.ID, triggerCommentID, OriginDerived); err != nil {
 		slog.Warn("enqueue squad leader task on create failed",
 			"issue_id", util.UUIDToString(issue.ID),

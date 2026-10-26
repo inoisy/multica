@@ -44,7 +44,6 @@ type CardState =
   | "success"
   | "held"
   | "blocked"
-  | "quota"
   | "failed"
   | "created"
   | "queued";
@@ -66,16 +65,14 @@ function isClosed(issue: Issue) {
   );
 }
 
-/** The card of a sub-issue: its own status first, then where its server route stands. */
+/** The card of a sub-issue, read from its status. */
 export function cardState(issue: Issue): CardState {
   if (issue.status === "cancelled" || issue.status_category === "closed") return "cancelled";
   if (issue.status === "done" || issue.status_category === "done") return "success";
   if (issue.status === "waiting") return "held";
-  const route = issue.route;
-  if (route?.status === "waiting_provider") return "quota";
-  if (route?.status === "awaiting_coordinator" || route?.status === "paused" || issue.status === "blocked") return "blocked";
-  if (route?.status === "completed" || issue.status === "in_review") return "review";
-  if (route?.status === "active" || issue.status_category === "started") return "running";
+  if (issue.status === "blocked") return "blocked";
+  if (issue.status === "in_review") return "review";
+  if (issue.status_category === "started") return "running";
   if (issue.assignee_id) return "queued";
   return "created";
 }
@@ -113,7 +110,6 @@ const CARD_ICONS: Record<CardState, string> = {
   success: "✓",
   held: "Ⅱ",
   blocked: "!",
-  quota: "⏸",
   failed: "✕",
   created: "",
   queued: "○",
@@ -126,13 +122,12 @@ const CARD_CLASSES: Record<CardState, string> = {
   success: "bg-muted/40 text-muted-foreground",
   held: "border-dashed",
   blocked: "border-destructive/50",
-  quota: "border-amber-500/50",
   failed: "border-destructive/60 bg-destructive/10",
   created: "border-dashed text-muted-foreground",
   queued: "",
 };
 
-const PROBLEMS: CardState[] = ["quota", "failed", "held", "blocked"];
+const PROBLEMS: CardState[] = ["failed", "held", "blocked"];
 
 /** An issue key or a Multica link → the key or UUID the API accepts. */
 export function parseRef(value: string): string | null {
@@ -428,7 +423,6 @@ function Lane({
                 .map((card) => (
                   <span key={card.id}>
                     {CARD_ICONS[cardState(card)]} {card.identifier} — {t(($) => $.conveyor.card[cardState(card)])}
-                    {card.route?.waiting_reason ? ` · ${card.route.waiting_reason}` : ""}
                   </span>
                 ))}
             </div>
@@ -470,8 +464,7 @@ function StageTrack({ stages, onOpenActions }: { stages: Stage[]; onOpenActions:
           </div>
           {stage.issues.map((card) => {
             const kind = cardState(card);
-            const step = card.route?.step;
-            const sub = step ? `${t(($) => $.conveyor.card[kind])} · ${step}` : t(($) => $.conveyor.card[kind]);
+            const sub = t(($) => $.conveyor.card[kind]);
             return (
               <div key={card.id} className={cn("group relative rounded-md border bg-background text-caption", CARD_CLASSES[kind])}>
                 <AppLink

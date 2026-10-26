@@ -1,5 +1,10 @@
 # ТЗ: конвейер целиком в multica — приёмка шагом маршрута, стадии на сервере, сторож удаляется
 
+> **26.10.2026 (STT-429): старый маршрут удалён.** Команды `multica issue conveyor enable/pause/resume/disable/get/events/result`,
+> эндпоинты `/api/issues/{id}/conveyor*`, автозапуск по шаблону сквада и ретраи маршрута сняты. Приёмку выполняет шаг
+> Workflow с обработчиком `accept` — `multica workflow accept` (`issue conveyor accept` — алиас на один релиз). Таблицы
+> `issue_conveyor`, `issue_conveyor_event` и `route`/`step` в metadata закрытых задач остаются архивом. Ниже — история.
+
 Версия 1 · 19.10.2026 · продолжение `tz-model-tiers.md` (этапы 1–4). Решение Евгения 19.10.2026: внешнего сторожа
 (`monorepo-for-multica/services/multica-conveyor`) не остаётся; всё, что он делает, — в форке multica (сервер и демон),
 переносимо на любой хост с демоном; автоприёмка сторожа в нынешнем виде не годится.

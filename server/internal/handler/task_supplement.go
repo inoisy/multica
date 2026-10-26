@@ -130,15 +130,73 @@ func applyCommentSupplements(resp *CommentResponse, receipts []CommentSupplement
 	resp.SupplementDeliveredAt = receipts[0].DeliveredAt
 }
 
-// steerCommentAgentTriggers binds a member comment to the turn its author
-// chose for each recipient. A bound agent leaves the enqueue list: that turn
+// maxSupplementsPerTurn caps how much additional input one running turn can
+// absorb through comment steering, whatever the mix of member and agent
+// authors behind it: a platform backstop against two agents steering each
+// other into a live ping-pong. A bind past the cap silently keeps the normal
+// trigger, so a busy turn spills into follow-up runs instead of dropping its
+// messages. The cap scopes to this bind path only; the member-facing
+// CreateTaskSupplement endpoint keeps its existing behavior.
+const maxSupplementsPerTurn = 10
+
+// bindCommentSteer binds one comment to one exact running turn. Locking the
+// task row, recounting its open supplements, and inserting the binding are
+// three statements of one transaction, in that order. The count MUST read
+// after the lock wait: each statement's snapshot in READ COMMITTED starts
+// when the statement starts, so a count folded into the locking statement
+// would keep its pre-wait snapshot and let every concurrent binder past the
+// cap. With the lock held first, each waiter's count sees what the previous
+// binder committed, and the inserts serialize below maxSupplementsPerTurn.
+// Anything that fails — turn ended, capability missing, cap reached —
+// surfaces as pgx.ErrNoRows, and the caller keeps the comment's normal
+// trigger instead.
+func (h *Handler) bindCommentSteer(ctx context.Context, issue db.Issue, comment db.Comment, taskID, agentID pgtype.UUID) (db.TaskSupplement, pgtype.UUID, error) {
+	tx, err := h.beginWakeupWrite(ctx)
+	if err != nil {
+		return db.TaskSupplement{}, pgtype.UUID{}, err
+	}
+	defer tx.Rollback(ctx)
+	q := h.Queries.WithTx(tx)
+	locked, err := q.LockSteerableTaskForBind(ctx, db.LockSteerableTaskForBindParams{
+		TaskID: taskID, IssueID: issue.ID, AgentID: agentID, WorkspaceID: issue.WorkspaceID,
+	})
+	if err != nil {
+		return db.TaskSupplement{}, pgtype.UUID{}, err
+	}
+	boundCount, err := q.CountOpenTaskSupplements(ctx, taskID)
+	if err != nil {
+		return db.TaskSupplement{}, pgtype.UUID{}, err
+	}
+	if int(boundCount) >= maxSupplementsPerTurn {
+		return db.TaskSupplement{}, pgtype.UUID{}, pgx.ErrNoRows
+	}
+	bound, err := q.InsertTaskSupplementBinding(ctx, db.InsertTaskSupplementBindingParams{
+		TaskID: taskID, WorkspaceID: issue.WorkspaceID, IssueID: issue.ID,
+		CommentID: comment.ID, AuthorID: comment.AuthorID, ClientRequestID: comment.ID,
+	})
+	if err != nil {
+		return db.TaskSupplement{}, pgtype.UUID{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return db.TaskSupplement{}, pgtype.UUID{}, err
+	}
+	return bound, locked.RuntimeID, nil
+}
+
+// steerCommentAgentTriggers binds a comment to the running turn its author
+// chose for each recipient: either the exact turns named in steerTaskIDs, or —
+// when the author only asks to steer — each recipient's current running turn
+// on this issue, resolved server-side for authors (typically agents) that do
+// not know the task ids. Explicit choices win; the server resolves only the
+// recipients left unnamed. A bound agent leaves the enqueue list: that turn
 // receives the comment instead of a follow-up run. A chosen turn that has
 // ended, has not started, or cannot take additional input is never swapped
 // for another turn of the same agent; that recipient keeps its normal
 // queued / coalesced / deferred handling, so losing a race never drops or
-// misdirects the comment.
-func (h *Handler) steerCommentAgentTriggers(ctx context.Context, issue db.Issue, comment db.Comment, actorType string, triggers []commentAgentTrigger, steerTaskIDs []pgtype.UUID) ([]commentAgentTrigger, map[string]commentEnqueueResult) {
-	if len(steerTaskIDs) == 0 || len(triggers) == 0 || actorType != "member" {
+// misdirects the comment. Steering only ever narrows delivery of a trigger
+// that already resolved, so it grants no invocation permission of its own.
+func (h *Handler) steerCommentAgentTriggers(ctx context.Context, issue db.Issue, comment db.Comment, triggers []commentAgentTrigger, steerTaskIDs []pgtype.UUID, steer bool) ([]commentAgentTrigger, map[string]commentEnqueueResult) {
+	if len(triggers) == 0 || (len(steerTaskIDs) == 0 && !steer) {
 		return triggers, nil
 	}
 	// Each chosen turn names its agent; only a turn of this issue counts.
@@ -155,15 +213,19 @@ func (h *Handler) steerCommentAgentTriggers(ctx context.Context, issue db.Issue,
 	for _, trigger := range triggers {
 		agentID := uuidToString(trigger.Agent.ID)
 		taskID, ok := chosen[agentID]
+		if !ok && steer {
+			if resolved, err := h.Queries.GetRunningSteerableTaskForAgent(ctx, db.GetRunningSteerableTaskForAgentParams{
+				IssueID: issue.ID, AgentID: trigger.Agent.ID,
+			}); err == nil {
+				taskID, ok = resolved, true
+			}
+		}
 		if !ok {
 			kept = append(kept, trigger)
 			continue
 		}
 		// The comment is its own request id: it binds to a turn at most once.
-		bound, err := h.Queries.BindCommentTaskSupplement(ctx, db.BindCommentTaskSupplementParams{
-			TaskID: taskID, IssueID: issue.ID, AgentID: trigger.Agent.ID, WorkspaceID: issue.WorkspaceID,
-			CommentID: comment.ID, AuthorID: comment.AuthorID, ClientRequestID: comment.ID,
-		})
+		bound, runtimeID, err := h.bindCommentSteer(ctx, issue, comment, taskID, trigger.Agent.ID)
 		if err != nil {
 			if !errors.Is(err, pgx.ErrNoRows) {
 				slog.Warn("steer comment into running turn failed",
@@ -173,8 +235,8 @@ func (h *Handler) steerCommentAgentTriggers(ctx context.Context, issue db.Issue,
 			continue
 		}
 		steered[agentID] = commentEnqueueResult{status: DispatchSteered, reason: ReasonSteered}
-		if h.DaemonTaskSupplement != nil && bound.RuntimeID.Valid {
-			h.DaemonTaskSupplement.NotifyTaskSupplementAvailable(uuidToString(bound.RuntimeID), uuidToString(bound.TaskID))
+		if h.DaemonTaskSupplement != nil && runtimeID.Valid {
+			h.DaemonTaskSupplement.NotifyTaskSupplementAvailable(uuidToString(runtimeID), uuidToString(bound.TaskID))
 		}
 	}
 	if len(steered) > 0 {
