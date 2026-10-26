@@ -12,14 +12,14 @@ import (
 	"time"
 )
 
-// AcceptProvider is the runtime of the route's accept step. It runs no model:
-// the daemon's own `multica` binary checks the commit the route accepted on
-// top of the base branch and merges it (`multica issue conveyor accept`).
+// AcceptProvider is the runtime of the Workflow acceptance step. It runs no
+// model: the daemon's own `multica` binary checks the pinned commit on top of
+// the base branch and merges it (`multica workflow accept`).
 const AcceptProvider = "accept"
 
 // acceptBackend runs the acceptance command of the multica CLI for the task's
 // issue. The prompt is ignored; the issue comes from MULTICA_ISSUE_ID in the
-// task environment, and the command reports its outcome to the route itself.
+// task environment, and the command reports its outcome to the issue itself.
 type acceptBackend struct {
 	cfg Config
 }
@@ -38,7 +38,7 @@ func (b *acceptBackend) Execute(ctx context.Context, _ string, opts ExecOptions)
 	}
 
 	runCtx, cancel := runContext(ctx, opts.Timeout)
-	args := []string{"issue", "conveyor", "accept"}
+	args := []string{"workflow", "accept"}
 	cmd := b.cfg.commandAt(execPath).exec(runCtx, args...)
 	hideAgentWindow(cmd)
 	cmd.WaitDelay = 10 * time.Second
