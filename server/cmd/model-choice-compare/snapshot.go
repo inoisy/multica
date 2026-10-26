@@ -27,7 +27,6 @@ const snapshotFormat = 1
 const (
 	kindAgent        = "agent"
 	kindIssue        = "issue"
-	kindRouteStep    = "route_step"
 	kindWorkflowStep = "workflow_step"
 	kindQueuedRun    = "queued_run"
 )
@@ -203,42 +202,6 @@ func collect(ctx context.Context, tx pgx.Tx, ws pgtype.UUID, now time.Time) (sna
 		})
 	}
 
-	// Steps of the routes that are still running, on open issues.
-	routeIssues, err := c.ids(ctx, `SELECT i.id FROM issue i JOIN issue_conveyor cv ON cv.issue_id = i.id
-		WHERE i.workspace_id = $1 AND cv.status NOT IN ('completed', 'disabled') AND `+openIssue, ws)
-	if err != nil {
-		return snapshot{}, err
-	}
-	for _, id := range routeIssues {
-		cv, err := c.q.GetIssueConveyor(ctx, id)
-		if err != nil {
-			return snapshot{}, err
-		}
-		iss, err := c.q.GetIssue(ctx, id)
-		if err != nil {
-			return snapshot{}, err
-		}
-		var route []struct {
-			Idx     int32  `json:"idx"`
-			AgentID string `json:"agent_id"`
-		}
-		if err := json.Unmarshal(cv.Route, &route); err != nil {
-			c.out = append(c.out, contextResult{Key: kindRouteStep + "/" + util.UUIDToString(id), Kind: kindRouteStep, Error: "unreadable route"})
-			continue
-		}
-		for _, node := range route {
-			key := fmt.Sprintf("%s/%d", util.UUIDToString(id), node.Idx)
-			a, ok := agents[node.AgentID]
-			if !ok {
-				c.out = append(c.out, contextResult{Key: kindRouteStep + "/" + key, Kind: kindRouteStep, Error: "node agent not found"})
-				continue
-			}
-			c.add(kindRouteStep, key, a.ArchivedAt.Valid, func() (service.ModelChoice, error) {
-				return service.PreviewRouteStepChoice(ctx, c.q, cv, node.Idx, a, &iss, now)
-			})
-		}
-	}
-
 	// Workflow steps that hand an issue to an agent, a squad's leader or the
 	// workspace's acceptance carrier: the agent's answer on an issue entering
 	// the step.
@@ -317,8 +280,7 @@ func collect(ctx context.Context, tx pgx.Tx, ws pgtype.UUID, now time.Time) (sna
 		})
 	}
 
-	// Queued runs as the sweep routes them: they carry the step's profile and
-	// the acceptance rule.
+	// Queued runs as the sweep routes them: they carry the acceptance rule.
 	taskIDs, err := c.ids(ctx, `SELECT t.id FROM agent_task_queue t JOIN agent a ON a.id = t.agent_id
 		WHERE a.workspace_id = $1 AND t.status IN ('queued', 'deferred')`, ws)
 	if err != nil {
@@ -330,8 +292,7 @@ func collect(ctx context.Context, tx pgx.Tx, ws pgtype.UUID, now time.Time) (sna
 			return snapshot{}, err
 		}
 		c.add(kindQueuedRun, util.UUIDToString(id), agents[util.UUIDToString(task.AgentID)].ArchivedAt.Valid, func() (service.ModelChoice, error) {
-			ch, _, err := service.RouteRunChoice(ctx, c.q, task, now)
-			return ch, err
+			return service.RunChoice(ctx, c.q, task, now)
 		})
 	}
 

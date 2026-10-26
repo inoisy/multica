@@ -94,8 +94,7 @@
   },
   "detail_tabs": {
     "members": "Участники",
-    "instructions": "Инструкции",
-    "route": "Маршрут"
+    "instructions": "Инструкции"
   },
   "details": {
     "leader": "Лидер",
@@ -114,9 +113,7 @@
     "leader_updated": "Лидер обновлён",
     "leader_update_failed": "Не удалось обновить лидера",
     "archive_failed": "Не удалось архивировать команду",
-    "instructions_saved": "Инструкции сохранены",
-    "route_saved": "Маршрут сохранён",
-    "route_save_failed": "Не удалось сохранить маршрут"
+    "instructions_saved": "Инструкции сохранены"
   },
   "profile_card": {
     "unavailable": "Команда недоступна",
@@ -155,11 +152,5 @@
     "clear_filters": "Сбросить фильтры",
     "filter_active_count_few": "{{count}} фильтра",
     "filter_active_count_many": "{{count}} фильтров"
-  },
-  "route_tab": {
-    "description": "Задача, назначенная этой команде, идёт по маршруту на сервере: каждый шаг стартует сам, лидер просыпается только на возврат, остановку и в конце.",
-    "placeholder": "dev:Бэкенд,qa:Тестировщик,review:Техдиректор,accept:Приёмщик,close:Тимлид",
-    "rules": "Шаги вида шаг:Агент через запятую, в конце close:<координатор>. qa идёт после dev; accept — один раз, прямо перед close и после review, он вливает принятый коммит.",
-    "clear_button": "Выключить"
   }
 }

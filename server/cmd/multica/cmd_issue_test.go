@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -555,6 +556,7 @@ func TestEnsureAttachmentWithinWorkdir(t *testing.T) {
 
 func newIssueCommentAddTestCmd() *cobra.Command {
 	cmd := &cobra.Command{Use: "add"}
+	cmd.Flags().Bool("steer", false, "")
 	cmd.Flags().String("content", "", "")
 	cmd.Flags().Bool("content-stdin", false, "")
 	cmd.Flags().String("content-file", "", "")
@@ -5856,5 +5858,84 @@ func TestRunIssueCommentDeleteKeepsReplies(t *testing.T) {
 				t.Fatalf("requests = %v, want only %v", paths, want)
 			}
 		})
+	}
+}
+
+func TestRunIssueCommentAddSendsSteerOnlyWhenAsked(t *testing.T) {
+	const issueID = "11111111-1111-4111-8111-111111111111"
+	for _, tc := range []struct {
+		name  string
+		steer bool
+	}{{"without flag", false}, {"with flag", true}} {
+		t.Run(tc.name, func(t *testing.T) {
+			var got map[string]any
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch {
+				case r.Method == http.MethodGet && r.URL.Path == "/api/issues/"+issueID:
+					_ = json.NewEncoder(w).Encode(map[string]any{"id": issueID, "identifier": "TST-1"})
+				case r.Method == http.MethodPost && r.URL.Path == "/api/issues/"+issueID+"/comments":
+					_ = json.NewDecoder(r.Body).Decode(&got)
+					_ = json.NewEncoder(w).Encode(map[string]any{"id": "comment-1"})
+				default:
+					t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+					w.WriteHeader(http.StatusNotFound)
+				}
+			}))
+			defer srv.Close()
+			setCLITestServerEnv(t, srv.URL)
+			t.Setenv("MULTICA_TOKEN", "mat_test-token")
+
+			cmd := newIssueCommentAddTestCmd()
+			_ = cmd.Flags().Set("content", "fix the requirement")
+			if tc.steer {
+				_ = cmd.Flags().Set("steer", "true")
+			}
+			if err := runIssueCommentAdd(cmd, []string{issueID}); err != nil {
+				t.Fatalf("runIssueCommentAdd: %v", err)
+			}
+			_, sent := got["steer"]
+			if sent != tc.steer {
+				t.Fatalf("steer sent = %v, want %v (body %v)", sent, tc.steer, got)
+			}
+			if tc.steer && got["steer"] != true {
+				t.Fatalf("steer = %v, want true", got["steer"])
+			}
+		})
+	}
+}
+
+func TestReportSteerOutcomesSeparatesDeliveredFromFallback(t *testing.T) {
+	var buf bytes.Buffer
+	reportSteerOutcomes(&buf, map[string]any{"trigger_outcomes": []any{
+		map[string]any{"target_id": "agent-a", "status": "steered"},
+		map[string]any{"target_id": "agent-b", "status": "queued"},
+	}})
+	out := buf.String()
+	if !strings.Contains(out, "delivered into the running turn of agent-a") {
+		t.Fatalf("missing delivered line: %q", out)
+	}
+	if !strings.Contains(out, "agent-b had no turn to take it; handled as queued") {
+		t.Fatalf("missing fallback line: %q", out)
+	}
+
+	buf.Reset()
+	reportSteerOutcomes(&buf, map[string]any{})
+	if !strings.Contains(buf.String(), "no agent was triggered") {
+		t.Fatalf("missing empty line: %q", buf.String())
+	}
+}
+
+// A refused pin names the run that may make it, instead of the generic 403
+// line that sent a coordinator after wider rights (STT-433).
+func TestIssueStatusRequestErrorNamesThePinOwner(t *testing.T) {
+	t.Setenv("LANG", "en_US.UTF-8")
+	pin := &cli.HTTPError{StatusCode: 403, Body: `{"error":"only the run of the step's handler may pin a commit","code":"workflow_pin_not_step_run"}`}
+	got := cli.FormatError(issueStatusRequestError(pin), false)
+	if !strings.Contains(got, "only the running run of this issue's current assignee may pin a commit") {
+		t.Fatalf("pin refusal = %q, want the run that may pin", got)
+	}
+	other := &cli.HTTPError{StatusCode: 403, Body: `{"error":"some other resource is off limits"}`}
+	if got := cli.FormatError(issueStatusRequestError(other), false); strings.Contains(got, "off limits") || !strings.Contains(got, "permission") {
+		t.Fatalf("an un-coded 403 = %q, want the generic copy", got)
 	}
 }
