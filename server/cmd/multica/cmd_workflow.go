@@ -94,6 +94,7 @@ func newWorkflowCommand() *cobra.Command {
 		}
 		cmd.AddCommand(c)
 	}
+	cmd.AddCommand(newWorkflowAcceptCommand())
 	return cmd
 }
 

@@ -1767,12 +1767,5 @@
   "stage_dispatch": {
     "label": "Stages",
     "off": "Not dispatched"
-  },
-  "route_step": {
-    "title": "Route step, round {{round}}",
-    "paused": "paused",
-    "awaiting_coordinator": "with the coordinator",
-    "waiting_provider": "waits for the provider",
-    "disabled": "off"
   }
 }

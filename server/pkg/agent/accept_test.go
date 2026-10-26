@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-// fakeMultica writes a script that stands in for `multica issue conveyor accept`.
+// fakeMultica writes a script that stands in for `multica workflow accept`.
 func fakeMultica(t *testing.T, body string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "multica")
@@ -56,7 +56,7 @@ func TestAcceptBackendRunsTheAcceptCommand(t *testing.T) {
 		lines = append(lines, m.Content)
 	}
 	got := strings.Join(lines, "\n")
-	for _, want := range []string{"args: issue conveyor accept", "issue: issue-1", "to stderr"} {
+	for _, want := range []string{"args: workflow accept", "issue: issue-1", "to stderr"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("log misses %q:\n%s", want, got)
 		}

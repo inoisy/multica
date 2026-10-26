@@ -1235,11 +1235,10 @@
     "card": {
       "running": "running",
       "cancelled": "cancelled",
-      "review": "route passed, waits for close",
+      "review": "in review",
       "success": "done",
       "held": "waits for the customer",
       "blocked": "with the coordinator",
-      "quota": "waits for the provider",
       "failed": "run failed",
       "created": "waits for its stage",
       "queued": "queued"

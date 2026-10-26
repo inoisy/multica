@@ -35,14 +35,13 @@ function issue(over: Partial<Issue>): Issue {
 }
 
 describe("conveyor helpers", () => {
-  it("reads a card from the issue status first, then from its route", () => {
+  it("reads a card from the issue status", () => {
     expect(cardState(issue({ status: "done" }))).toBe("success");
     expect(cardState(issue({ status: "cancelled" }))).toBe("cancelled");
     expect(cardState(issue({ status: "waiting" }))).toBe("held");
-    expect(cardState(issue({ status: "in_progress", route: { step: "dev", status: "waiting_provider", round: 1 } }))).toBe("quota");
-    expect(cardState(issue({ status: "qa", route: { step: "qa", status: "awaiting_coordinator", round: 1 } }))).toBe("blocked");
-    expect(cardState(issue({ status: "in_review", route: { step: "close", status: "completed", round: 1 } }))).toBe("review");
-    expect(cardState(issue({ status: "in_progress", route: { step: "dev", status: "active", round: 1 } }))).toBe("running");
+    expect(cardState(issue({ status: "blocked" }))).toBe("blocked");
+    expect(cardState(issue({ status: "in_review" }))).toBe("review");
+    expect(cardState(issue({ status: "qa", status_category: "started" }))).toBe("running");
     expect(cardState(issue({ assignee_id: "squad" }))).toBe("queued");
     expect(cardState(issue({}))).toBe("created");
   });
@@ -75,7 +74,7 @@ describe("ConveyorPage", () => {
     apiMock.listChildIssues.mockResolvedValue({
       issues: [
         issue({ id: "c1", identifier: "STT-240", stage: 1, status: "done" }),
-        issue({ id: "c2", identifier: "STT-241", stage: 2, status: "qa", assignee_id: "sq-1", route: { step: "qa", status: "waiting_provider", round: 1, waiting_reason: "limit until 15:53" } }),
+        issue({ id: "c2", identifier: "STT-241", stage: 2, status: "blocked", assignee_id: "sq-1" }),
       ],
     });
     apiMock.setIssueStageDispatch.mockResolvedValue({ issue_id: "STT-300", squad_id: "sq-1", dispatch_by: "u" });
@@ -96,13 +95,12 @@ describe("ConveyorPage", () => {
     );
   }
 
-  it("shows dispatched epics with their stages and the route step of each card", async () => {
+  it("shows dispatched epics with their stages and the state of each card", async () => {
     renderPage();
     expect(await screen.findByText("STT-239")).toBeTruthy();
     expect(await screen.findByText("Stages go to Разработка")).toBeTruthy();
     expect(screen.getByText(/In progress · stage 2/)).toBeTruthy();
-    expect(screen.getByText("waits for the provider · qa")).toBeTruthy();
-    expect(screen.getByText(/limit until 15:53/)).toBeTruthy();
+    expect(screen.getAllByText(/with the coordinator/).length).toBeGreaterThan(0);
   });
 
   it("stops dispatching after a confirmation", async () => {

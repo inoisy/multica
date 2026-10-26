@@ -92,8 +92,7 @@
   },
   "detail_tabs": {
     "members": "Membres",
-    "instructions": "Instructions",
-    "route": "Parcours"
+    "instructions": "Instructions"
   },
   "details": {
     "leader": "Chef",
@@ -112,9 +111,7 @@
     "leader_updated": "Responsable mis à jour",
     "leader_update_failed": "Échec de la mise à jour du responsable",
     "archive_failed": "Échec de l'archivage du squad",
-    "instructions_saved": "Instructions enregistrées",
-    "route_saved": "Parcours enregistré",
-    "route_save_failed": "Échec de l'enregistrement du parcours"
+    "instructions_saved": "Instructions enregistrées"
   },
   "profile_card": {
     "unavailable": "Squad indisponible",
@@ -147,11 +144,5 @@
     "filter_active_count_one": "{{count}} filtre",
     "filter_active_count_other": "{{count}} filtres",
     "clear_filters": "Effacer les filtres"
-  },
-  "route_tab": {
-    "description": "Un ticket assigné à cette équipe suit ce parcours sur le serveur : chaque étape démarre seule, et le responsable n'est réveillé que pour un retour, un arrêt ou la fin.",
-    "placeholder": "dev:Backend,qa:Tester,review:Reviewer,accept:Acceptor,close:Lead",
-    "rules": "Étapes au format étape:Agent séparées par des virgules, terminées par close:<coordinateur>. qa suit dev ; accept figure une fois, juste avant close et après review, et fusionne le commit accepté.",
-    "clear_button": "Désactiver"
   }
 }

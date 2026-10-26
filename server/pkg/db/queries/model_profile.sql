@@ -294,10 +294,3 @@ FROM agent_task_queue t
 LEFT JOIN issue i ON i.id = t.issue_id
 WHERE t.agent_id = $1 AND t.status = 'queued' AND t.model_choice->>'reason' = 'all_unavailable'
 ORDER BY t.created_at;
-
--- name: ListAgentQueuedRouteTasks :many
--- Unclaimed runs of the agent that serve a route step: their model comes
--- from the step's options (profile, family to avoid), not the agent's list.
-SELECT * FROM agent_task_queue
-WHERE agent_id = $1 AND status = 'queued' AND conveyor_action_id IS NOT NULL
-ORDER BY created_at;
