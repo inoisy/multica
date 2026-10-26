@@ -1370,7 +1370,7 @@ func (h *Handler) DeleteAgentRuntime(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := qtx.DeleteRuntimeModelReferences(r.Context(), rt.ID); err != nil {
+	if err := service.RemoveRuntimeModelRows(r.Context(), qtx, rt.ID); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to delete runtime")
 		return
 	}
@@ -1588,7 +1588,7 @@ func (h *Handler) UnbindAgentsAndDeleteRuntime(w http.ResponseWriter, r *http.Re
 	}
 
 	// Model rows and unavailability of the runtime go with it.
-	if err := qtx.DeleteRuntimeModelReferences(r.Context(), rt.ID); err != nil {
+	if err := service.RemoveRuntimeModelRows(r.Context(), qtx, rt.ID); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to delete runtime")
 		return
 	}

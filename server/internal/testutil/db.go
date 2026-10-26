@@ -222,6 +222,27 @@ func (f *Fixture) Runtime(t TB, name string, over ...Cols) string {
 	}, over))
 }
 
+// EnvironmentRuntime inserts an online runtime that an environment (a
+// runtime_profile without a pool: a login of its own) backs, so model rows may
+// name it. The provider is the one in over, claude by default; the profile
+// runs the CLI of that family.
+func (f *Fixture) EnvironmentRuntime(t TB, name string, over ...Cols) string {
+	t.Helper()
+	cols := merge(Cols{"provider": "claude"}, over)
+	family, _ := cols["provider"].(string)
+	profile := f.Insert(t, "runtime_profile", Cols{
+		"workspace_id":    f.WorkspaceID,
+		"display_name":    name,
+		"protocol_family": family,
+		"command_name":    family,
+		"runtime_type":    family,
+	})
+	cols["profile_id"] = profile
+	id := f.Runtime(t, name, cols)
+	f.Cleanup(t, "DELETE FROM runtime_profile WHERE id = $1", profile)
+	return id
+}
+
 // Agent inserts an agent bound to runtimeID. Pass an empty runtimeID for an
 // agent with no runtime.
 func (f *Fixture) Agent(t TB, name, runtimeID string, over ...Cols) string {

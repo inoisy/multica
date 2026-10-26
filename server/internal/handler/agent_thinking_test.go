@@ -701,25 +701,12 @@ func TestUpdateAgent_ThinkingLevelCarriesOverToUndiscoveredHermes(t *testing.T) 
 	if testHandler == nil {
 		t.Skip("database not available")
 	}
-	ctx := context.Background()
 	claudeRuntimeID := createClaudeProviderRuntime(t)
 	hermesRuntimeID := createProviderRuntime(t, "hermes")
 
-	created := httptest.NewRecorder()
-	testHandler.CreateAgent(created, newRequest(http.MethodPost, "/api/agents", map[string]any{
-		"name":                 "carryover-thinking-agent",
-		"runtime_id":           claudeRuntimeID,
-		"visibility":           "private",
-		"max_concurrent_tasks": 1,
-		"thinking_level":       "high",
-	}))
-	if created.Code != http.StatusCreated {
-		t.Fatalf("seed agent: expected 201, got %d: %s", created.Code, created.Body.String())
-	}
-	var seeded map[string]any
-	_ = json.NewDecoder(created.Body).Decode(&seeded)
-	agentID, _ := seeded["id"].(string)
-	t.Cleanup(func() { testPool.Exec(ctx, `DELETE FROM agent WHERE id = $1`, agentID) })
+	// An agent row without a profile: a profile would own the runtime and the
+	// PATCH below would be refused before the thinking level is looked at.
+	agentID := createAgentOnRuntime(t, "carryover-thinking-agent", claudeRuntimeID, "high")
 
 	w := httptest.NewRecorder()
 	testHandler.UpdateAgent(w, withURLParam(
@@ -816,6 +803,29 @@ func TestAcpThinkingDecision(t *testing.T) {
 	})
 }
 
+// backRuntimeWithEnvironment gives a claude or codex test runtime the
+// environment (a login of its own) that model rows require; other providers
+// are left as they are.
+func backRuntimeWithEnvironment(t *testing.T, runtimeID, provider string) {
+	t.Helper()
+	if provider != "claude" && provider != "codex" {
+		return
+	}
+	var profileID string
+	if err := testPool.QueryRow(context.Background(), `
+		INSERT INTO runtime_profile (workspace_id, display_name, protocol_family, command_name, runtime_type)
+		VALUES ($1, $2, $3, $3, $3) RETURNING id
+	`, testWorkspaceID, provider+" environment "+runtimeID, provider).Scan(&profileID); err != nil {
+		t.Fatalf("create %s environment: %v", provider, err)
+	}
+	if _, err := testPool.Exec(context.Background(), `UPDATE agent_runtime SET profile_id = $2 WHERE id = $1`, runtimeID, profileID); err != nil {
+		t.Fatalf("back runtime with environment: %v", err)
+	}
+	t.Cleanup(func() {
+		testPool.Exec(context.Background(), `DELETE FROM runtime_profile WHERE id = $1`, profileID)
+	})
+}
+
 // createProviderRuntime stands up a runtime row for the given provider so a
 // test can exercise provider-level gates end-to-end.
 func createProviderRuntime(t *testing.T, provider string) string {
@@ -832,6 +842,7 @@ func createProviderRuntime(t *testing.T, provider string) string {
 	if err != nil {
 		t.Fatalf("create %s runtime: %v", provider, err)
 	}
+	backRuntimeWithEnvironment(t, runtimeID, provider)
 	t.Cleanup(func() {
 		testPool.Exec(context.Background(), `DELETE FROM agent_runtime WHERE id = $1`, runtimeID)
 	})
@@ -875,6 +886,7 @@ func createCodexProviderRuntime(t *testing.T) string {
 	if err != nil {
 		t.Fatalf("create codex runtime: %v", err)
 	}
+	backRuntimeWithEnvironment(t, runtimeID, "codex")
 	t.Cleanup(func() {
 		testPool.Exec(context.Background(), `DELETE FROM agent_runtime WHERE id = $1`, runtimeID)
 	})
@@ -899,6 +911,7 @@ func createClaudeProviderRuntime(t *testing.T) string {
 	if err != nil {
 		t.Fatalf("create claude runtime: %v", err)
 	}
+	backRuntimeWithEnvironment(t, runtimeID, "claude")
 	t.Cleanup(func() {
 		testPool.Exec(context.Background(), `DELETE FROM agent_runtime WHERE id = $1`, runtimeID)
 	})

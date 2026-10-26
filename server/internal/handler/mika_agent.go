@@ -216,6 +216,10 @@ func (h *Handler) resolveMikaAgent(w http.ResponseWriter, r *http.Request, works
 		writeError(w, http.StatusInternalServerError, "failed to create the workspace agent")
 		return db.Agent{}, false, false
 	}
+	if created, err = service.ProfileFromAgentFields(r.Context(), qtx, created); err != nil {
+		writeModelProfileError(w, err)
+		return db.Agent{}, false, false
+	}
 	// Workspace-invocable: every member may chat with Mika and assign it work.
 	if err := replaceInvocationTargetsWithQueries(r.Context(), qtx, created.ID, parseUUID(userID), []targetSpec{
 		{targetType: invocationTargetWorkspace, targetID: wsUUID},
