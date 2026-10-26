@@ -32,7 +32,7 @@ Prerequisites: Python 3.10+, Git; Node 18+ only for screenshots. First build on
 Linux x86_64 downloads the pinned backend; subsequent builds are offline.
 
 ```sh
-git fetch origin runtime/0.6.1-live
+git fetch origin main
 python3 tools/product/index.py build
 python3 tools/product/index.py check
 python3 tools/product/index.py find runtime_id --kind query --limit 10
@@ -44,7 +44,7 @@ python3 tools/product/index.py trace listPools
 ```
 
 The first JSON fields are `source_sha`, `source_ref` and `source_fingerprint`.
-The default ref is `origin/runtime/0.6.1-live`. Build refuses modified/untracked
+The default ref is `origin/main`. Build refuses modified/untracked
 product source; it indexes an immutable `git archive` snapshot. Read commands
 refuse a stale SHA or a changed working-tree fingerprint. Fetch explicitly to
 compare against the remote's newest head; the tool does not fetch silently.

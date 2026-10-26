@@ -1,9 +1,9 @@
 # База продукта Multica
 
 Внутренняя база форка `inoisy/multica`. Срез: 26.10.2026. Код —
-`runtime/0.6.1-live`, `f12d2020efe929ac670ba1bf10be67c8013b65f5`, схема 612.
+`main`, `8130ec095610cbb2dc218dd9198e29de36e35047`, схема 612.
 Установленный релиз по отчёту STT-424 — `f4cd8d034`; различие этой ветки с релизом
-затрагивает установщик. Это сведения из приёмки, не новый замер прода.
+затрагивает установщик и внутреннюю документацию/тулинг. Это сведения из приёмки, не новый замер прода.
 Источники и порядок разрешения противоречий — [sources.md](sources.md).
 
 ## Зачем продукт
@@ -37,6 +37,7 @@ STT-433 ещё не реализована на индексируемой ве�
 | [ui.md](ui.md) | Навигация, контролы, визуальные источники |
 | [upstream.md](upstream.md) | RFC и открытые реализации апстрима |
 | [acceptance.md](acceptance.md) | Ответы на три контрольных вопроса |
+| [reviews/stt-433.md](reviews/stt-433.md) | Проверка постановки и макета до разработки, доказательства и открытый вопрос |
 | [generated/index.json](generated/index.json) | Машинная производная от кода |
 
 ## Проверка актуальности
@@ -44,7 +45,7 @@ STT-433 ещё не реализована на индексируемой ве�
 Из корня репозитория:
 
 ```sh
-git fetch origin runtime/0.6.1-live
+git fetch origin main
 python3 tools/product/index.py check
 python3 tools/product/index.py build
 python3 tools/product/index.py find runtime_id --kind query --limit 10
@@ -52,7 +53,7 @@ python3 tools/product/index.py screens /api/pools
 python3 tools/product/index.py trace listPools
 ```
 
-`check` и поиск отказывают при несовпадении SHA с `origin/runtime/0.6.1-live` или
+`check` и поиск отказывают при несовпадении SHA с `origin/main` или
 отпечатка индексируемых файлов с рабочей копией. SHA относится к продуктовому
 срезу; добавление документации и инструментов поверх него не меняет этот SHA.
 Для другой ветки явно передавать `--ref HEAD`. Подробности:

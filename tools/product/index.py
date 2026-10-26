@@ -346,7 +346,7 @@ def describe(r, selected=None):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--index", type=Path, default=DEFAULT)
-    parser.add_argument("--ref", default="origin/runtime/0.6.1-live", help="Required source revision for reads")
+    parser.add_argument("--ref", default="origin/main", help="Required source revision for reads")
     subs = parser.add_subparsers(dest="command", required=True)
     subs.add_parser("build")
     subs.add_parser("check")

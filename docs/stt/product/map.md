@@ -8,6 +8,11 @@
 [router.go](../../../server/cmd/server/router.go). Все пути интерфейса workspace
 имеют префикс `/{workspaceSlug}`.
 
+После слияния PR №53/55 рабочая ветка — `main`, срез `8130ec095`.
+Продуктовые исходники относительно `f12d2020e` не изменились; индекс пересобран
+для main. Уточнения STT-433 и ссылки на владельцев:
+[reviews/stt-433.md](reviews/stt-433.md).
+
 | Раздел | Экран в `packages/views/` | API | Основные таблицы / sqlc |
 | --- | --- | --- | --- |
 | Задачи, мои задачи | `issues/components/issues-page.tsx`, `my-issues/components/my-issues-page.tsx` | `/api/issues`, `/api/comments/{commentId}` | `issue`, `comment`, `issue_status`; [issue.sql](../../../server/pkg/db/queries/issue.sql), [comment.sql](../../../server/pkg/db/queries/comment.sql) |
