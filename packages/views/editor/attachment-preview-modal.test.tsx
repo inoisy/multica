@@ -82,12 +82,18 @@ vi.mock("./use-download-attachment", () => ({
 // Module-level flags toggled per-test: simulate desktop (openInNewTab
 // adapter present) vs web (omitted), and the no-slug case where the
 // modal sits outside a workspace route.
-const { openInNewTabMock, getShareableUrlMock, navState, slugState } =
-  vi.hoisted(() => ({
+const {
+  openInNewTabMock,
+  getShareableUrlMock,
+  navState,
+  slugState,
+  standaloneState,
+} = vi.hoisted(() => ({
     openInNewTabMock: vi.fn(),
     getShareableUrlMock: vi.fn((p: string) => `https://app.example${p}`),
     navState: { hasOpenInNewTab: true },
     slugState: { value: "acme" as string | null },
+    standaloneState: { value: false },
   }));
 
 vi.mock("../navigation", () => ({
@@ -101,6 +107,11 @@ vi.mock("../navigation", () => ({
     ...(navState.hasOpenInNewTab ? { openInNewTab: openInNewTabMock } : {}),
     getShareableUrl: getShareableUrlMock,
   }),
+}));
+
+vi.mock("../platform/standalone", () => ({
+  useIsStandalonePwa: () => standaloneState.value,
+  isStandalonePwa: () => standaloneState.value,
 }));
 
 vi.mock("@multica/core/paths", async (importOriginal) => {
@@ -227,6 +238,7 @@ beforeEach(() => {
   getAttachmentTextContentMock.mockReset();
   navState.hasOpenInNewTab = true;
   slugState.value = "acme";
+  standaloneState.value = false;
   isDesktopShellMock.mockReturnValue(false);
   copyImageMock.mockResolvedValue(true);
   // Default to web's same-origin empty base so existing absolute-URL tests
@@ -953,6 +965,27 @@ describe("AttachmentPreviewModal — open-in-new-tab", () => {
       />,
     );
     expect(screen.queryByRole("button", { name: "Open in new tab" })).toBeNull();
+  });
+
+  it("does not render the new-tab button in an installed PWA — a second window is a dead end there", async () => {
+    standaloneState.value = true;
+    getAttachmentTextContentMock.mockResolvedValueOnce({
+      text: "<p>hi</p>",
+      originalContentType: "text/html",
+    });
+    const att = makeAttachment({
+      filename: "report.html",
+      content_type: "text/html",
+    });
+    render(
+      <AttachmentPreviewModal
+        source={{ kind: "full", attachment: att }}
+        open
+        onClose={() => {}}
+      />,
+    );
+    expect(screen.queryByTitle("Open in new tab")).toBeNull();
+    expect(screen.getByTitle("Download")).toBeTruthy();
   });
 
   it("does not render the new-tab button when there is no workspace slug", async () => {
