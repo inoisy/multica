@@ -4,7 +4,9 @@
 One run: find the newest commit on main whose CI and STT workflows succeeded,
 and if it is ahead of what the server runs, back up the database, switch the
 backend/web images to that commit, wait for /health to report it, and roll back
-to the previous images if it does not. The daemon binary is swapped only while
+to the previous images if it does not. When mcp_service is set, the multica-tasks
+MCP image pinned in the same commit (mcp_pin_path) is deployed, health-checked and
+rolled back together with them. The daemon binary is swapped only while
 the daemon is idle. Destructive migrations stop the run until an operator
 passes --allow-destructive.
 
@@ -20,6 +22,7 @@ import shutil
 import subprocess
 import sys
 import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -35,6 +38,13 @@ DEFAULTS = {
     "compose_project": "",
     "backend_service": "backend",
     "frontend_service": "frontend",
+    # Empty mcp_service keeps the MCP out of the release. Set it only after the
+    # old multica-tasks-mcp.service is stopped: both bind 127.0.0.1:8101.
+    "mcp_service": "",
+    "mcp_pin_path": "deploy/autodeploy/mcp-image",
+    "mcp_image_repo": "ghcr.io/inoisy/multica-tasks-mcp",
+    "mcp_health_url": "http://127.0.0.1:8101/healthz",
+    "mcp_addon_file": "/opt/multica/docker-compose.mcp.yml",
     "postgres_service": "postgres",
     "override_name": "docker-compose.autodeploy.yml",
     "backup_dir": "/var/backups/multica-autodeploy",
@@ -109,12 +119,23 @@ def pick_target(commits, runs_by_sha, required):
     return None
 
 
-def render_override(cfg, sha_or_images):
+def parse_mcp_pin(cfg, text):
+    """The pin must be an immutable reference to the MCP image repo: a 40-hex tag or a sha256 digest."""
+    ref = (text or "").strip()
+    pattern = re.escape(cfg["mcp_image_repo"]) + r"(:[0-9a-f]{40}|@sha256:[0-9a-f]{64})"
+    if not re.fullmatch(pattern, ref):
+        raise ValueError(f"invalid MCP image pin {ref[:120]!r}: expected {cfg['mcp_image_repo']}:<40-hex sha> or @sha256:<digest>")
+    return ref
+
+
+def render_override(cfg, sha_or_images, mcp_image=None):
     if isinstance(sha_or_images, str):
         images = {
             cfg["backend_service"]: f"{cfg['image_prefix']}backend:{sha_or_images}",
             cfg["frontend_service"]: f"{cfg['image_prefix']}web:{sha_or_images}",
         }
+        if mcp_image:
+            images[cfg["mcp_service"]] = mcp_image
     else:
         images = sha_or_images
     lines = ["# Managed by multica-autodeploy. Do not edit: the next run rewrites it.", "services:"]
@@ -150,6 +171,20 @@ class Deployer:
         with urllib.request.urlopen(req, timeout=20) as r:
             return json.loads(r.read().decode())
 
+    def raw_file(self, path, ref):
+        """File content at a commit of the repo, or None when the commit has no such file."""
+        req = urllib.request.Request(f"https://raw.githubusercontent.com/{self.cfg['repo']}/{ref}/{path}", headers={"User-Agent": "multica-autodeploy"})
+        token = os.environ.get("GITHUB_TOKEN")
+        if token:
+            req.add_header("Authorization", f"Bearer {token}")
+        try:
+            with urllib.request.urlopen(req, timeout=20) as r:
+                return r.read().decode()
+        except urllib.error.HTTPError as exc:
+            if exc.code == 404:
+                return None
+            raise
+
     def gh(self, path):
         return self.http_json(f"https://api.github.com/repos/{self.cfg['repo']}{path}")
 
@@ -160,14 +195,21 @@ class Deployer:
         res = subprocess.run(cmd, check=check, text=True, capture_output=capture)
         return res.stdout if capture else ""
 
-    def health(self):
+    def health(self, url=None):
         try:
-            with urllib.request.urlopen(self.cfg["health_url"], timeout=5) as r:
+            with urllib.request.urlopen(url or self.cfg["health_url"], timeout=5) as r:
                 return json.loads(r.read().decode())
         except Exception as exc:  # noqa: BLE001 - any failure means "not healthy"
             return {"status": "error", "error": str(exc)}
 
     # ---- compose ----------------------------------------------------------
+    def services(self, mcp=False):
+        """Services a release switches; the MCP only when enabled and wanted."""
+        names = [self.cfg["backend_service"], self.cfg["frontend_service"]]
+        if mcp and self.cfg["mcp_service"]:
+            names.append(self.cfg["mcp_service"])
+        return names
+
     def compose_context(self):
         """Project, working dir and config files of the running backend container."""
         filters = ["--filter", f"label=com.docker.compose.service={self.cfg['backend_service']}",
@@ -189,6 +231,10 @@ class Deployer:
         override = str(Path(workdir) / self.cfg["override_name"])
         if override not in files:
             files.append(override)
+        addon = self.cfg["mcp_addon_file"]
+        if self.cfg["mcp_service"]:
+            # The addon defines the MCP service; the override must stay last so its image wins.
+            files = [f for f in files if f not in (addon, override)] + [addon, override]
         return {"project": lab["com.docker.compose.project"], "workdir": workdir, "files": files, "override": override,
                 "backend_image": labels["Config"]["Image"], "backend_container": cid[0]}
 
@@ -201,7 +247,7 @@ class Deployer:
 
     def current_images(self, ctx):
         images = {}
-        for service in (self.cfg["backend_service"], self.cfg["frontend_service"]):
+        for service in self.services(mcp=True):
             cid = subprocess.run(["docker", "ps", "-q", "--filter", f"label=com.docker.compose.service={service}",
                                   "--filter", f"label=com.docker.compose.project={ctx['project']}"],
                                  check=True, text=True, capture_output=True).stdout.split()
@@ -209,6 +255,28 @@ class Deployer:
                 images[service] = json.loads(subprocess.run(["docker", "inspect", cid[0]], check=True, text=True,
                                                             capture_output=True).stdout)[0]["Config"]["Image"]
         return images
+
+    def mcp_state(self, ctx):
+        """Image, running flag and health of the MCP container, or None when it does not exist."""
+        cid = subprocess.run(["docker", "ps", "-aq", "--filter", f"label=com.docker.compose.service={self.cfg['mcp_service']}",
+                              "--filter", f"label=com.docker.compose.project={ctx['project']}"],
+                             check=True, text=True, capture_output=True).stdout.split()
+        if not cid:
+            return None
+        info = json.loads(subprocess.run(["docker", "inspect", cid[0]], check=True, text=True, capture_output=True).stdout)[0]
+        return {"image": info["Config"]["Image"], "running": info["State"]["Running"],
+                "health": info["State"].get("Health", {}).get("Status", "none")}
+
+    def mcp_ready(self, ctx, image):
+        try:
+            state = self.mcp_state(ctx)
+        except subprocess.CalledProcessError as exc:
+            return False, {"error": f"container inspection failed ({exc.returncode})"}
+        container_ok = bool(state) and state["image"] == image and state["running"] and state["health"] == "healthy"
+        if not container_ok:
+            return False, state
+        endpoint = self.health(self.cfg["mcp_health_url"])
+        return endpoint.get("status") == "ok", {**state, "endpoint": endpoint}
 
     def write_override(self, ctx, content):
         if self.dry_run:
@@ -227,6 +295,13 @@ class Deployer:
             if run["status"] == "completed":
                 per.setdefault(run["name"], run["conclusion"])
         return pick_target(commits, runs_by_sha, self.cfg["required_workflows"])
+
+    def mcp_pin(self, target):
+        """MCP image pinned in the target commit; mandatory when MCP is enabled."""
+        if not self.cfg["mcp_service"]:
+            return None
+        text = self.raw_file(self.cfg["mcp_pin_path"], target)
+        return parse_mcp_pin(self.cfg, text)
 
     def migration_check(self, current, target):
         cmp = self.gh(f"/compare/{current}...{target}")
@@ -266,15 +341,28 @@ class Deployer:
             old.unlink()
         return str(path)
 
-    def wait_health(self, sha):
+    def wait_health(self, sha, ctx=None, mcp_image=None):
+        """Platform /health reports sha and, when mcp_image is given, the MCP container runs it and is healthy."""
         deadline = time.time() + self.cfg["health_timeout_s"]
         last = {}
         while time.time() < deadline:
             last = self.health()
             if last.get("status") == "ok" and last.get("commit") == sha:
-                return True, last
+                if not mcp_image:
+                    return True, last
+                ready, mcp = self.mcp_ready(ctx, mcp_image)
+                last = {**last, "mcp": mcp}
+                if ready:
+                    return True, last
             time.sleep(5)
         return False, last
+
+    def restore(self, ctx, images, mcp_added):
+        """Put the given images back; an MCP that did not exist before the release is stopped."""
+        self.write_override(ctx, render_override(self.cfg, images))
+        self.compose(ctx, "up", "-d", "--no-deps", *[s for s in self.services(mcp=True) if s in images])
+        if mcp_added:
+            self.compose(ctx, "stop", self.cfg["mcp_service"])
 
     def daemon_status(self):
         out = subprocess.run(["runuser", "-u", self.cfg["daemon_user"], "--", self.cfg["daemon_binary"], "daemon", "status", "--output", "json"],
@@ -336,7 +424,7 @@ class Deployer:
         if not target:
             self.log("noop", reason="no commit with green CI and STT on main")
             return 0
-        if target == current:
+        if target == current and not self.cfg["mcp_service"]:
             if state.get("daemon") == "busy" and not self.dry_run:
                 state["daemon"] = self.update_daemon(target)
                 self.save_state(state)
@@ -355,31 +443,51 @@ class Deployer:
             return 3
         ctx = self.compose_context()
         previous = self.current_images(ctx)
-        self.log("start", current=current, target=target, migrations=added, previous=previous)
-        dump = self.backup(ctx, current)
-        self.write_override(ctx, render_override(self.cfg, target))
         try:
-            self.compose(ctx, "pull", self.cfg["backend_service"], self.cfg["frontend_service"])
+            mcp_image = self.mcp_pin(target)
+        except ValueError as exc:
+            self.log("abort", reason=str(exc), target=target)
+            return 6
+        if mcp_image and not Path(self.cfg["mcp_addon_file"]).exists():
+            self.log("abort", reason=f"MCP compose file {self.cfg['mcp_addon_file']} is missing", target=target)
+            return 6
+        if target == current and self.mcp_ready(ctx, mcp_image)[0]:
+            if state.get("daemon") == "busy" and not self.dry_run:
+                state["daemon"] = self.update_daemon(target)
+                self.save_state(state)
+            self.log("noop", reason="already running", commit=current, mcp=mcp_image)
+            return 0
+        mcp_added = bool(mcp_image) and self.cfg["mcp_service"] not in previous
+        services = self.services(mcp=bool(mcp_image))
+        self.log("start", current=current, target=target, migrations=added, previous=previous, mcp=mcp_image)
+        dump = self.backup(ctx, current)
+        self.write_override(ctx, render_override(self.cfg, target, mcp_image))
+        try:
+            self.compose(ctx, "pull", *services)
         except subprocess.CalledProcessError:
             self.write_override(ctx, render_override(self.cfg, previous))
             self.log("abort", reason="image pull failed", target=target)
             return 5
-        self.compose(ctx, "up", "-d", "--no-deps", self.cfg["backend_service"], self.cfg["frontend_service"])
-        if self.dry_run:
-            self.log("dry_run_done", target=target)
-            self.notify(f"Автовыкатка (пробный режим): выкатила бы `{target[:9]}` вместо `{current[:9]}`, миграций: {len(added)}.")
-            return 0
-        ok, last = self.wait_health(target)
+        try:
+            self.compose(ctx, "up", "-d", "--no-deps", *services)
+            if self.dry_run:
+                self.log("dry_run_done", target=target)
+                self.notify(f"Автовыкатка (пробный режим): выкатила бы `{target[:9]}` вместо `{current[:9]}`, миграций: {len(added)}.")
+                return 0
+            ok, last = self.wait_health(target, ctx, mcp_image)
+        except subprocess.CalledProcessError as exc:
+            ok, last = False, {"error": f"compose up failed ({exc.returncode})"}
         if not ok:
             self.log("rollback", target=target, health=last, previous=previous)
-            self.write_override(ctx, render_override(self.cfg, previous))
-            self.compose(ctx, "up", "-d", "--no-deps", self.cfg["backend_service"], self.cfg["frontend_service"])
-            back, after = self.wait_health(current)
+            self.restore(ctx, previous, mcp_added)
+            back, after = self.wait_health(current, ctx, previous.get(self.cfg["mcp_service"]))
+            self.log("rollback_done", commit=current, ok=back, health=after)
             self.notify(f"Автовыкатка `{target[:9]}` не прошла health, откат на `{current[:9]}`: "
                         f"{'успешно' if back else 'НЕ поднялся, нужен человек'}. Бэкап БД: `{dump}`.")
             return 4
         daemon = self.update_daemon(target)
-        state.update({"deployed": target, "previous": current, "previous_images": previous, "backup": dump, "daemon": daemon})
+        state.update({"deployed": target, "previous": current, "previous_images": previous, "backup": dump, "daemon": daemon,
+                      "mcp": mcp_image, "mcp_added": mcp_added})
         state.pop("blocked", None)
         self.save_state(state)
         self.log("done", commit=target, daemon=daemon)
@@ -390,9 +498,9 @@ class Deployer:
     def rollback(self):
         state = json.loads(Path(self.cfg["state_path"]).read_text())
         ctx = self.compose_context()
-        self.write_override(ctx, render_override(self.cfg, state["previous_images"]))
-        self.compose(ctx, "up", "-d", "--no-deps", self.cfg["backend_service"], self.cfg["frontend_service"])
-        ok, last = self.wait_health(state["previous"])
+        previous = state["previous_images"]
+        self.restore(ctx, previous, bool(state.get("mcp_added")))
+        ok, last = self.wait_health(state["previous"], ctx, previous.get(self.cfg["mcp_service"]))
         self.log("manual_rollback", ok=ok, health=last)
         return 0 if ok else 4
 

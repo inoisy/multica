@@ -4428,15 +4428,6 @@ func (s *TaskService) StartTaskForClaim(ctx context.Context, claim db.LockAgentT
 	var change *qoderIssueChange
 	replay := task.Status == "running"
 	if !replay {
-		// Rolled back before the refusal is journaled: cancelling takes the
-		// task row this transaction holds.
-		if reason, err := s.conveyor().StaleReason(ctx, qtx, task); err != nil {
-			return nil, err
-		} else if reason != "" {
-			tx.Rollback(ctx)
-			s.conveyor().RejectStale(ctx, task, reason)
-			return nil, fmt.Errorf("%w: %s", ErrConveyorStale, reason)
-		}
 		task, err = qtx.StartAgentTaskWithSupplement(ctx, db.StartAgentTaskWithSupplementParams{
 			TaskID:               task.ID,
 			EnableTaskSupplement: len(supplementSupport) > 0 && supplementSupport[0],
@@ -4652,13 +4643,6 @@ func (s *TaskService) CompleteTaskWithTransition(ctx context.Context, taskID pgt
 		if err := SettleTerminalTaskState(ctx, qtx, t); err != nil {
 			return err
 		}
-		// A run of a route step ends here: the route decides what follows in
-		// this same transaction, so the decision and the run it owes commit
-		// with the status or not at all.
-		if err := s.conveyor().OnTaskTerminal(ctx, qtx, t); err != nil {
-			return err
-		}
-
 		if t.ChatSessionID.Valid {
 			// Pin the chat_session's runtime_id alongside the session_id so the
 			// next claim can apply the runtime-guard. Both fields move together:
@@ -4742,7 +4726,6 @@ func (s *TaskService) CompleteTaskWithTransition(ctx context.Context, taskID pgt
 	s.publishQoderIssueChange(ctx, change)
 	slog.Info("task completed", "task_id", util.UUIDToString(task.ID), "issue_id", util.UUIDToString(task.IssueID))
 	s.captureTaskCompleted(ctx, task)
-	s.deliverConveyorAfterTerminal(ctx, task)
 
 	// Invariant: every completed issue task must have at least one agent
 	// comment on the issue, so the user always sees something when a run
@@ -5382,12 +5365,7 @@ func (s *TaskService) FailTaskWithQuotaReset(ctx context.Context, taskID pgtype.
 				return fmt.Errorf("write chat failure outcome: %w", err)
 			}
 		}
-		// A run of a route step that a system retry takes over is not an end
-		// for the route: the attempt inherits the step and answers for it.
-		if retried != nil {
-			return nil
-		}
-		return s.conveyor().OnTaskTerminal(ctx, qtx, t)
+		return nil
 	}); err != nil {
 		if existing, lookupErr := s.Queries.GetAgentTask(ctx, taskID); lookupErr == nil {
 			if errors.Is(err, pgx.ErrNoRows) {
@@ -5418,7 +5396,6 @@ func (s *TaskService) FailTaskWithQuotaReset(ctx context.Context, taskID pgtype.
 	slog.Warn("task failed", "task_id", util.UUIDToString(task.ID), "issue_id", util.UUIDToString(task.IssueID), "error", errMsg, "failure_reason", failureReason)
 	s.publishIdleNotices(idleNotices)
 	s.captureTaskFailed(ctx, task)
-	s.deliverConveyorAfterTerminal(ctx, task)
 
 	// The auto-retry child (if any) was created inside the transaction above so
 	// no newer chat task could jump ahead of it. Surface it now: broadcast
@@ -5448,11 +5425,7 @@ func (s *TaskService) FailTaskWithQuotaReset(ctx context.Context, taskID pgtype.
 	// platform-authored comment on the source task's issue, routed explicitly to
 	// that task's agent; recoverDelegatedTaskFailure coalesces it with an
 	// existing coordinator run and deduplicates by the failed task id.
-	//
-	// A route step is not delegated work: its ending was decided by the route in
-	// the failing transaction (including the wait for a provider limit), so
-	// the coordinator is not woken a second time from here.
-	if retried == nil && !task.ConveyorActionID.Valid {
+	if retried == nil {
 		_, recoveryErr := s.recoverDelegatedTaskFailure(ctx, task)
 		if recoveryErr != nil {
 			slog.Warn("delegated task failure recovery failed",
@@ -5940,17 +5913,6 @@ var ErrRerunInvokeNotAllowed = errors.New("rerun: operator not allowed to invoke
 // rerun as a back door — and a blocked rerun mutates nothing. Pass nil only
 // from trusted internal callers (tests, backfill) that have already gated.
 func (s *TaskService) RerunIssue(ctx context.Context, issueID pgtype.UUID, sourceTaskID pgtype.UUID, triggerCommentID pgtype.UUID, actorUserID pgtype.UUID, canInvoke func(agent db.Agent) bool) (*db.AgentTaskQueue, error) {
-	// On a routed issue the route owns the retry of its step: one successor of
-	// the run that failed, whoever asks and whether or not they name it.
-	if s.TxStarter == nil {
-		return s.rerunIssue(ctx, issueID, sourceTaskID, triggerCommentID, actorUserID, canInvoke)
-	}
-	return s.conveyor().RerunGuard(ctx, issueID, sourceTaskID, canInvoke, func(source pgtype.UUID) (*db.AgentTaskQueue, error) {
-		return s.rerunIssue(ctx, issueID, source, triggerCommentID, actorUserID, canInvoke)
-	})
-}
-
-func (s *TaskService) rerunIssue(ctx context.Context, issueID pgtype.UUID, sourceTaskID pgtype.UUID, triggerCommentID pgtype.UUID, actorUserID pgtype.UUID, canInvoke func(agent db.Agent) bool) (*db.AgentTaskQueue, error) {
 	issue, err := s.Queries.GetIssue(ctx, issueID)
 	if err != nil {
 		return nil, fmt.Errorf("load issue: %w", err)

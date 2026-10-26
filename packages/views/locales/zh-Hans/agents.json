@@ -1208,11 +1208,10 @@
     "card": {
       "running": "running",
       "cancelled": "cancelled",
-      "review": "路线已完成，等待关闭",
+      "review": "评审中",
       "success": "done",
       "held": "waits for the customer",
       "blocked": "等待协调者",
-      "quota": "等待服务商",
       "failed": "run failed",
       "created": "waits for its stage",
       "queued": "queued"

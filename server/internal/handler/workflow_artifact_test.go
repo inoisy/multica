@@ -138,26 +138,3 @@ func TestWorkflowArtifactGuards(t *testing.T) {
 	})
 	agentUpdateIssue(t, issueID, other, observerTask, pinBody("done", testPinnedCommit)).Want(http.StatusForbidden)
 }
-
-// A project whose workflow runs the issue must not also start the squad's
-// legacy route, and a legacy route cannot be enabled there.
-func TestWorkflowProjectRefusesLegacyRoute(t *testing.T) {
-	seedTestCatalog(t)
-	agentID := seededReadyAgentID(t)
-	projectID := deliveryProject(t, "Workflow legacy route project", agentID)
-	issueID := dbfx.Issue(t, "no legacy route", testutil.Cols{"project_id": projectID, "status": "todo"})
-
-	req := withURLParam(newRequest("PUT", "/api/issues/"+issueID+"/conveyor", map[string]any{
-		"action": "enable", "expected_revision": 0,
-		"route": []map[string]string{{"step": "dev", "agent": agentID}, {"step": "close", "agent": agentID}},
-	}), "id", issueID)
-	body := testutil.Call(t, testHandler.ApplyIssueConveyor, req).Want(http.StatusConflict).Map()
-	if msg, _ := body["error"].(string); !strings.Contains(msg, "Workflow") {
-		t.Fatalf("legacy route refusal = %v", body)
-	}
-	var routes int
-	dbfx.QueryRow(t, `SELECT count(*) FROM issue_conveyor WHERE issue_id = $1`, issueID).Scan(&routes)
-	if routes != 0 {
-		t.Fatalf("legacy routes = %d, want none", routes)
-	}
-}
