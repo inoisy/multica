@@ -6,6 +6,13 @@ name: STT
 on:
   push:
     branches: [main]
+    # Changes that do not alter the images must not rebuild them: a new image
+    # tag makes the server redeploy and restart the backend for nothing.
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+      - "deploy/**"
+      - "tools/**"
   pull_request:
     branches: [main]
   workflow_dispatch:
