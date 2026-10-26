@@ -253,7 +253,7 @@ func TestAcceptWithoutDescriptionPassesWithoutMerge(t *testing.T) {
 	if r.main() != before {
 		t.Fatal("a repository without acceptance got a merge")
 	}
-	if report := acceptResult(out, "repo", "abc")["report"].(string); !strings.HasPrefix(report, "Приёмки нет") {
+	if report := acceptReport(out); !strings.HasPrefix(report, "Приёмки нет") {
 		t.Fatalf("report %q", report)
 	}
 	missing, _ := r.accept(strings.Repeat("ab", 20), "")
@@ -290,18 +290,9 @@ func TestAcceptCommandTimeoutStopsTheTree(t *testing.T) {
 	}
 }
 
-func TestAcceptResultIsARouteResult(t *testing.T) {
-	sha := strings.Repeat("a", 40)
-	res := acceptResult(acceptOutcome{Outcome: "changes_requested", Base: "test/base", Reason: "command failed: make test",
-		Checks: []acceptCheck{{Name: "make test", Command: "make test"}}, Tail: "FAIL x"}, "git@host:r.git", sha)
-	if res["outcome"] != "changes_requested" || res["schema_version"] != 1 {
-		t.Fatalf("result %#v", res)
-	}
-	art := res["artifact"].(map[string]string)
-	if art["commit"] != sha || art["repo"] != "git@host:r.git" || art["branch"] != "test/base" {
-		t.Fatalf("artifact %#v", art)
-	}
-	if report := res["report"].(string); !strings.Contains(report, "Слияния нет") || !strings.Contains(report, "FAIL x") {
+func TestAcceptReportNamesTheFailure(t *testing.T) {
+	report := acceptReport(acceptOutcome{Outcome: "changes_requested", Reason: "command failed: make test", Tail: "FAIL x"})
+	if !strings.Contains(report, "Слияния нет") || !strings.Contains(report, "FAIL x") {
 		t.Fatalf("report %q", report)
 	}
 }
