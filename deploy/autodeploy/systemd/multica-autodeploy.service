@@ -1,0 +1,9 @@
+[Unit]
+Description=Multica autodeploy: roll main onto this server if CI is green
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/multica-autodeploy/autodeploy.py run
+TimeoutStartSec=45min
