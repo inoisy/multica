@@ -55,7 +55,8 @@ P0 — работоспособность и сохранность резуль
    подписей), автовыкатка `deploy/autodeploy` (PR #60–#65, журнал STT-443).
    С 26.10 на `main` обязательные проверки и автослияние: агенты вливают PR
    сами по зелёному CI (см. decisions.md). Остаток —
-   перевести `multica-tasks-mcp` в compose и убрать harness-control.
+   перевести `multica-tasks-mcp` в compose и убрать harness-control ([STT-454]); тесты РП
+   в CI git01 вместо своей приёмки ([STT-453]).
 5. [STT-429] передана Техдиректору 26.10; [STT-264] отменена, живых старых маршрутов нет. Снять последний старый маршрут,
    сохранив stage-dispatch; accept в репо с CI заменить на «PR/MR → автослияние
    по зелёному CI», прогон команд оставить только для локальных репо без CI; согласовать удаление внешних
@@ -548,3 +549,5 @@ HTML-вложение открывается на весь экран с адр�
 [STT-441]: https://multica.yakutov.com/stt/issues/STT-441
 [STT-443]: https://multica.yakutov.com/stt/issues/STT-443
 [STT-452]: https://multica.yakutov.com/stt/issues/STT-452
+[STT-453]: https://multica.yakutov.com/stt/issues/STT-453
+[STT-454]: https://multica.yakutov.com/stt/issues/STT-454
