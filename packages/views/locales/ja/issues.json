@@ -1701,12 +1701,5 @@
   "stage_dispatch": {
     "label": "ステージ",
     "off": "割り当てない"
-  },
-  "route_step": {
-    "title": "ルートのステップ、{{round}} 周目",
-    "paused": "一時停止",
-    "awaiting_coordinator": "コーディネーター待ち",
-    "waiting_provider": "プロバイダー待ち",
-    "disabled": "オフ"
   }
 }

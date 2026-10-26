@@ -1196,11 +1196,10 @@
     "card": {
       "running": "running",
       "cancelled": "cancelled",
-      "review": "ルート完了、クローズ待ち",
+      "review": "レビュー中",
       "success": "done",
       "held": "waits for the customer",
       "blocked": "コーディネーター待ち",
-      "quota": "プロバイダー待ち",
       "failed": "run failed",
       "created": "waits for its stage",
       "queued": "queued"
