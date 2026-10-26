@@ -46,7 +46,7 @@ class MigrationTests(unittest.TestCase):
         self.assertIn("DROP TABLE", problems[0])
 
     def test_legacy_cleanup_migration_stops_the_autodeploy(self):
-        name = "616_drop_legacy_model_schema.up.sql"
+        name = "617_drop_legacy_model_schema.up.sql"
         content = (HERE.parent.parent / "server" / "migrations" / name).read_text()
         problems, added = ad.classify_migrations([{"filename": f"server/migrations/{name}", "status": "added", "content": content}])
         self.assertEqual(added, [f"server/migrations/{name}"])
