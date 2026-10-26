@@ -3,7 +3,7 @@
 import { useId } from "react";
 import { AGENT_LIMIT_MAX, parseAgentLimit, peopleShare } from "@multica/core/subscriptions";
 import { Input } from "@multica/ui/components/ui/input";
-import { useT } from "../i18n";
+import { useT } from "../../i18n";
 
 /** Typed limits per window, as text so a half-typed value is not lost. */
 export type AgentLimitDraft = Record<string, string>;

@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { Pool, PoolAccount, Subscription } from "@multica/core/types";
-import { renderWithI18n } from "../test/i18n";
+import { renderWithI18n } from "../../test/i18n";
 
 const api = vi.hoisted(() => ({
   listSubscriptions: vi.fn(),
@@ -13,13 +13,16 @@ const api = vi.hoisted(() => ({
   updatePool: vi.fn(),
   setPoolGrants: vi.fn(),
 }));
+vi.mock("@multica/core/paths", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@multica/core/paths")>()),
+  useWorkspacePaths: () => ({ runtimes: () => "/acme/runtimes" }),
+}));
 vi.mock("@multica/core/api", () => ({
   api,
   ApiError: class ApiError extends Error {},
 }));
 
 import { PoolAccountsSection } from "./pool-accounts-section";
-import { PoolDialog } from "./pool-dialog";
 
 function sub(key: string): Subscription {
   return {
@@ -70,25 +73,14 @@ describe("PoolAccountsSection", () => {
     expect(within(section).getByTestId("pool-editor").getAttribute("data-revision")).toBe("5");
   });
 
-  it("edits through the same pool mutation, so the subscriptions pool dialog follows", async () => {
+  it("saves an edit with the revision it started from and sends the person to Accounts for limits", async () => {
     api.updatePool.mockResolvedValue(pool(["b", "a"], 6));
-    renderWith(
-      <>
-        <PoolAccountsSection poolId="pool-1" />
-        <PoolDialog poolId="pool-1" subscriptions={[sub("a"), sub("b"), sub("c")]} canManage onOpenChange={() => undefined} />
-      </>,
-    );
+    renderWith(<PoolAccountsSection poolId="pool-1" />);
     const section = await screen.findByTestId("runtime-pool");
-    // An open dialog hides the page behind it from the accessibility tree.
-    fireEvent.click(await within(section).findByRole("button", { name: "Up: b", hidden: true }));
-    api.listPools.mockResolvedValue({ can_manage: true, pools: [pool(["b", "a"], 6)] });
-    fireEvent.click(within(section).getByRole("button", { name: "Save", hidden: true }));
+    fireEvent.click(await within(section).findByRole("button", { name: "Up: b" }));
+    fireEvent.click(within(section).getByRole("button", { name: "Save" }));
     await waitFor(() => expect(api.updatePool).toHaveBeenCalledWith("pool-1", { revision: 5, subscriptions: ["b", "a"] }));
-    const dialog = await screen.findByRole("dialog");
-    await waitFor(() => expect(within(dialog).getByTestId("pool-editor").getAttribute("data-revision")).toBe("6"));
-    const order = within(dialog).getAllByRole("listitem").map((li) => li.textContent ?? "");
-    expect(order[0]).toContain("b");
-    expect(order[1]).toContain("a");
+    expect(within(section).getByRole("link", { name: /Accounts/ }).getAttribute("href")).toBe("/acme/runtimes?tab=accounts");
   });
 
   it("does not offer editing to a reader who cannot manage", async () => {

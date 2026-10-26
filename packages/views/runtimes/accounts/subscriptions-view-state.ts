@@ -1,5 +1,5 @@
 import { useCallback } from "react";
-import { useNavigation } from "../navigation";
+import { useNavigation } from "../../navigation";
 import type { LaneHorizon } from "./availability-lane";
 import { LANE_HORIZONS } from "./availability-lane";
 
@@ -14,8 +14,6 @@ export interface SubscriptionsView {
   query: string;
   /** Account whose card is open. */
   account: string;
-  /** Pool whose editor is open. */
-  pool: string;
   horizon: LaneHorizon;
 }
 
@@ -24,7 +22,7 @@ function pick<T extends string>(allowed: readonly T[], value: string | null, fal
 }
 
 /**
- * Filters, search, scale and the opened account or pool live in the address, so
+ * Filters, search, scale and the opened account live in the address, so
  * a link and a reload restore the same view. A filter change replaces the entry
  * (back does not step through filters); an empty or unknown value is no filter.
  */
@@ -37,14 +35,13 @@ export function useSubscriptionsView(): [SubscriptionsView, (patch: Partial<Reco
     family: pick(FAMILY_FILTERS, searchParams.get("family"), "all"),
     query: searchParams.get("q") ?? "",
     account: searchParams.get("account") ?? "",
-    pool: searchParams.get("pool") ?? "",
     horizon: LANE_HORIZONS.find((h) => h === range) ?? 48,
   };
   const set = useCallback(
     (patch: Partial<Record<keyof SubscriptionsView, string | null>>) => {
       const next = new URLSearchParams(searchParams);
       const keys: Record<keyof SubscriptionsView, string> = {
-        status: "status", family: "family", query: "q", account: "account", pool: "pool", horizon: "range",
+        status: "status", family: "family", query: "q", account: "account", horizon: "range",
       };
       for (const [name, value] of Object.entries(patch) as [keyof SubscriptionsView, string | null | undefined][]) {
         const key = keys[name];

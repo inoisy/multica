@@ -64,6 +64,8 @@ import { ActorAvatar } from "../../common/actor-avatar";
 import { AgentPresenceIndicator } from "./agent-presence-indicator";
 import { VisibilityBadge } from "./visibility-badge";
 import { AgentOverviewPane, type DetailTab } from "./agent-overview-pane";
+import { scrollToAgentModels } from "./agent-models-anchor";
+import { isAgentModelOwnedByProfile } from "@multica/core/model-profiles";
 import { ExpandableDescription } from "../../common/expandable-description";
 import { useT, useTimeAgo } from "../../i18n";
 
@@ -197,7 +199,13 @@ export function AgentDetailPage({ agentId }: AgentDetailPageProps) {
         );
       }
       void qc.invalidateQueries({ queryKey });
-      toast.error(e instanceof Error ? e.message : t(($) => $.detail.update_failed_toast));
+      if (isAgentModelOwnedByProfile(e)) {
+        toast.error(t(($) => $.detail.model_owned_by_profile_toast), {
+          action: { label: t(($) => $.inspector.model_open_models), onClick: scrollToAgentModels },
+        });
+      } else {
+        toast.error(e instanceof Error ? e.message : t(($) => $.detail.update_failed_toast));
+      }
       throw e;
     }
   };

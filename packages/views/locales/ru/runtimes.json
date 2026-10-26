@@ -35,7 +35,10 @@
       "other_machine_hint": "Выполните две команды на том компьютере",
       "cloud_services": "Облачные сервисы",
       "qoder_manage_hint": "Подключён · управление подключением",
-      "cloud_runtime_hint": "Создать облачный узел Multica"
+      "cloud_runtime_hint": "Создать облачный узел Multica",
+      "accounts": "Через аккаунты",
+      "accounts_environment": "Добавить среду через аккаунты",
+      "accounts_environment_hint": "Пул аккаунтов и выдача workspace. Аккаунты подключаются на вкладке «Аккаунты»"
     },
     "columns": {
       "name": "Название",
@@ -70,6 +73,10 @@
       "all": "Все",
       "online": "В сети",
       "offline": "Не в сети"
+    },
+    "tabs": {
+      "environments": "Среды",
+      "accounts": "Аккаунты"
     }
   },
   "mika_setup": {
@@ -709,5 +716,51 @@
   "running_few": "{{count}} выполняется",
   "running_many": "{{count}} выполняется",
   "queued_few": "{{count}} в очереди",
-  "queued_many": "{{count}} в очереди"
+  "queued_many": "{{count}} в очереди",
+  "accounts": {
+    "pool_no_environments": "Этот пул пока не использует ни одна среда",
+    "pool_environments": "Среды пула",
+    "open_environment": "Открыть среду «{{name}}»"
+  },
+  "facts": {
+    "title": "Использование и факты",
+    "kind": "Вид среды",
+    "kinds": {
+      "via_accounts": "Через аккаунты",
+      "own_login": "Со своим входом",
+      "builtin": "Встроенная"
+    },
+    "kind_hint": {
+      "via_accounts": "Штатный claude/codex под аккаунтом из пула; вход готовит демон.",
+      "own_login": "Вход выполнен на самой машине: аккаунт неизвестен, квота не учитывается.",
+      "builtin": "Встроенная команда машины; для модельных агентов не выбирается."
+    },
+    "selection": "Выбор",
+    "states": {
+      "active": "Используется за 24 ч",
+      "reserve": "В запасе",
+      "unused": "Не используется",
+      "closed": "Закрыта для выбора"
+    },
+    "machine": "Машина: {{status}}",
+    "runs_24h": "Запуски за 24 ч",
+    "runs": "Запусков: {{count}}",
+    "unknown_account_runs": "Без подтверждённого аккаунта: {{count}}",
+    "accounts_24h": "Аккаунты за 24 ч",
+    "own_login_accounts": "Свой вход: аккаунт неизвестен, квота не учитывается.",
+    "selected_in": "Где выбрана",
+    "personal_profile": "личный профиль",
+    "shared_profile": "общий профиль",
+    "rows": "строки: {{rows}}",
+    "fallback": "Запасной профиль для",
+    "based_on": "Основа личных профилей",
+    "hidden_profiles": "Профилей, которых вы не видите: {{count}}",
+    "serves": "Обслуживает агентов",
+    "hidden_agents": "Агентов, которых вы не видите: {{count}}",
+    "open_issues": "Открытых задач: {{count}}",
+    "removal": "Удаление",
+    "deletable": "Можно удалить: ссылок нет",
+    "not_deletable": "Нельзя удалить: есть агенты или открытые задачи",
+    "load_failed": "Не удалось загрузить"
+  }
 }

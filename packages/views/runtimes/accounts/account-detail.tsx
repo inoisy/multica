@@ -28,9 +28,11 @@ import {
   DropdownMenuTrigger,
 } from "@multica/ui/components/ui/dropdown-menu";
 import { Input } from "@multica/ui/components/ui/input";
-import { useT } from "../i18n";
-import { formatModelTime } from "../model-profiles/format-time";
+import { useT } from "../../i18n";
+import { formatModelTime } from "../../model-profiles/format-time";
 import { AgentLimitFields, limitDraftOf, parseLimitDraft, type AgentLimitDraft } from "./agent-limit-fields";
+import { ManualRuns } from "./manual-runs";
+import { PoolEnvironmentLinks } from "./pool-environments";
 import { SubscriptionLoginStatus } from "./subscription-login";
 import { UsageMeters } from "./usage-meters";
 
@@ -51,7 +53,7 @@ export function AccountDetail({
   wsId,
   canManage,
   windowName,
-  onOpenPool,
+  journal,
 }: {
   sub: Subscription;
   account: SubscriptionAccount;
@@ -59,7 +61,8 @@ export function AccountDetail({
   wsId: string;
   canManage: boolean;
   windowName: (window: string) => string;
-  onOpenPool: (poolId: string) => void;
+  /** Show the journal of manual runs: the Accounts tab of an instance admin only. */
+  journal: boolean;
 }) {
   const { t } = useT("agents");
   const updateSubscription = useUpdateSubscription();
@@ -203,19 +206,23 @@ export function AccountDetail({
 
       <div className="min-w-0 space-y-3 text-caption">
         <SubscriptionLoginStatus sub={sub} canManage={canManage} />
-        <p>
-          <span className="text-muted-foreground">{t(($) => $.subscriptions.in_pools)}</span>{" "}
-          {pools.length
-            ? pools.map(({ pool, position }, index) => (
-                <span key={pool.id}>
-                  {index ? ", " : ""}
-                  <Button variant="link" type="button" className="h-auto p-0 underline-offset-2 hover:underline" onClick={() => onOpenPool(pool.id)}>
+        <div className="space-y-1">
+          <span className="text-muted-foreground">{t(($) => $.subscriptions.in_pools)}</span>
+          {pools.length ? (
+            <ul className="space-y-1">
+              {pools.map(({ pool, position }) => (
+                <li key={pool.id} className="space-y-0.5">
+                  <span className="break-words font-medium">
                     {t(($) => $.subscriptions.spent_by_item, { name: pool.name, position })}
-                  </Button>
-                </span>
-              ))
-            : t(($) => $.subscriptions.no_pool)}
-        </p>
+                  </span>
+                  <PoolEnvironmentLinks pool={pool} />
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p>{t(($) => $.subscriptions.no_pool)}</p>
+          )}
+        </div>
         <p>
           <span className="text-muted-foreground">{t(($) => $.subscriptions.spent_by)}</span>{" "}
           {here.length ? here.map((user) => user.display_name).join(", ") : t(($) => $.subscriptions.spent_by_none)}
@@ -226,6 +233,7 @@ export function AccountDetail({
             </span>
           ) : null}
         </p>
+        {journal ? <ManualRuns subscriptionKey={sub.key} /> : null}
         {sub.credential_path ? (
           <p className="break-all text-muted-foreground">
             {t(($) => $.subscriptions.credential)} <code className="font-mono">{sub.credential_path}</code>

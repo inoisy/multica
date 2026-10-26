@@ -3,11 +3,8 @@
 import { accountLimit, windowBlocked, type SubscriptionAccount } from "@multica/core/subscriptions";
 import { Badge } from "@multica/ui/components/ui/badge";
 import { cn } from "@multica/ui/lib/utils";
-import { useT } from "../i18n";
-import { formatModelTime } from "../model-profiles/format-time";
-
-/** Figures older than this are marked with the time they were taken. */
-const OLD_USAGE_MS = 10 * 60_000;
+import { useT } from "../../i18n";
+import { formatModelTime } from "../../model-profiles/format-time";
 
 /** Window load: the fill is spent, the hatched end is what people keep, the tick is the agents' limit. */
 export function UsageBar({ used, limit, blocked, label }: { used: number; limit: number | undefined; blocked: boolean; label: string }) {
@@ -55,8 +52,8 @@ export function UsageMeters({
   const oldest = Math.min(...account.usage.map((w) => Date.parse(w.observed_at) || Date.now()));
   return (
     <div className="space-y-2">
-      {!compact && Date.now() - oldest > OLD_USAGE_MS ? (
-        <p className="text-caption text-muted-foreground">
+      {!compact ? (
+        <p className="text-caption text-muted-foreground" data-testid="usage-measured-at">
           {t(($) => $.subscriptions.usage_as_of, { time: formatModelTime(new Date(oldest).toISOString()) })}
         </p>
       ) : null}

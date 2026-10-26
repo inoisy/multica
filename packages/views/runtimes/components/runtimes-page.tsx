@@ -7,6 +7,7 @@ import {
   ChevronRight,
   Cloud,
   Download,
+  KeyRound,
   Laptop,
   Loader2,
   Monitor,
@@ -31,6 +32,7 @@ import {
 import { agentTaskSnapshotOptions } from "@multica/core/agents";
 import { chatSessionsOptions } from "@multica/core/chat/queries";
 import { runtimeProfileListOptions } from "@multica/core/runtimes";
+import { poolListOptions, subscriptionListOptions } from "@multica/core/subscriptions";
 import {
   runtimeListOptions,
   runtimeKeys,
@@ -73,6 +75,7 @@ import {
   type MikaRuntimeSelection,
 } from "./mika-runtime-choice";
 import { Skeleton } from "@multica/ui/components/ui/skeleton";
+import { Tabs, TabsList, TabsTrigger } from "@multica/ui/components/ui/tabs";
 import { CollectionPageHeader } from "../../layout/collection-page";
 import { PAGE_GUTTER, PAGE_RAIL, PageHeader } from "../../layout/page-header";
 import { cn } from "@multica/ui/lib/utils";
@@ -90,6 +93,7 @@ import { ConnectRemoteDialog } from "./connect-remote-dialog";
 import { CloudRuntimeDialog } from "./cloud-runtime-dialog";
 import { ProviderLogo } from "./provider-logo";
 import { RuntimeList, buildWorkloadIndex } from "./runtime-list";
+import { AccountsOverview, NewPoolDialog } from "../accounts";
 import { pendingRuntimeFromProfile } from "./pending-runtime";
 import { buildRuntimeMachines, type RuntimeMachine } from "./runtime-machines";
 import { HealthDot, HealthIcon, useHealthLabel } from "./shared";
@@ -110,6 +114,9 @@ export interface RuntimesPageProps {
 }
 
 type StatusFilter = "all" | "online" | "offline";
+
+const PAGE_TABS = ["environments", "accounts"] as const;
+type PageTab = (typeof PAGE_TABS)[number];
 const STATUS_FILTERS: StatusFilter[] = ["all", "online", "offline"];
 
 const COMING_SOON_SERVICES = [
@@ -165,6 +172,19 @@ export function RuntimesPage({
   const [showCloudRuntimeDialog, setShowCloudRuntimeDialog] = useState(false);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [newEnvironmentOpen, setNewEnvironmentOpen] = useState(false);
+  // The tab is part of the address, so a link and a reload keep the same view.
+  const tab: PageTab = navigation.searchParams.get("tab") === "accounts" ? "accounts" : "environments";
+  const setTab = (next: PageTab) => {
+    const params = new URLSearchParams(navigation.searchParams);
+    if (next === "environments") params.delete("tab");
+    else params.set("tab", next);
+    const query = params.toString();
+    navigation.replace(query ? `${navigation.pathname}?${query}` : navigation.pathname);
+  };
+  const pools = useQuery(poolListOptions());
+  const subscriptions = useQuery(subscriptionListOptions());
+  const canCreateEnvironment = pools.data?.can_manage === true;
 
   const { data: runtimes = [], isLoading: runtimesLoading } = useQuery(
     runtimeListOptions(wsId),
@@ -325,12 +345,32 @@ export function RuntimesPage({
             onAddMachine={() => setShowConnectDialog(true)}
             onQoder={openQoder}
             onCloudRuntime={() => setShowCloudRuntimeDialog(true)}
+            onAccountsEnvironment={canCreateEnvironment ? () => setNewEnvironmentOpen(true) : null}
           />
         }
       />
 
+      <Tabs value={tab} onValueChange={(value) => setTab(value === "accounts" ? "accounts" : "environments")}>
+        <div className={cn("h-12 shrink-0 overflow-x-auto border-b [-webkit-overflow-scrolling:touch]", PAGE_GUTTER)}>
+          <TabsList variant="line" className="gap-0 p-0 group-data-horizontal/tabs:h-full">
+            {PAGE_TABS.map((value) => (
+              <TabsTrigger
+                key={value}
+                value={value}
+                className="h-full rounded-none px-2.5 text-label group-data-horizontal/tabs:after:bottom-0"
+              >
+                {t(($) => $.page.tabs[value])}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </div>
+      </Tabs>
+
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className={cn(PAGE_RAIL, PAGE_GUTTER, "flex flex-col gap-3 py-4 sm:py-6")}>
+          {tab === "accounts" && <AccountsOverview mode="manage" />}
+          {tab === "environments" && (
+          <>
           <RuntimesToolbar
             query={query}
             onQueryChange={setQuery}
@@ -458,11 +498,21 @@ export function RuntimesPage({
               hasMachines={machines.length > 0}
             />
           )}
+          </>
+          )}
         </div>
       </div>
 
       {qoderDialogOpen && (
         <RemoteRuntimeDialog onClose={() => setQoderDialogOpen(false)} />
+      )}
+      {canCreateEnvironment && (
+        <NewPoolDialog
+          open={newEnvironmentOpen}
+          onOpenChange={setNewEnvironmentOpen}
+          wsId={wsId}
+          subscriptions={subscriptions.data?.subscriptions ?? []}
+        />
       )}
       {showConnectDialog && (
         <ConnectRemoteDialog onClose={() => setShowConnectDialog(false)} />
@@ -482,6 +532,7 @@ function AddRuntimeMenu({
   onAddMachine,
   onQoder,
   onCloudRuntime,
+  onAccountsEnvironment,
 }: {
   isDesktop: boolean;
   localMachineName: string | null;
@@ -490,6 +541,8 @@ function AddRuntimeMenu({
   onAddMachine: () => void;
   onQoder: () => void;
   onCloudRuntime: () => void;
+  /** Null for a reader who is not an instance admin: they cannot create an environment. */
+  onAccountsEnvironment: (() => void) | null;
 }) {
   const { t } = useT("runtimes");
   return (
@@ -535,6 +588,20 @@ function AddRuntimeMenu({
             onClick={onAddMachine}
           />
         </DropdownMenuGroup>
+        {onAccountsEnvironment ? (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuGroup>
+              <DropdownMenuLabel>{t(($) => $.page.add_menu.accounts)}</DropdownMenuLabel>
+              <AddMenuItem
+                icon={<KeyRound className="size-4 text-muted-foreground" />}
+                title={t(($) => $.page.add_menu.accounts_environment)}
+                description={t(($) => $.page.add_menu.accounts_environment_hint)}
+                onClick={onAccountsEnvironment}
+              />
+            </DropdownMenuGroup>
+          </>
+        ) : null}
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
           <DropdownMenuLabel>{t(($) => $.page.add_menu.cloud_services)}</DropdownMenuLabel>
