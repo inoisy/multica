@@ -128,3 +128,21 @@ git diff --check
 Tests cover nested chi scopes and comments, SET versus WHERE columns, migration history versus SQL mutation
 targets, stale/dirty source refusal, and factory-local Cobra declarations.
 Product code is unchanged; application test suites are not needed for this tool.
+
+## Readable page of the product base
+
+`site.py` renders `docs/stt/product/*.md` into one static `index.html` for
+people: section menu, light/dark theme, 375 px layout, Mermaid, and a
+«Документ / Markdown» switch. The Markdown files remain the source of truth;
+the page is a derived artifact and is not committed (`.product-site/` is ignored).
+
+```sh
+python3 tools/product/site.py build          # writes .product-site/index.html and checks links
+python3 tools/product/site.py check          # re-checks an existing build
+python3 -m unittest tools/product/test_site.py
+```
+
+Publish the directory as a stand artifact under the stable name
+`art-multica-product-e7d8b8` so the link stays the same
+(https://art-multica-product-e7d8b8.stand.yakutov.com). Rendering uses
+`marked` and `mermaid` from jsDelivr in the reader's browser.
