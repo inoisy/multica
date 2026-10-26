@@ -1,7 +1,7 @@
 -- Gives the schema back without its data: the tables and columns are empty or
 -- hold their defaults. Their contents (an agent's own rows, reserves, the 611
 -- and 613 backups, the share keys of runtime copies, the cleared groups) come
--- back only from a database backup taken before 616. Until it is restored,
+-- back only from a database backup taken before 617. Until it is restored,
 -- 611 down and 613 down find no backup and change nothing, and 610 down gives
 -- the pools new share keys instead of the original ones.
 CREATE TABLE IF NOT EXISTS agent_model_option (

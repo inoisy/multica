@@ -41,7 +41,7 @@ review the new SHA before switching. Subsequent releases retain the pin file.
   the first live run: both bind `127.0.0.1:8101`. The operator restarts the old unit if first activation fails.
 
 Why migrations must be additive: rollback is "start the previous images". That only works when the old
-code runs on the new schema. Removals (like STT-433 migration 615) ship separately and are applied by an
+code runs on the new schema. Removals (like STT-433 migration 617) ship separately and are applied by an
 operator with `sudo multica-autodeploy run --allow-destructive <sha>`.
 
 ## Install (root, once)
