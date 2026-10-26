@@ -242,7 +242,7 @@ func (h *Handler) SubmitIssueConveyorResult(w http.ResponseWriter, r *http.Reque
 	})
 	// Every agent of the route is suppressed on the comment itself; anyone the
 	// report mentions beyond the route is reached as for any other comment.
-	h.triggerTasksForComment(r.Context(), issue, comment, nil, "agent", actorID, h.invokeOriginatorFromRequest(r, "agent", actorID), comment.SuppressedAgentIds, nil)
+	h.triggerTasksForComment(r.Context(), issue, comment, nil, "agent", actorID, h.invokeOriginatorFromRequest(r, "agent", actorID), comment.SuppressedAgentIds, nil, false)
 	writeJSON(w, http.StatusCreated, resp)
 }
 
