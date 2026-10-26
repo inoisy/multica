@@ -16,7 +16,7 @@
 | [STT-433](https://multica.yakutov.com/stt/issues/STT-433), `01a17727-e7d6-7897-a6e3-cd232ced34d1` | Актуальное целевое решение и план 613–615; комментарий `01a17777-90af-7766-b714-1c1e1cb7459f` — окончательное размещение управления |
 | [STT-435](https://multica.yakutov.com/stt/issues/STT-435), `01a1776e-23d4-7978-9577-c6dce775eb2e` | Очерёдность работы с апстримом и условия публикации |
 | [model-selection-and-accounts.md](../../engineering/model-selection-and-accounts.md), [server API](../../engineering/model-accounts-server-api.md) | Словарь и контракт схемы 612 |
-| [PR форка #53](https://github.com/inoisy/multica/pull/53), head `4e62e5e2d6ec373296fe5d924fde9bf2a90c6939` | Прочитан `docs/engineering/model-tables.md` из ветки `t-12345-model-tables`; PR OPEN, в базовой ветке файла ещё нет. Не считаем описанную проекцию полей уже реализованной без проверки кода |
+| [PR форка #53](https://github.com/inoisy/multica/pull/53), head `4e62e5e2d6ec373296fe5d924fde9bf2a90c6939` | При сборке STT-436 читался из ветки. Перепроверка STT-441: MERGED 26.10 09:58 UTC, `docs/engineering/model-tables.md` уже в main. Наличие документа не делает целевую проекцию полей реализованной |
 | [docs/stt](..) | История ТЗ моделей, импорта и конвейера; более поздние STT-420/429/433 заменяют соответствующие старые положения |
 | [Архив STT-423](https://multica.yakutov.com/stt/issues/STT-423), STT-424, [v5](https://art-multica-kiss-v5-0da4e4.stand.yakutov.com) | Визуальные источники, перечисленные в [ui.md](ui.md) |
 | [RFC #6650](https://github.com/multica-ai/multica/issues/6650), [#8931](https://github.com/multica-ai/multica/pull/8931), [#8579](https://github.com/multica-ai/multica/pull/8579), [#7413](https://github.com/multica-ai/multica/pull/7413) | Направление и актуальные статусы апстрима, проверены GitHub API |
@@ -33,3 +33,19 @@
 истории и остаточных зависимостей, не разрешение возрождать снятые механизмы.
 Основание: [STT-429](https://multica.yakutov.com/stt/issues/STT-429),
 [STT-433](https://multica.yakutov.com/stt/issues/STT-433).
+
+## Дополнение STT-441
+
+Роадмап строился по `main@8130ec095610cbb2dc218dd9198e29de36e35047`,
+постраничному обходу 431 задачи (127 открытых), корням обсуждений выбранных
+продуктовых задач и раскрытым значимым тредам. Полный охват открытых записей —
+[inventory](roadmap-inventory.md); воспроизводимые запросы, состояния 45
+источников апстрима и разбор всех 15 сигналов Сторожа —
+[журнал проверки](roadmap-upstream-check.md). Статический индекс STT-436 для
+этого вывода не использовался и не пересобирался.
+
+Доказательства расходятся по времени: пример — открытый в поиске #9553 и
+последующее подтверждение merge в 10:20 UTC. Роадмап использует более поздний
+факт. PR обвязки #29 и CLI форка #45 уже слиты, но исполнение операторских
+шагов и версия установленного бинаря этим не подтверждены. Новые правила
+очереди и приоритеты — рекомендации для Евгения, а не принятые решения.
