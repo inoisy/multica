@@ -176,9 +176,9 @@ export function RuntimeDetail({
         }
         actions={
           !canEditRuntime ? (
-            <span className="inline-flex items-center gap-1 text-caption text-muted-foreground">
-              <Lock className="h-3 w-3" />
-              {t(($) => $.detail.read_only)}
+            <span className="inline-flex items-center gap-1 text-caption text-muted-foreground" title={t(($) => $.detail.read_only)}>
+              <Lock className="h-3 w-3" aria-hidden="true" />
+              <span className="sr-only sm:not-sr-only">{t(($) => $.detail.read_only)}</span>
             </span>
           ) : null
         }
