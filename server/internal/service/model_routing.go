@@ -41,41 +41,28 @@ const (
 // errClaimNotThisRuntime rolls back a claim the model list sends elsewhere.
 var errClaimNotThisRuntime = errors.New("model choice: run belongs to another runtime now")
 
+// RunChoice is the choice a queued run would get if it were claimed now.
+func RunChoice(ctx context.Context, q *db.Queries, task db.AgentTaskQueue, now time.Time) (ModelChoice, error) {
+	choice, _, err := choiceForTask(ctx, q, task, now)
+	return choice, err
+}
+
 // choiceForTask is the choice for one run, read with q.
 func choiceForTask(ctx context.Context, q *db.Queries, task db.AgentTaskQueue, now time.Time) (ModelChoice, db.Agent, error) {
-	choice, agent, _, err := runChoice(ctx, q, task, now)
-	return choice, agent, err
-}
-
-// RouteRunChoice is the choice a queued run of a route step would get if it
-// were claimed now, with the step it serves (nil outside a route). The
-// agent's own preview leaves out the step's profile and the family a cross
-// step rules out; this is what the run actually waits for.
-func RouteRunChoice(ctx context.Context, q *db.Queries, task db.AgentTaskQueue, now time.Time) (ModelChoice, *ConveyorNode, error) {
-	choice, _, node, err := runChoice(ctx, q, task, now)
-	return choice, node, err
-}
-
-func runChoice(ctx context.Context, q *db.Queries, task db.AgentTaskQueue, now time.Time) (ModelChoice, db.Agent, *ConveyorNode, error) {
 	agent, err := q.GetAgent(ctx, task.AgentID)
 	if err != nil {
-		return ModelChoice{}, agent, nil, err
+		return ModelChoice{}, agent, err
 	}
 	var issue *db.Issue
 	if task.IssueID.Valid {
 		if i, err := q.GetIssue(ctx, task.IssueID); err == nil {
 			issue = &i
 		} else if !errors.Is(err, pgx.ErrNoRows) {
-			return ModelChoice{}, agent, nil, err
+			return ModelChoice{}, agent, err
 		}
 	}
-	// A route step may name its own profile and a model family to avoid.
-	routeModel, err := (&IssueConveyorService{}).RunModel(ctx, q, task)
-	if err != nil {
-		return ModelChoice{}, agent, nil, err
-	}
-	choice, err := previewChoice(ctx, q, agent, issue, routeModel, now)
-	return choice, agent, routeModel.Node, err
+	choice, err := PreviewChoice(ctx, q, agent, issue, now)
+	return choice, agent, err
 }
 
 // isModelRouted reports whether the run's model comes from a list.

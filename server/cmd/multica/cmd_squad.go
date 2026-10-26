@@ -204,15 +204,17 @@ func runSquadUpdate(cmd *cobra.Command, args []string) error {
 		body["avatar_url"] = v
 	}
 	if cmd.Flags().Changed("route") {
+		// Squad routes are gone; the flag only clears a template left from
+		// before, which the server still stores and accepts as empty.
 		v, _ := cmd.Flags().GetString("route")
-		if v == "off" {
-			v = ""
+		if v != "off" && v != "" {
+			return fmt.Errorf("squad routes were removed; only --route off clears a leftover template")
 		}
-		body["route_template"] = v
+		body["route_template"] = ""
 	}
 
 	if len(body) == 0 {
-		return fmt.Errorf("no fields to update; use flags like --name, --description, --instructions, --leader, --route")
+		return fmt.Errorf("no fields to update; use flags like --name, --description, --instructions, --leader")
 	}
 
 	var result map[string]any
@@ -530,7 +532,7 @@ func init() {
 	squadUpdateCmd.Flags().String("instructions", "", "New instructions")
 	squadUpdateCmd.Flags().String("leader", "", "New leader agent (name or ID)")
 	squadUpdateCmd.Flags().String("avatar-url", "", "New avatar URL")
-	squadUpdateCmd.Flags().String("route", "", "Default route for issues assigned to the squad, as dev:Agent,qa:Agent,review:Agent,close:Agent (\"off\" clears it)")
+	squadUpdateCmd.Flags().String("route", "", "Deprecated: squad routes were removed; \"off\" clears a leftover template")
 	squadUpdateCmd.Flags().String("output", "json", "Output format: table or json")
 
 	// delete

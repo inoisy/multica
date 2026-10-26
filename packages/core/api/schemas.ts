@@ -1418,13 +1418,6 @@ export const CommentSubIssueTaskResponseSchema = z.object({
   task_id: z.string().min(1),
 }).loose();
 
-export const IssueRouteSchema = z.object({
-  step: z.string().default(""),
-  status: z.string().default(""),
-  round: z.number().default(0),
-  waiting_reason: z.string().optional(),
-}).loose();
-
 export const IssueSchema = z.object({
   id: z.string(),
   workspace_id: z.string(),
@@ -1469,9 +1462,6 @@ export const IssueSchema = z.object({
   // Older backends predate `stage`; default to null so a missing field parses
   // cleanly into the non-optional Issue.stage (number | null).
   stage: z.number().nullable().default(null),
-  // Where a routed sub-issue stands on its server route; only the sub-issue
-  // list sends it, and an unreadable value is dropped rather than failing the issue.
-  route: IssueRouteSchema.nullable().optional().catch(undefined),
   start_date: z.string().nullable(),
   due_date: z.string().nullable(),
   metadata: IssueMetadataSchema,

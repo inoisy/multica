@@ -2,10 +2,8 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"strings"
 
@@ -41,8 +39,9 @@ func acceptWorkflowTarget(o acceptOutcome, view workflowAcceptView) string {
 }
 
 // runWorkflowAccept is the acceptance step of a project Workflow: it merges
-// the commit the previous step pinned with its status change, reports the
-// checks as a comment and hands the issue on with an ordinary status change.
+// the commit the previous step pinned with its status change (or, for a
+// repository with CI, confirms the platform merged it), reports the checks as
+// a comment and hands the issue on with an ordinary status change.
 func runWorkflowAccept(ctx context.Context, client *cli.APIClient, base, identifier string, log io.Writer) error {
 	var view workflowAcceptView
 	if err := getJSON(ctx, client, base+"/workflow-artifact", &view); err != nil {
@@ -70,7 +69,7 @@ func runWorkflowAccept(ctx context.Context, client *cli.APIClient, base, identif
 	}
 	fmt.Fprintf(log, "accept: %s — %s\n", outcome.Outcome, outcome.Reason)
 
-	report, _ := acceptResult(outcome, repo, commit)["report"].(string)
+	report := acceptReport(outcome)
 	apiCtx, cancel := cli.APIContext(ctx)
 	defer cancel()
 	var out any
@@ -88,12 +87,29 @@ func runWorkflowAccept(ctx context.Context, client *cli.APIClient, base, identif
 	return nil
 }
 
-// noLiveRoute reports whether GET /conveyor said the issue has no route the
-// accept step could belong to: then acceptance follows the project Workflow.
-func noLiveRoute(err error, status string) bool {
-	var httpErr *cli.HTTPError
-	if errors.As(err, &httpErr) {
-		return httpErr.StatusCode == http.StatusNotFound
+// acceptReport is the comment the acceptance step leaves: the outcome and the
+// tail of the checks, so a person can act on it.
+func acceptReport(o acceptOutcome) string {
+	var report strings.Builder
+	switch o.Outcome {
+	case "pass":
+		if o.Skipped {
+			fmt.Fprintf(&report, "Приёмки нет: %s. Слияния нет.", o.Reason)
+		} else {
+			fmt.Fprintf(&report, "Приёмка пройдена: %s.", o.Reason)
+		}
+	case "changes_requested":
+		fmt.Fprintf(&report, "Приёмка не пройдена: %s. Слияния нет.", o.Reason)
+	case "blocked":
+		fmt.Fprintf(&report, "Приёмка не дождалась: %s. Слияния нет.", o.Reason)
+	default:
+		fmt.Fprintf(&report, "Приёмка не смогла проверить работу: %s. Слияния нет.", o.Reason)
 	}
-	return err == nil && (status == "disabled" || status == "completed")
+	if tail := strings.TrimSpace(o.Tail); tail != "" {
+		if len(tail) > 20000 {
+			tail = "…" + tail[len(tail)-20000:]
+		}
+		fmt.Fprintf(&report, "\n\n```\n%s\n```", tail)
+	}
+	return report.String()
 }

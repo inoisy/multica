@@ -314,3 +314,14 @@ func TestWorkflowCLIEmptyStepsAndNewStatus(t *testing.T) {
 		})
 	}
 }
+
+func TestWorkflowAcceptAndItsDeprecatedConveyorAlias(t *testing.T) {
+	accept, _, err := newWorkflowCommand().Find([]string{"accept"})
+	if err != nil || accept.Name() != "accept" || accept.Deprecated != "" {
+		t.Fatalf("workflow accept: %v %+v", err, accept)
+	}
+	alias, _, err := newIssueConveyorCommand().Find([]string{"accept"})
+	if err != nil || alias.Name() != "accept" || alias.Deprecated == "" {
+		t.Fatalf("issue conveyor accept must stay as a deprecated alias: %v", err)
+	}
+}

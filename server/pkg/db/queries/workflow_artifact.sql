@@ -10,15 +10,3 @@ SELECT * FROM issue_workflow_artifact WHERE issue_id = $1 AND workspace_id = $2;
 
 -- name: DeleteIssueWorkflowArtifact :exec
 DELETE FROM issue_workflow_artifact WHERE issue_id = $1;
-
--- name: ProjectHasLegacyRoutes :one
-SELECT EXISTS (
-    SELECT 1 FROM issue_conveyor c JOIN issue i ON i.id = c.issue_id
-    WHERE i.project_id = $1 AND i.workspace_id = $2 AND c.status NOT IN ('disabled', 'completed')
-);
-
--- name: WorkspaceHasLegacyRoutes :one
-SELECT EXISTS (
-    SELECT 1 FROM issue_conveyor c JOIN issue i ON i.id = c.issue_id
-    WHERE i.workspace_id = $1 AND c.status NOT IN ('disabled', 'completed')
-);
