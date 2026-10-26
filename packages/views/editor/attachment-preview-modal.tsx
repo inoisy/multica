@@ -64,6 +64,7 @@ import {
   PreviewUnsupportedError,
 } from "@multica/core/api";
 import {
+  ArrowLeft,
   ChevronLeft,
   ChevronRight,
   Code,
@@ -104,6 +105,7 @@ import { useT } from "../i18n";
 import { useNavigation } from "../navigation";
 import { openExternal } from "../platform";
 import { isDesktopShell } from "../platform/local-directory";
+import { useIsStandalonePwa } from "../platform/standalone";
 import { useImmersiveMode } from "../platform/use-immersive-mode";
 import { ReadonlyContent } from "./readonly-content";
 import {
@@ -466,6 +468,9 @@ export function AttachmentPreviewModal({
   // workspace route instead of throwing, so the new-tab button just hides.
   const slug = useWorkspaceSlug();
   const navigation = useNavigation();
+  // An installed PWA has no tab strip: a second window is a dead end there, so
+  // the viewer overlay is the only place a file opens.
+  const standalonePwa = useIsStandalonePwa();
   // The html kind's current address, for "Open in new tab". Tagged with its
   // file so one document's address never follows the reader to the next.
   const htmlAddressRef = useRef<{ attachmentId: string; address: string } | null>(
@@ -546,7 +551,8 @@ export function AttachmentPreviewModal({
   // Open-in-new-tab: the full-page route (/attachments/{id}/preview) shows
   // every previewable kind, but loads the file by id — a URL-only source has
   // none, and a file the viewer cannot show gains nothing from a tab.
-  const canOpenInNewTab = kind !== null && !!slug && !!state.attachmentId;
+  const canOpenInNewTab =
+    kind !== null && !!slug && !!state.attachmentId && !standalonePwa;
   const handleOpenInNewTab = () => {
     if (!slug || !state.attachmentId) return;
     const address =
@@ -712,6 +718,7 @@ function PreviewPanel({
   source,
   state,
   onClose,
+  onBack,
   onDownload,
   onOpenInNewTab,
   sequence,
@@ -730,6 +737,8 @@ function PreviewPanel({
   source: PreviewSource;
   state: PreviewState;
   onClose?: () => void;
+  /** The page surface's way out; shown where the host gives no browser back. */
+  onBack?: () => void;
   onDownload: () => void;
   onOpenInNewTab?: () => void;
   sequence?: PreviewSequence;
@@ -889,6 +898,11 @@ function PreviewPanel({
         style={surface === "viewer" ? DRAG : undefined}
       >
         <div className="flex min-w-0 items-center gap-2.5">
+          {onBack && (
+            <ChromeButton label={t(($) => $.attachment.back)} onClick={onBack}>
+              <ArrowLeft className="size-4" />
+            </ChromeButton>
+          )}
           <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-secondary text-muted-foreground">
             <KindIcon className="size-4" />
           </span>
@@ -1663,9 +1677,12 @@ export function AttachmentPreviewStandalone({
   renderHtmlFrame,
   initialHtmlAddress,
   onHtmlAddressChange,
+  onBack,
 }: {
   attachment: Attachment;
   renderHtmlFrame?: HtmlFrameRenderer;
+  /** Leaves the page. Set only where the host has no browser back of its own. */
+  onBack?: () => void;
   /** Query and fragment an HTML file opens at. */
   initialHtmlAddress?: string;
   onHtmlAddressChange?: (address: string) => void;
@@ -1688,6 +1705,7 @@ export function AttachmentPreviewStandalone({
         kind={state.kind}
         source={source}
         state={state}
+        onBack={onBack}
         onDownload={() => download(attachment.id)}
         reduceMotion
         renderHtmlFrame={renderHtmlFrame}
