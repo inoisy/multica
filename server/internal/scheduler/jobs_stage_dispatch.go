@@ -12,8 +12,7 @@ type StageDispatcher interface {
 }
 
 // StageDispatchJob catches what the pass right after a sub-issue change did
-// not: a failed pass, and changes that record no sub-issue event, such as a
-// route that merged through its accept step.
+// not: a failed pass, and changes that record no sub-issue event.
 func StageDispatchJob(dispatcher StageDispatcher) JobSpec {
 	return JobSpec{
 		Name: "issue_stage_dispatch", Cadence: time.Minute, CatchUpMode: CatchUpLatestOnly, CatchUpWindow: time.Hour,

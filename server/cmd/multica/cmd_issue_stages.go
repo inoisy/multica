@@ -17,7 +17,7 @@ func init() {
 		Use:   "stages <issue-id>",
 		Short: "Show or set the squad the server assigns this epic's stages to",
 		Long: "With --squad the server assigns the unassigned sub-issues of the first open stage to the squad as soon as\n" +
-			"every earlier stage is closed (a sub-issue merged by the route's accept step counts as closed). Sub-issues in\n" +
+			"every earlier stage is closed. Sub-issues in\n" +
 			"the \"waiting\" status wait for the customer: they are not assigned and do not hold later stages. --off stops it.",
 		Args: exactArgs(1),
 		RunE: runIssueStages,
