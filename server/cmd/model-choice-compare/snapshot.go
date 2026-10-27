@@ -202,9 +202,8 @@ func collect(ctx context.Context, tx pgx.Tx, ws pgtype.UUID, now time.Time) (sna
 		})
 	}
 
-	// Workflow steps that hand an issue to an agent, a squad's leader or the
-	// workspace's acceptance carrier: the agent's answer on an issue entering
-	// the step.
+	// Workflow steps that hand an issue to an agent or a squad's leader: the
+	// agent's answer on an issue entering the step.
 	workflows, err := c.q.ListIssueWorkflows(ctx, ws)
 	if err != nil {
 		return snapshot{}, err
