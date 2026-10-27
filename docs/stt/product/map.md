@@ -64,6 +64,12 @@ workspace; `runtime_profile` — настройка CLI workspace; `agent_runtim
 
 ## Граница с прежним конвейером
 
+**Цель с 27.10.** По решению Евгения [STT-429](https://multica.yakutov.com/stt/issues/STT-429)
+удаляет accept целиком: handler/provider, команды и оба режима. Обычный ревьюер
+завершает проверки, слияние и применимую доставку для CI- и локальных репо.
+[Инвентаризация и условия перехода](reviews/2026-10-27-remove-accept.md).
+Кодовые ссылки ниже описывают ещё существующую реализацию до этого удаления.
+
 Уточнение 26.10 по `main@82448ded6`: старый маршрут удалён в PR #77,
 приёмка Workflow и stage-dispatch сохранены. Основная команда —
 `multica workflow accept`, прежнее имя `issue conveyor accept` оставлено
