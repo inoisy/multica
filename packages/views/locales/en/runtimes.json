@@ -45,6 +45,7 @@
       "harness": "Harness",
       "agents": "Agents",
       "workload": "Workload",
+      "runs_24h": "Runs, 24 h",
       "status": "Status"
     },
     "groups": {
@@ -64,6 +65,8 @@
       "add_machine_hint": "Run two commands on that machine so agents can use the CLIs installed there",
       "view_commands": "View commands",
       "owner_you": "You",
+      "runs_24h": "Runs in 24 h: {{count}}",
+      "runs_unavailable": "Run counts unavailable",
       "connect": "Connect",
       "not_connected": "Not connected",
       "provided_by": "By {{vendor}}",
