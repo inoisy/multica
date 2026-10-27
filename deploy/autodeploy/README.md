@@ -25,7 +25,8 @@ With `"mcp_service": "multica-tasks-mcp"` in `config.json` the release also carr
 pinned in the released commit itself, `deploy/autodeploy/mcp-image`: one line
 `ghcr.io/inoisy/multica-tasks-mcp:<40-hex sha>` or `@sha256:<digest>`; floating tags abort the run before
 anything is touched. With MCP enabled, a missing pin also aborts before any changes.
-A pin-only commit is under `deploy/**`, ignored by the STT push trigger. After merging that pin PR,
+A pin-only commit is under `deploy/**`, ignored by the STT push trigger. The release picks green CI from push runs
+and green STT from push or `workflow_dispatch` runs on that sha (`dispatch_workflows`, default `["STT"]`). After merging that pin PR,
 run the existing image workflow (`gh workflow run stt.yml --repo inoisy/multica --ref main`), verify its `headSha`
 equals the accepted pin release SHA, and require green CI and STT before enabling MCP. If main moved,
 review the new SHA before switching. Subsequent releases retain the pin file.
