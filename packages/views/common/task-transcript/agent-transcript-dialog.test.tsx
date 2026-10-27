@@ -927,8 +927,8 @@ describe("AgentTranscriptDialog — model and account of the run", () => {
     chosen: null, runtime_name: "claude", provider: "claude", exhausted_profiles: [], wait_until: null, wait_reason_code: null,
     wait_until_estimated: false, profile_personal: false,
     rows: [
-      { position: 1, runtime_id: "rt-1", runtime_name: "codex", provider: "codex", model: "sol", thinking_level: "high", custom_args: null, state: "limited", until: "2026-06-08T09:00:00Z", reason_code: "agent_cap", until_estimated: false, chosen: false },
-      { position: 2, runtime_id: "rt-2", runtime_name: "claude", provider: "claude", model: "opus", thinking_level: "", custom_args: null, state: "available", until: null, reason_code: null, until_estimated: false, chosen: true },
+      { position: 1, runtime_id: "rt-1", runtime_name: "codex", provider: "codex", model: "sol", thinking_level: "high", custom_args: null, state: "limited", until: "2026-06-08T09:00:00Z", reason_code: "agent_cap", until_estimated: false, chosen: false, effective_model: "sol", model_at_run: false },
+      { position: 2, runtime_id: "rt-2", runtime_name: "claude", provider: "claude", model: "opus", thinking_level: "", custom_args: null, state: "available", until: null, reason_code: null, until_estimated: false, chosen: true, effective_model: "opus", model_at_run: false },
     ],
   };
   const fact = { subscription_id: "s1", subscription_key: "claude-3", account_group: "g", pool_id: "pool1", pool_revision: 12, daemon_id: "d1", confirmed_at: "2026-06-08T08:00:00Z" };

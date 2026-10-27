@@ -11,6 +11,37 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const closeSubscriptionManualRun = `-- name: CloseSubscriptionManualRun :one
+UPDATE subscription_manual_run
+SET finished_at = now(), exit_code = $1
+WHERE id = $2 AND subscription_id = $3 AND finished_at IS NULL
+RETURNING id, subscription_id, user_id, daemon_id, command, started_at, finished_at, exit_code, agent_cap_exceeded
+`
+
+type CloseSubscriptionManualRunParams struct {
+	ExitCode       pgtype.Int4 `json:"exit_code"`
+	ID             pgtype.UUID `json:"id"`
+	SubscriptionID pgtype.UUID `json:"subscription_id"`
+}
+
+// Closes a record once; a record that is already closed is left as it is.
+func (q *Queries) CloseSubscriptionManualRun(ctx context.Context, arg CloseSubscriptionManualRunParams) (SubscriptionManualRun, error) {
+	row := q.db.QueryRow(ctx, closeSubscriptionManualRun, arg.ExitCode, arg.ID, arg.SubscriptionID)
+	var i SubscriptionManualRun
+	err := row.Scan(
+		&i.ID,
+		&i.SubscriptionID,
+		&i.UserID,
+		&i.DaemonID,
+		&i.Command,
+		&i.StartedAt,
+		&i.FinishedAt,
+		&i.ExitCode,
+		&i.AgentCapExceeded,
+	)
+	return i, err
+}
+
 const createSharedRuntimeProfile = `-- name: CreateSharedRuntimeProfile :one
 INSERT INTO runtime_profile (
     workspace_id, display_name, protocol_family, command_name, description,
@@ -141,6 +172,43 @@ func (q *Queries) CreateSubscription(ctx context.Context, arg CreateSubscription
 	return i, err
 }
 
+const createSubscriptionManualRun = `-- name: CreateSubscriptionManualRun :one
+INSERT INTO subscription_manual_run (subscription_id, user_id, daemon_id, command, agent_cap_exceeded)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, subscription_id, user_id, daemon_id, command, started_at, finished_at, exit_code, agent_cap_exceeded
+`
+
+type CreateSubscriptionManualRunParams struct {
+	SubscriptionID   pgtype.UUID `json:"subscription_id"`
+	UserID           pgtype.UUID `json:"user_id"`
+	DaemonID         string      `json:"daemon_id"`
+	Command          string      `json:"command"`
+	AgentCapExceeded bool        `json:"agent_cap_exceeded"`
+}
+
+func (q *Queries) CreateSubscriptionManualRun(ctx context.Context, arg CreateSubscriptionManualRunParams) (SubscriptionManualRun, error) {
+	row := q.db.QueryRow(ctx, createSubscriptionManualRun,
+		arg.SubscriptionID,
+		arg.UserID,
+		arg.DaemonID,
+		arg.Command,
+		arg.AgentCapExceeded,
+	)
+	var i SubscriptionManualRun
+	err := row.Scan(
+		&i.ID,
+		&i.SubscriptionID,
+		&i.UserID,
+		&i.DaemonID,
+		&i.Command,
+		&i.StartedAt,
+		&i.FinishedAt,
+		&i.ExitCode,
+		&i.AgentCapExceeded,
+	)
+	return i, err
+}
+
 const createSubscriptionUsage = `-- name: CreateSubscriptionUsage :one
 INSERT INTO subscription_usage (
     subscription_id, window_key, used_percent, resets_at, limit_reached, source, observed_at
@@ -182,6 +250,29 @@ func (q *Queries) CreateSubscriptionUsage(ctx context.Context, arg CreateSubscri
 	return i, err
 }
 
+const deleteExpiredSubscriptionManualRuns = `-- name: DeleteExpiredSubscriptionManualRuns :execrows
+DELETE FROM subscription_manual_run
+WHERE id IN (
+    SELECT id FROM subscription_manual_run
+    WHERE started_at < $1::timestamptz
+    ORDER BY started_at
+    LIMIT $2
+)
+`
+
+type DeleteExpiredSubscriptionManualRunsParams struct {
+	Before    pgtype.Timestamptz `json:"before"`
+	BatchSize int32              `json:"batch_size"`
+}
+
+func (q *Queries) DeleteExpiredSubscriptionManualRuns(ctx context.Context, arg DeleteExpiredSubscriptionManualRunsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteExpiredSubscriptionManualRuns, arg.Before, arg.BatchSize)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteSubscription = `-- name: DeleteSubscription :exec
 DELETE FROM subscription
 WHERE id = $1
@@ -199,6 +290,16 @@ WHERE subscription_id = $1
 
 func (q *Queries) DeleteSubscriptionHostStates(ctx context.Context, subscriptionID pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, deleteSubscriptionHostStates, subscriptionID)
+	return err
+}
+
+const deleteSubscriptionManualRuns = `-- name: DeleteSubscriptionManualRuns :exec
+DELETE FROM subscription_manual_run
+WHERE subscription_id = $1
+`
+
+func (q *Queries) DeleteSubscriptionManualRuns(ctx context.Context, subscriptionID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteSubscriptionManualRuns, subscriptionID)
 	return err
 }
 
@@ -237,6 +338,33 @@ func (q *Queries) GetSubscriptionByKey(ctx context.Context, key string) (Subscri
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getSubscriptionManualRun = `-- name: GetSubscriptionManualRun :one
+SELECT id, subscription_id, user_id, daemon_id, command, started_at, finished_at, exit_code, agent_cap_exceeded FROM subscription_manual_run
+WHERE id = $1 AND subscription_id = $2
+`
+
+type GetSubscriptionManualRunParams struct {
+	ID             pgtype.UUID `json:"id"`
+	SubscriptionID pgtype.UUID `json:"subscription_id"`
+}
+
+func (q *Queries) GetSubscriptionManualRun(ctx context.Context, arg GetSubscriptionManualRunParams) (SubscriptionManualRun, error) {
+	row := q.db.QueryRow(ctx, getSubscriptionManualRun, arg.ID, arg.SubscriptionID)
+	var i SubscriptionManualRun
+	err := row.Scan(
+		&i.ID,
+		&i.SubscriptionID,
+		&i.UserID,
+		&i.DaemonID,
+		&i.Command,
+		&i.StartedAt,
+		&i.FinishedAt,
+		&i.ExitCode,
+		&i.AgentCapExceeded,
 	)
 	return i, err
 }
@@ -671,6 +799,66 @@ func (q *Queries) ListSubscriptionHostStates(ctx context.Context) ([]Subscriptio
 			&i.CredentialState,
 			&i.Error,
 			&i.CheckedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSubscriptionManualRuns = `-- name: ListSubscriptionManualRuns :many
+SELECT r.id, r.subscription_id, r.user_id, r.daemon_id, r.command, r.started_at, r.finished_at, r.exit_code, r.agent_cap_exceeded, COALESCE(u.name, '')::text AS user_name
+FROM subscription_manual_run r
+LEFT JOIN "user" u ON u.id = r.user_id
+WHERE r.subscription_id = $1
+  AND ($2::timestamptz IS NULL OR r.started_at < $2::timestamptz)
+ORDER BY r.started_at DESC, r.id DESC
+LIMIT $3
+`
+
+type ListSubscriptionManualRunsParams struct {
+	SubscriptionID pgtype.UUID        `json:"subscription_id"`
+	Before         pgtype.Timestamptz `json:"before"`
+	RowLimit       int32              `json:"row_limit"`
+}
+
+type ListSubscriptionManualRunsRow struct {
+	ID               pgtype.UUID        `json:"id"`
+	SubscriptionID   pgtype.UUID        `json:"subscription_id"`
+	UserID           pgtype.UUID        `json:"user_id"`
+	DaemonID         string             `json:"daemon_id"`
+	Command          string             `json:"command"`
+	StartedAt        pgtype.Timestamptz `json:"started_at"`
+	FinishedAt       pgtype.Timestamptz `json:"finished_at"`
+	ExitCode         pgtype.Int4        `json:"exit_code"`
+	AgentCapExceeded bool               `json:"agent_cap_exceeded"`
+	UserName         string             `json:"user_name"`
+}
+
+func (q *Queries) ListSubscriptionManualRuns(ctx context.Context, arg ListSubscriptionManualRunsParams) ([]ListSubscriptionManualRunsRow, error) {
+	rows, err := q.db.Query(ctx, listSubscriptionManualRuns, arg.SubscriptionID, arg.Before, arg.RowLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListSubscriptionManualRunsRow{}
+	for rows.Next() {
+		var i ListSubscriptionManualRunsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.SubscriptionID,
+			&i.UserID,
+			&i.DaemonID,
+			&i.Command,
+			&i.StartedAt,
+			&i.FinishedAt,
+			&i.ExitCode,
+			&i.AgentCapExceeded,
+			&i.UserName,
 		); err != nil {
 			return nil, err
 		}

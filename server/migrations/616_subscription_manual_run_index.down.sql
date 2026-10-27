@@ -1,0 +1,1 @@
+DROP INDEX CONCURRENTLY IF EXISTS subscription_manual_run_account_started_idx;

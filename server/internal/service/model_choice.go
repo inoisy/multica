@@ -74,6 +74,8 @@ type RuntimeAvailability struct {
 	// when nobody reported a reset and UnavailableUntil is only a guess.
 	UnavailableCode      string
 	UnavailableEstimated bool
+	AccountModels        []Account
+	HasPool              bool
 	PoolID               string
 }
 
@@ -118,6 +120,8 @@ type ModelRowState struct {
 	ReasonCode     string `json:"reason_code,omitempty"`
 	UntilEstimated bool   `json:"until_estimated,omitempty"`
 	Chosen         bool   `json:"chosen"`
+	EffectiveModel string `json:"effective_model"`
+	ModelAtRun     bool   `json:"model_at_run"`
 }
 
 // ModelChoice is the outcome: the chosen row (nil when the run must wait) and
@@ -394,6 +398,11 @@ func ChooseModel(in ModelChoiceInput, now time.Time) ModelChoice {
 			}
 			if rt, ok := in.Runtimes[o.RuntimeID]; ok {
 				row.RuntimeName, row.Provider = rt.Name, rt.Provider
+				row.EffectiveModel = o.Model
+				if rt.HasPool {
+					m := modelForAccounts(o.Model, rt.AccountModels)
+					row.EffectiveModel, row.ModelAtRun = m.Model, m.AtRun
+				}
 			}
 			if state == ModelRowAvailable && choice.Chosen == nil {
 				row.Chosen = true

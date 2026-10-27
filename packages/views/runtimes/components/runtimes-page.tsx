@@ -7,6 +7,7 @@ import {
   ChevronRight,
   Cloud,
   Download,
+  KeyRound,
   Laptop,
   Loader2,
   Monitor,
@@ -31,6 +32,7 @@ import {
 import { agentTaskSnapshotOptions } from "@multica/core/agents";
 import { chatSessionsOptions } from "@multica/core/chat/queries";
 import { runtimeProfileListOptions } from "@multica/core/runtimes";
+import { poolListOptions, subscriptionListOptions } from "@multica/core/subscriptions";
 import {
   runtimeListOptions,
   runtimeKeys,
@@ -73,6 +75,7 @@ import {
   type MikaRuntimeSelection,
 } from "./mika-runtime-choice";
 import { Skeleton } from "@multica/ui/components/ui/skeleton";
+import { Tabs, TabsList, TabsTrigger } from "@multica/ui/components/ui/tabs";
 import { CollectionPageHeader } from "../../layout/collection-page";
 import { PAGE_GUTTER, PAGE_RAIL, PageHeader } from "../../layout/page-header";
 import { cn } from "@multica/ui/lib/utils";
@@ -90,9 +93,11 @@ import { ConnectRemoteDialog } from "./connect-remote-dialog";
 import { CloudRuntimeDialog } from "./cloud-runtime-dialog";
 import { ProviderLogo } from "./provider-logo";
 import { RuntimeList, buildWorkloadIndex } from "./runtime-list";
+import { AccountsOverview, NewPoolDialog } from "../accounts";
 import { pendingRuntimeFromProfile } from "./pending-runtime";
 import { buildRuntimeMachines, type RuntimeMachine } from "./runtime-machines";
 import { HealthDot, HealthIcon, useHealthLabel } from "./shared";
+import { useMachineRunFacts, type MachineRunFacts } from "./machine-run-facts";
 import { useT, useTimeAgo } from "../../i18n";
 import { daemonRuntimesDocsHref } from "./runtime-docs";
 
@@ -110,6 +115,9 @@ export interface RuntimesPageProps {
 }
 
 type StatusFilter = "all" | "online" | "offline";
+
+const PAGE_TABS = ["environments", "accounts"] as const;
+type PageTab = (typeof PAGE_TABS)[number];
 const STATUS_FILTERS: StatusFilter[] = ["all", "online", "offline"];
 
 const COMING_SOON_SERVICES = [
@@ -117,14 +125,14 @@ const COMING_SOON_SERVICES = [
   { provider: "claude", name: "Claude Managed Agents", vendor: "Anthropic" },
 ];
 
-// Track order: edge, name, harness, agents, workload, status, actions, edge.
+// Track order: edge, name, harness, agents, workload, runs, status, actions, edge.
 // Below @2xl only name, status and actions keep a track; the other cells are
 // `hidden @2xl:flex` and drop out of subgrid placement. MUST stay a literal
 // string so Tailwind sees the arbitrary template.
 const GRID_COLS =
   "grid-cols-[0.5rem_minmax(0,1fr)_96px_2rem_0.5rem] " +
   "@sm:grid-cols-[0.5rem_minmax(160px,1fr)_112px_2rem_0.5rem] " +
-  "@2xl:grid-cols-[0.5rem_minmax(120px,1fr)_128px_64px_112px_136px_5.5rem_0.5rem]";
+  "@2xl:grid-cols-[0.5rem_minmax(120px,1fr)_128px_64px_112px_104px_136px_5.5rem_0.5rem]";
 
 const OPTIONAL_CELL = "hidden @2xl:flex";
 
@@ -165,6 +173,19 @@ export function RuntimesPage({
   const [showCloudRuntimeDialog, setShowCloudRuntimeDialog] = useState(false);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [newEnvironmentOpen, setNewEnvironmentOpen] = useState(false);
+  // The tab is part of the address, so a link and a reload keep the same view.
+  const tab: PageTab = navigation.searchParams.get("tab") === "accounts" ? "accounts" : "environments";
+  const setTab = (next: PageTab) => {
+    const params = new URLSearchParams(navigation.searchParams);
+    if (next === "environments") params.delete("tab");
+    else params.set("tab", next);
+    const query = params.toString();
+    navigation.replace(query ? `${navigation.pathname}?${query}` : navigation.pathname);
+  };
+  const pools = useQuery(poolListOptions());
+  const subscriptions = useQuery(subscriptionListOptions());
+  const canCreateEnvironment = pools.data?.can_manage === true;
 
   const { data: runtimes = [], isLoading: runtimesLoading } = useQuery(
     runtimeListOptions(wsId),
@@ -325,12 +346,32 @@ export function RuntimesPage({
             onAddMachine={() => setShowConnectDialog(true)}
             onQoder={openQoder}
             onCloudRuntime={() => setShowCloudRuntimeDialog(true)}
+            onAccountsEnvironment={canCreateEnvironment ? () => setNewEnvironmentOpen(true) : null}
           />
         }
       />
 
+      <Tabs value={tab} onValueChange={(value) => setTab(value === "accounts" ? "accounts" : "environments")}>
+        <div className={cn("h-12 shrink-0 overflow-x-auto border-b [-webkit-overflow-scrolling:touch]", PAGE_GUTTER)}>
+          <TabsList variant="line" className="gap-0 p-0 group-data-horizontal/tabs:h-full">
+            {PAGE_TABS.map((value) => (
+              <TabsTrigger
+                key={value}
+                value={value}
+                className="h-full rounded-none px-2.5 text-label group-data-horizontal/tabs:after:bottom-0"
+              >
+                {t(($) => $.page.tabs[value])}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </div>
+      </Tabs>
+
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className={cn(PAGE_RAIL, PAGE_GUTTER, "flex flex-col gap-3 py-4 sm:py-6")}>
+          {tab === "accounts" && <AccountsOverview mode="manage" />}
+          {tab === "environments" && (
+          <>
           <RuntimesToolbar
             query={query}
             onQueryChange={setQuery}
@@ -351,6 +392,9 @@ export function RuntimesPage({
                 </ListGridHeaderCell>
                 <ListGridHeaderCell className={OPTIONAL_CELL}>
                   {t(($) => $.page.columns.workload)}
+                </ListGridHeaderCell>
+                <ListGridHeaderCell className={OPTIONAL_CELL}>
+                  {t(($) => $.page.columns.runs_24h)}
                 </ListGridHeaderCell>
                 <ListGridHeaderCell>{t(($) => $.page.columns.status)}</ListGridHeaderCell>
                 <ListGridHeaderCell aria-hidden="true" />
@@ -458,11 +502,21 @@ export function RuntimesPage({
               hasMachines={machines.length > 0}
             />
           )}
+          </>
+          )}
         </div>
       </div>
 
       {qoderDialogOpen && (
         <RemoteRuntimeDialog onClose={() => setQoderDialogOpen(false)} />
+      )}
+      {canCreateEnvironment && (
+        <NewPoolDialog
+          open={newEnvironmentOpen}
+          onOpenChange={setNewEnvironmentOpen}
+          wsId={wsId}
+          subscriptions={subscriptions.data?.subscriptions ?? []}
+        />
       )}
       {showConnectDialog && (
         <ConnectRemoteDialog onClose={() => setShowConnectDialog(false)} />
@@ -482,6 +536,7 @@ function AddRuntimeMenu({
   onAddMachine,
   onQoder,
   onCloudRuntime,
+  onAccountsEnvironment,
 }: {
   isDesktop: boolean;
   localMachineName: string | null;
@@ -490,6 +545,8 @@ function AddRuntimeMenu({
   onAddMachine: () => void;
   onQoder: () => void;
   onCloudRuntime: () => void;
+  /** Null for a reader who is not an instance admin: they cannot create an environment. */
+  onAccountsEnvironment: (() => void) | null;
 }) {
   const { t } = useT("runtimes");
   return (
@@ -535,6 +592,20 @@ function AddRuntimeMenu({
             onClick={onAddMachine}
           />
         </DropdownMenuGroup>
+        {onAccountsEnvironment ? (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuGroup>
+              <DropdownMenuLabel>{t(($) => $.page.add_menu.accounts)}</DropdownMenuLabel>
+              <AddMenuItem
+                icon={<KeyRound className="size-4 text-muted-foreground" />}
+                title={t(($) => $.page.add_menu.accounts_environment)}
+                description={t(($) => $.page.add_menu.accounts_environment_hint)}
+                onClick={onAccountsEnvironment}
+              />
+            </DropdownMenuGroup>
+          </>
+        ) : null}
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
           <DropdownMenuLabel>{t(($) => $.page.add_menu.cloud_services)}</DropdownMenuLabel>
@@ -734,6 +805,7 @@ function NameCell({
   href,
   badge,
   subtitle,
+  extra,
   muted,
 }: {
   tile: ReactNode;
@@ -741,6 +813,8 @@ function NameCell({
   href?: string;
   badge?: ReactNode;
   subtitle: string;
+  /** A line under the subtitle, for facts that get their own column on wide screens. */
+  extra?: ReactNode;
   muted?: boolean;
 }) {
   return (
@@ -771,6 +845,7 @@ function NameCell({
         <span className="block truncate text-caption text-muted-foreground">
           {subtitle}
         </span>
+        {extra}
       </span>
     </ListGridCell>
   );
@@ -817,6 +892,23 @@ function WorkloadText({
   );
 }
 
+function MachineRuns({ facts }: { facts: MachineRunFacts }) {
+  const { t } = useT("runtimes");
+  if (facts.status === "loading") return <Skeleton className="h-4 w-8" />;
+  if (facts.status === "error") {
+    return (
+      <span
+        className="text-caption text-destructive"
+        title={t(($) => $.page.rows.runs_unavailable)}
+        aria-label={t(($) => $.page.rows.runs_unavailable)}
+      >
+        —
+      </span>
+    );
+  }
+  return <>{facts.runs}</>;
+}
+
 function MachineRow({
   machine,
   bootstrapping,
@@ -854,6 +946,7 @@ function MachineRow({
   const starting =
     machine.isCurrent && bootstrapping && machine.runtimes.length === 0;
   const online = machine.health === "online";
+  const runFacts = useMachineRunFacts(machine.runtimes);
 
   return (
     <ListGridRow
@@ -883,6 +976,18 @@ function MachineRow({
           ) : undefined
         }
         subtitle={subtitle}
+        extra={
+          <span
+            className="block truncate text-caption tabular-nums text-muted-foreground @2xl:hidden"
+            data-testid="machine-runs-24h-compact"
+          >
+            {runFacts.status === "ready"
+              ? t(($) => $.page.rows.runs_24h, { count: runFacts.runs })
+              : runFacts.status === "error"
+                ? t(($) => $.page.rows.runs_unavailable)
+                : null}
+          </span>
+        }
       />
       <ListGridCell className={OPTIONAL_CELL}>
         <ProviderIconStack providers={machine.providerNames} />
@@ -900,6 +1005,9 @@ function MachineRow({
       ) : (
         <EmptyCell />
       )}
+      <ListGridCell className={cn(OPTIONAL_CELL, "text-body tabular-nums")} data-testid="machine-runs-24h">
+        <MachineRuns facts={runFacts} />
+      </ListGridCell>
       <ListGridCell className="gap-1.5 text-caption">
         {starting ? (
           <>
@@ -958,6 +1066,7 @@ function QoderRow({
           title={title}
           subtitle={byQoder}
         />
+        <EmptyCell />
         <EmptyCell />
         <EmptyCell />
         <EmptyCell />
@@ -1033,6 +1142,7 @@ function QoderRow({
       ) : (
         <EmptyCell />
       )}
+      <EmptyCell />
       <ListGridCell className="gap-1.5 text-caption">
         <span aria-hidden="true" className={cn("size-1.5 rounded-full", dotTone)} />
         <span
@@ -1074,6 +1184,7 @@ function ComingSoonRow({
         subtitle={t(($) => $.page.rows.provided_by, { vendor })}
         muted
       />
+      <EmptyCell />
       <EmptyCell />
       <EmptyCell />
       <EmptyCell />
