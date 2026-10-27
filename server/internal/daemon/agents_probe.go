@@ -337,25 +337,7 @@ var probeAgentCLIs = func() map[string]AgentEntry {
 	if e, ok := probe("MULTICA_ZEROCLAW_PATH", "zeroclaw", ""); ok {
 		agents["zeroclaw"] = e
 	}
-	if e, ok := acceptRuntimeEntry(); ok {
-		agents[agent.AcceptProvider] = e
-	}
 	return agents
-}
-
-// acceptRuntimeEntry is the model-free runtime of the route's accept step: the
-// daemon's own multica binary. Every daemon offers it unless the operator turns
-// it off with MULTICA_ACCEPT_RUNTIME=off; it needs no CLI, only git and the
-// host's push access to the repositories it accepts into.
-func acceptRuntimeEntry() (AgentEntry, bool) {
-	if strings.EqualFold(strings.TrimSpace(os.Getenv("MULTICA_ACCEPT_RUNTIME")), "off") {
-		return AgentEntry{}, false
-	}
-	self, err := os.Executable()
-	if err != nil {
-		return AgentEntry{}, false
-	}
-	return AgentEntry{Path: self}, true
 }
 
 // executableCandidate reports whether a Desktop-app bundle candidate can be
