@@ -290,9 +290,6 @@ function StepChain({ steps }: { steps: IssueWorkflowStep[] }) {
               {type === "creator" && (
                 <span className="text-muted-foreground">· {t(($) => $.workflows.handler.creator)}</span>
               )}
-              {type === "accept" && (
-                <span className="text-muted-foreground">· {t(($) => $.workflows.handler.accept)}</span>
-              )}
             </span>
           </Fragment>
         );
