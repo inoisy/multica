@@ -8,7 +8,7 @@ import { agentTaskSnapshotOptions } from "@multica/core/agents";
 import { chatSessionsOptions } from "@multica/core/chat/queries";
 import { runtimeProfileListOptions } from "@multica/core/runtimes";
 import { qoderOptions, type QoderConnection } from "@multica/core/runtimes/qoder";
-import { runtimeListOptions } from "@multica/core/runtimes/queries";
+import { runtimeListOptions, runtimeRunFactsOptions } from "@multica/core/runtimes/queries";
 import {
   poolListOptions,
   subscriptionDiscrepanciesOptions,
@@ -110,8 +110,10 @@ function renderPage({
   connection = qoder(),
   desktop = false,
   instanceAdmin = false,
+  runsByRuntime = {},
 }: {
   runtimes?: AgentRuntime[];
+  runsByRuntime?: Record<string, number>;
   connection?: QoderConnection;
   desktop?: boolean;
   instanceAdmin?: boolean;
@@ -129,6 +131,14 @@ function renderPage({
   qc.setQueryData(poolListOptions().queryKey, { pools: [], can_manage: instanceAdmin });
   qc.setQueryData(subscriptionListOptions().queryKey, { subscriptions: [], can_manage: instanceAdmin });
   qc.setQueryData(subscriptionDiscrepanciesOptions().queryKey, []);
+  for (const [runtimeId, runs] of Object.entries(runsByRuntime)) {
+    qc.setQueryData(runtimeRunFactsOptions(runtimeId).queryKey, {
+      runtime_id: runtimeId,
+      selection_state: "active",
+      machine_status: "online",
+      run_facts_24h: { since: "", until: "", runs, unknown_account_runs: 0, accounts: {} },
+    });
+  }
   return render(
     <QueryClientProvider client={qc}>
       <I18nProvider locale="en" resources={TEST_RESOURCES}>
@@ -189,6 +199,26 @@ describe("RuntimesPage", () => {
     expect(screen.getByRole("button", { name: "Connect" })).toBeInTheDocument();
     expect(screen.getByText("Cursor Cloud Agents")).toBeInTheDocument();
     expect(screen.getByText("Claude Managed Agents")).toBeInTheDocument();
+  });
+
+  it("shows the runs of the last 24 hours per machine, summed over its environments", () => {
+    renderPage({
+      runtimes: [makeRuntime(), makeRuntime({ id: "rt-codex", provider: "codex", name: "Codex (dev-machine.local)" })],
+      runsByRuntime: { "rt-claude": 3, "rt-codex": 4 },
+    });
+
+    expect(screen.getByTestId("machine-runs-24h")).toHaveTextContent("7");
+    expect(screen.getByTestId("machine-runs-24h-compact")).toHaveTextContent("Runs in 24 h: 7");
+  });
+
+  it("does not show a partial figure while a machine's run facts are still loading", () => {
+    renderPage({
+      runtimes: [makeRuntime(), makeRuntime({ id: "rt-codex", provider: "codex", name: "Codex (dev-machine.local)" })],
+      runsByRuntime: { "rt-claude": 3 },
+    });
+
+    expect(screen.getByTestId("machine-runs-24h")).not.toHaveTextContent("3");
+    expect(screen.getByTestId("machine-runs-24h-compact")).toBeEmptyDOMElement();
   });
 
   it("offers the desktop download on web when no machine is connected", () => {

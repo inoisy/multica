@@ -45,6 +45,7 @@
       "harness": "Harness",
       "agents": "에이전트",
       "workload": "작업량",
+      "runs_24h": "Runs, 24 h",
       "status": "상태"
     },
     "groups": {
@@ -64,6 +65,8 @@
       "add_machine_hint": "해당 머신에서 명령 두 개를 실행하면 에이전트가 그 머신의 CLI를 사용할 수 있습니다",
       "view_commands": "명령 보기",
       "owner_you": "나",
+      "runs_24h": "Runs in 24 h: {{count}}",
+      "runs_unavailable": "Run counts unavailable",
       "connect": "연결",
       "not_connected": "연결 안 됨",
       "provided_by": "{{vendor}} 제공",
