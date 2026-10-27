@@ -259,8 +259,6 @@ func (q *Queries) DeleteModelProfileOptions(ctx context.Context, profileID pgtyp
 const deleteRuntimeModelReferences = `-- name: DeleteRuntimeModelReferences :exec
 WITH deleted_profile_rows AS (
  DELETE FROM model_profile_option WHERE model_profile_option.runtime_id = $1
-), deleted_agent_rows AS (
- DELETE FROM agent_model_option WHERE agent_model_option.runtime_id = $1
 )
 DELETE FROM runtime_unavailable WHERE runtime_unavailable.runtime_id = $1
 `
@@ -1362,8 +1360,6 @@ func (q *Queries) ProjectModelProfileRow1OnAgents(ctx context.Context, arg Proje
 const reassignRuntimeModelReferences = `-- name: ReassignRuntimeModelReferences :exec
 WITH moved_profile_rows AS (
  UPDATE model_profile_option SET runtime_id = $1 WHERE model_profile_option.runtime_id = $2
-), moved_agent_rows AS (
- UPDATE agent_model_option SET runtime_id = $1 WHERE agent_model_option.runtime_id = $2
 )
 UPDATE runtime_unavailable SET runtime_id = $1 WHERE runtime_unavailable.runtime_id = $2
 `

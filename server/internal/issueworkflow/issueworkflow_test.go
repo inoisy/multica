@@ -111,6 +111,7 @@ func TestValidateHandoff(t *testing.T) {
 		"not a column":      {step: Step{StatusKey: "nope", Handler: Handler{Type: HandlerProjectLead}}, want: "not part"},
 		"needs an id":       {step: Step{StatusKey: "implement", Handler: Handler{Type: HandlerAgent}}, want: "choose a agent"},
 		"unknown handler":   {step: Step{StatusKey: "implement", Handler: Handler{Type: "robot"}}, want: "unknown handler"},
+		"removed accept":    {step: Step{StatusKey: "implement", Handler: Handler{Type: "accept"}}, want: "unknown handler"},
 		"backlog parks":     {step: Step{StatusKey: "backlog", Handler: Handler{Type: HandlerProjectLead}}, want: "cannot be handed off"},
 		"done finishes":     {step: Step{StatusKey: "done", Handler: Handler{Type: HandlerProjectLead}}, want: "cannot be handed off"},
 		"next outside flow": {step: Step{StatusKey: "implement", Handler: Handler{Type: HandlerProjectLead}, NextStatusKey: "in_review"}, want: "not another status"},

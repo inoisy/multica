@@ -92,34 +92,13 @@ func (h *Handler) applyIssueWorkflow(ctx context.Context, prev db.Issue, params 
 	if !ok || !step.HandsOff() {
 		return nil, nil
 	}
-	assigneeType, assigneeID, ok := h.resolveWorkflowHandler(ctx, step, project, prev.CreatorType, prev.CreatorID)
+	assigneeType, assigneeID, ok := issueworkflow.ResolveHandler(step, project, prev.CreatorType, prev.CreatorID)
 	if !ok {
 		return nil, nil
 	}
 	params.AssigneeType = pgtype.Text{String: assigneeType, Valid: true}
 	params.AssigneeID = assigneeID
 	return &workflowHandoff{def: *def, step: step, project: project}, nil
-}
-
-// resolveWorkflowHandler names who a step hands the issue to. An acceptance
-// step goes to the workspace's model-free accept agent; false when no daemon
-// offers an accept runtime, so the issue stays with whoever has it.
-func (h *Handler) resolveWorkflowHandler(ctx context.Context, step issueworkflow.Step, project db.Project, creatorType string, creatorID pgtype.UUID) (string, pgtype.UUID, bool) {
-	if step.Handler.Type != issueworkflow.HandlerAccept {
-		return issueworkflow.ResolveHandler(step, project, creatorType, creatorID)
-	}
-	a, err := service.WorkflowAcceptanceAgent(ctx, h.Queries, project.WorkspaceID)
-	if err != nil || a == nil {
-		return "", pgtype.UUID{}, false
-	}
-	return "agent", a.ID, true
-}
-
-// toAcceptance reports whether the handoff goes to the server's acceptance
-// carrier. The server picks that agent itself, so the hand-picked assignee
-// gate (which sees user agents only) does not apply to it.
-func (hand *workflowHandoff) toAcceptance() bool {
-	return hand != nil && hand.step.Handler.Type == issueworkflow.HandlerAccept
 }
 
 // workflowHandoffPayload describes a handoff on the issue:updated event, so
@@ -404,8 +383,6 @@ func (h *Handler) stepHandlerName(ctx context.Context, issue db.Issue, project d
 			return "the project lead (none set)"
 		case issueworkflow.HandlerCreator:
 			return "the issue creator"
-		case issueworkflow.HandlerAccept:
-			return "automatic acceptance (merges the pinned commit)"
 		}
 		return ""
 	}

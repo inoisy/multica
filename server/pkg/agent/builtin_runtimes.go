@@ -3,7 +3,6 @@ package agent
 import (
 	"context"
 	"fmt"
-	"log/slog"
 )
 
 // BuiltinRuntime describes a built-in runtime identity that the daemon probes
@@ -152,15 +151,6 @@ func (b *piBackend) applyBuiltinRuntimeOverrides(desc BuiltinRuntime) {
 // thing: New() is family-only, NewRuntime() is runtime-identity-only, and
 // the daemon never has to know which is which.
 func ResolveBackend(provider string, cfg Config) (Backend, error) {
-	// accept is the daemon's own model-free runtime, neither a protocol family
-	// nor a fork of one, so custom runtime profiles cannot claim it.
-	if provider == AcceptProvider {
-		if cfg.Logger == nil {
-			cfg.Logger = slog.Default()
-		}
-		cfg.provider = provider
-		return &acceptBackend{cfg: cfg}, nil
-	}
 	if IsBuiltinRuntime(provider) {
 		return NewRuntime(provider, cfg)
 	}

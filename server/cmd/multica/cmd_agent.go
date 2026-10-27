@@ -3,8 +3,10 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -730,6 +732,21 @@ func runAgentCreate(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
+// agentUpdateError explains the refusal for an agent whose runtime, model and
+// thinking level belong to its model profile, instead of the raw 409.
+func agentUpdateError(agent string, err error) error {
+	var httpErr *cli.HTTPError
+	if errors.As(err, &httpErr) && httpErr.StatusCode == http.StatusConflict {
+		var payload struct {
+			Code string `json:"code"`
+		}
+		if json.Unmarshal([]byte(httpErr.Body), &payload) == nil && payload.Code == "agent_model_owned_by_profile" {
+			return fmt.Errorf("update agent: the runtime, model and thinking level of this agent come from its model profile; change them with `multica agent models %s`", agent)
+		}
+	}
+	return fmt.Errorf("update agent: %w", err)
+}
+
 func runAgentUpdate(cmd *cobra.Command, args []string) error {
 	client, err := newAPIClient(cmd)
 	if err != nil {
@@ -818,7 +835,7 @@ func runAgentUpdate(cmd *cobra.Command, args []string) error {
 
 	var result map[string]any
 	if err := client.PutJSON(ctx, "/api/agents/"+args[0], body, &result); err != nil {
-		return fmt.Errorf("update agent: %w", err)
+		return agentUpdateError(args[0], err)
 	}
 
 	output, _ := cmd.Flags().GetString("output")

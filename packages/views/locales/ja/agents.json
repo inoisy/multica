@@ -148,7 +148,8 @@
     "runtime_required_toast": "このエージェントを実行する前にランタイムを設定してください。",
     "assign_work": "作業を割り当てる",
     "more_actions_aria": "エージェントの操作",
-    "updated": "{{when}}に更新"
+    "updated": "{{when}}に更新",
+    "model_owned_by_profile_toast": "The runtime, model and thinking level of this agent come from its profile. Change them in Models."
   },
   "inspector": {
     "section_profile": "プロフィール",
@@ -183,7 +184,8 @@
     "description_placeholder": "このエージェントは何をしますか？",
     "save": "保存",
     "cancel": "キャンセル",
-    "model_routed": "実行のモデルは下の「モデル」セクションで選ばれます。"
+    "model_saved_hint": "Row 1 of the saved list. The next run may take another row and the account is chosen at launch: forecast and last run are in Models below.",
+    "model_open_models": "Change in Models"
   },
   "overview": {
     "agent_context": "エージェント",
@@ -1046,7 +1048,6 @@
     "profile_none": "No profile",
     "profile_usage": "Editing the profile affects {{agents}} agents and {{issues}} issues.",
     "open_profile": "Open profiles",
-    "now_label": "Now",
     "now_next_run": "What the next run would take",
     "profile_rows": "Models of “{{name}}”",
     "row_primary": "Primary",
@@ -1094,7 +1095,7 @@
     "mode_profile_hint": "複数のエージェントで共有するリスト",
     "mode_single": "単一モデル",
     "mode_one_hint": "このモデルのみ、予備なし",
-    "mode_fields_hint": "プロファイルも独自モデルもありません。実行は上のフィールドのランタイムとモデルを使います。",
+    "mode_fields_hint": "No profile and no own model: a run takes the runtime and model from the agent's own fields.",
     "switch_to_profile": "プロファイル「{{name}}」を使う",
     "one_title": "エージェントのモデル",
     "one_hint": "予備なし: ランタイムが上限またはオフラインの場合、実行はリセットまで待機し、オーナーに通知されます。",
@@ -1131,7 +1132,17 @@
     "reason_waiting_why": "すべてのモデルが利用不可({{why}}) — 実行は待機します",
     "reason_fallback_row_why": "{{n}} 行目は利用不可({{why}}) — {{m}} 行目を採用",
     "reset_confirm": "共通に戻す",
-    "unavailable_label": "利用できないランタイム"
+    "unavailable_label": "利用できないランタイム",
+    "model_at_run": "Decided at launch",
+    "setting_label": "Setting",
+    "setting_badge": "saved",
+    "setting_source_profile": "Shared profile “{{name}}”, row 1",
+    "setting_source_personal": "The agent's personal profile, row 1",
+    "setting_source_single": "One model of this agent",
+    "setting_source_fields": "No profile: the agent's own runtime and model",
+    "forecast_label": "Server forecast",
+    "last_label": "Last run",
+    "last_none": "No runs yet"
   },
   "model_profiles": {
     "title": "Profiles",
@@ -1172,7 +1183,8 @@
     "personal_title": "個人プロファイル",
     "personal_empty": "個人プロファイルを持つエージェントはいません。",
     "col_agent": "エージェント",
-    "col_base": "ベース"
+    "col_base": "ベース",
+    "delete_blocked": "Cannot delete: {{agents}} agents, {{issues}} open issues and {{profiles}} profiles use it"
   },
   "conveyor": {
     "title": "エピック",
@@ -1228,7 +1240,7 @@
     "saved": "保存しました",
     "bad_percent": "上限は 0〜100 の整数(%)です",
     "credential": "ホスト上の認証情報：",
-    "usage_as_of": "{{time}} 時点の数値",
+    "usage_as_of": "Quota measured {{time}}",
     "limited_banner": "エージェントの上限に到達：{{titles}}。エージェントはプロファイルの次のモデルに移ります。",
     "spent_by": "利用元：",
     "spent_by_item": "{{name}}（{{position}} 番目）",
@@ -1316,7 +1328,6 @@
       "add": "アカウントを追加",
       "add_placeholder": "アカウントを選択…",
       "spend_title": "使い方",
-      "edit": "構成と順序",
       "revision": "バージョン {{revision}}",
       "moved_on": "編集中にプールが変更されました(バージョン {{revision}})。",
       "take_current": "現在のプールを取り込む",
@@ -1327,18 +1338,20 @@
       "no_environments": "このプールを使う環境はまだありません。ワークスペースに付与すると作成されます。",
       "not_found": "このプールは表示できないか削除されました。",
       "of_environment": "プール「{{name}}」",
-      "workspaces_n_other": "{{count}} ワークスペース"
+      "workspaces_n_other": "{{count}} ワークスペース",
+      "accounts_elsewhere": "Limits and sign-in of the accounts are on the Accounts tab.",
+      "open_accounts": "Open Accounts"
     },
     "new_pool": {
-      "open": "新しいプール",
-      "title": "新しいプール",
+      "open": "Add an environment through accounts",
+      "title": "New environment through accounts",
       "family": "実行する CLI",
       "name": "名前",
       "name_placeholder": "例：Claude · 共通",
       "workspaces": "ワークスペース",
       "all_workspaces": "新しいものを含むすべてのワークスペース",
       "submit": "作成",
-      "done": "プール「{{name}}」を作成しました"
+      "done": "Environment “{{name}}” created"
     },
     "add": {
       "open": "サブスクリプションを追加",
@@ -1368,15 +1381,6 @@
       "claude_login": "ブラウザーでこの Claude アカウントにログインしたコンピューターで claude setup-token を実行し、トークンを貼り付けてください。",
       "key_login": "プロバイダーのダッシュボードでキーを作成し、ここに貼り付けてください。",
       "secret_hint": "デーモンに送られ、ホスト上の認証情報ファイル（モード 600）にのみ書き込まれます。空のままにして、後でカードからログインすることもできます。",
-      "step_spend": "プール",
-      "spend_mode": {
-        "existing": "既存のプール",
-        "new": "新しいプール",
-        "none": "まだプールなし"
-      },
-      "placement": "順序での位置",
-      "placement_last": "最後",
-      "placement_first": "最初",
       "step_caps": "エージェントが使える量",
       "no_windows": "プロバイダーにクォータウィンドウはありません。エージェントはプロバイダーの上限まで使えます。",
       "submit": "接続",
@@ -1387,27 +1391,7 @@
       "model": "モデル",
       "model_hint": "任意。すべての階層の既定モデルになります。",
       "model_placeholder": "例：glm-4.6",
-      "steps_label": "接続の手順",
-      "steps": {
-        "account": "アカウントとサインイン",
-        "pool": "プールに追加",
-        "usage": "利用"
-      },
-      "step_of": "ステップ {{n}} / {{total}}",
-      "pool_label": "プール",
-      "pool_none_hint": "アカウントは接続されたまま「プールなし」に表示されます。プールに入るまでエージェントは使いません。",
-      "no_pool_of_family": "{{family}} のプールはまだありません。新規作成してください。",
-      "usage_title": "使われる場所",
-      "usage_existing": "アカウントは「{{pool}}」に追加されます。",
-      "usage_envs": "プールの環境 {{names}} を通じて使われます。プロファイルに行を追加する必要はありません。",
-      "usage_no_env": "プールにはまだ環境がないため、付与されるまでエージェントはアカウントを使いません。",
-      "usage_new": "このアカウントで新しいプール「{{pool}}」を作成します。",
-      "usage_new_grant": "付与したワークスペースに環境が作成されます。",
-      "usage_new_no_grant": "どのワークスペースにも付与されないため、環境は作成されません。",
-      "usage_running": "実行中のものはアカウントを維持します。",
-      "next": "次へ",
-      "back": "戻る",
-      "stop_here": "プールなしで接続"
+      "no_pool_note": "The account is not put into a pool here: the pool is composed on the page of the environment that spends it."
     },
     "discrepancies": {
       "title": "不整合",
@@ -1454,7 +1438,21 @@
       "reset": "リセット",
       "none": "条件に一致するものはありません。"
     },
-    "counted_once": "1 回だけ集計され、上に表示されています"
+    "counted_once": "1 回だけ集計され、上に表示されています",
+    "view_only": "View only. Accounts are connected and edited in Environments → Accounts.",
+    "open_accounts": "Open Environments → Accounts",
+    "manual": {
+      "title": "Journal of manual runs",
+      "command_hint": "To run the account's CLI by hand, run this on the daemon host as an instance admin:",
+      "copy": "Copy the command",
+      "unfinished": "not finished",
+      "over_cap": "agent limit was exceeded",
+      "machine": "Machine: {{machine}}",
+      "exit_code": "exit code {{code}}",
+      "load_failed": "The journal is unavailable: only an instance admin reads it.",
+      "empty": "No manual runs yet",
+      "more": "Show more"
+    }
   },
   "verdict": {
     "reason": {

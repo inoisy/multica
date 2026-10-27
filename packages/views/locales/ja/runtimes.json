@@ -35,13 +35,17 @@
       "other_machine_hint": "そのマシンで 2 つのコマンドを実行",
       "cloud_services": "クラウドサービス",
       "qoder_manage_hint": "接続済み · 接続を管理",
-      "cloud_runtime_hint": "Multica がホストするクラウドノードを作成"
+      "cloud_runtime_hint": "Multica がホストするクラウドノードを作成",
+      "accounts": "Through accounts",
+      "accounts_environment": "Add an environment through accounts",
+      "accounts_environment_hint": "A pool of accounts granted to workspaces. Accounts are connected on the Accounts tab"
     },
     "columns": {
       "name": "名前",
       "harness": "Harness",
       "agents": "エージェント",
       "workload": "負荷",
+      "runs_24h": "Runs, 24 h",
       "status": "ステータス"
     },
     "groups": {
@@ -61,6 +65,8 @@
       "add_machine_hint": "そのマシンで 2 つのコマンドを実行すると、エージェントがそこにインストールされた CLI を使えます",
       "view_commands": "コマンドを表示",
       "owner_you": "あなた",
+      "runs_24h": "Runs in 24 h: {{count}}",
+      "runs_unavailable": "Run counts unavailable",
       "connect": "接続",
       "not_connected": "未接続",
       "provided_by": "{{vendor}} 提供",
@@ -70,6 +76,10 @@
       "all": "すべて",
       "online": "オンライン",
       "offline": "オフライン"
+    },
+    "tabs": {
+      "environments": "Environments",
+      "accounts": "Accounts"
     }
   },
   "mika_setup": {
@@ -655,5 +665,51 @@
       "cancel": "キャンセル",
       "done": "Qoder の接続を解除しました"
     }
+  },
+  "accounts": {
+    "pool_no_environments": "No environment spends this pool yet",
+    "pool_environments": "Environments of the pool",
+    "open_environment": "Open environment “{{name}}”"
+  },
+  "facts": {
+    "title": "Use and facts",
+    "kind": "Kind",
+    "kinds": {
+      "via_accounts": "Through accounts",
+      "own_login": "Own login",
+      "builtin": "Built-in"
+    },
+    "kind_hint": {
+      "via_accounts": "The standard claude/codex under an account of the pool; the daemon prepares the login.",
+      "own_login": "Signed in on the machine itself: the account is unknown and its quota is not counted.",
+      "builtin": "The machine's built-in CLI; model agents cannot select it."
+    },
+    "selection": "Selection",
+    "states": {
+      "active": "Used in the last 24 h",
+      "reserve": "In reserve",
+      "unused": "Not used",
+      "closed": "Closed for selection"
+    },
+    "machine": "Machine: {{status}}",
+    "runs_24h": "Runs in 24 h",
+    "runs": "Runs: {{count}}",
+    "unknown_account_runs": "Without a confirmed account: {{count}}",
+    "accounts_24h": "Accounts in 24 h",
+    "own_login_accounts": "Own login: the account is unknown and the quota is not counted.",
+    "selected_in": "Where it is selected",
+    "personal_profile": "personal profile",
+    "shared_profile": "shared profile",
+    "rows": "rows: {{rows}}",
+    "fallback": "Fallback of profile",
+    "based_on": "Base of personal profiles",
+    "hidden_profiles": "Profiles you cannot see: {{count}}",
+    "serves": "Serves agents",
+    "hidden_agents": "Agents you cannot see: {{count}}",
+    "open_issues": "Open issues: {{count}}",
+    "removal": "Removal",
+    "deletable": "Can be deleted: nothing refers to it",
+    "not_deletable": "Cannot be deleted: agents or open issues refer to it",
+    "load_failed": "Could not load"
   }
 }

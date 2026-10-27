@@ -1,5 +1,5 @@
 import { useCallback } from "react";
-import { queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
+import { infiniteQueryOptions, queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ApiError, api } from "../api";
 import { PoolRevisionConflictSchema } from "../api/schemas";
 import { runtimeProfileKeys } from "../runtimes/profiles";
@@ -24,6 +24,7 @@ export const subscriptionKeys = {
   list: () => [...subscriptionKeys.all(), "list"] as const,
   discrepancies: () => [...subscriptionKeys.all(), "discrepancies"] as const,
   pools: () => [...subscriptionKeys.all(), "pools"] as const,
+  manualRuns: (key: string) => [...subscriptionKeys.all(), "manual-runs", key] as const,
   login: (key: string) => [...subscriptionKeys.all(), "login", key] as const,
   profile: (wsId: string, profileId: string) => [...runtimeProfileKeys.all(wsId), "subscriptions", profileId] as const,
 };
@@ -61,6 +62,23 @@ export function subscriptionLoginOptions(key: string, enabled = true) {
     queryFn: () => api.getSubscriptionLogin(key),
     enabled: enabled && key.length > 0,
     refetchInterval: (query) => (query.state.data?.state === "waiting" ? SUBSCRIPTION_LOGIN_POLL_MS : false),
+  });
+}
+
+export const MANUAL_RUNS_PAGE = 20;
+
+/**
+ * The journal of commands run by hand under an account, newest first, a page
+ * at a time. Only an instance admin may read it; a refusal is shown, not retried.
+ */
+export function manualRunsOptions(key: string) {
+  return infiniteQueryOptions({
+    queryKey: subscriptionKeys.manualRuns(key),
+    queryFn: ({ pageParam }) => api.listSubscriptionManualRuns(key, { limit: MANUAL_RUNS_PAGE, before: pageParam }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (last) => last.next_before ?? undefined,
+    enabled: key.length > 0,
+    retry: false,
   });
 }
 

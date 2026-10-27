@@ -139,6 +139,10 @@ func applyRuntimeAccessRevocation(ctx context.Context, qtx *db.Queries, next db.
 	if err != nil {
 		return updated, result, nil, err
 	}
+	result.UnboundAgents, err = service.RestoreAgentModelProjections(ctx, qtx, result.UnboundAgents)
+	if err != nil {
+		return updated, result, nil, err
+	}
 	ids := make([]pgtype.UUID, len(result.UnboundAgents))
 	for i, a := range result.UnboundAgents {
 		ids[i] = a.ID

@@ -3137,79 +3137,6 @@ func (q *Queries) CreateRetryTask(ctx context.Context, arg CreateRetryTaskParams
 	return i, err
 }
 
-const createSystemAcceptAgent = `-- name: CreateSystemAcceptAgent :one
-INSERT INTO agent (
-    workspace_id, name, description, runtime_mode, runtime_config, runtime_id,
-    visibility, permission_mode, max_concurrent_tasks, owner_id, instructions,
-    custom_env, custom_args, kind, system_key
-) VALUES (
-    $1, $2, '', $3, '{}'::jsonb, $4,
-    'private', 'private', 1, $5, '',
-    '{}'::jsonb, '[]'::jsonb, 'system', 'accept'
-)
-RETURNING id, workspace_id, name, avatar_url, runtime_mode, runtime_config, visibility, status, max_concurrent_tasks, owner_id, created_at, updated_at, description, runtime_id, instructions, archived_at, archived_by, custom_env, custom_args, mcp_config, model, thinking_level, composio_toolkit_allowlist, permission_mode, kind, system_key, disabled_runtime_skills, service_tier, conversation_starters, model_profile_id, disallowed_tools
-`
-
-type CreateSystemAcceptAgentParams struct {
-	WorkspaceID pgtype.UUID `json:"workspace_id"`
-	Name        string      `json:"name"`
-	RuntimeMode string      `json:"runtime_mode"`
-	RuntimeID   pgtype.UUID `json:"runtime_id"`
-	OwnerID     pgtype.UUID `json:"owner_id"`
-}
-
-// The hidden carrier of a route's accept step on one accept runtime: the
-// daemon claims work per agent, so acceptance needs an agent row, but it has
-// no model, prompt or owner choices. `kind = 'system'` keeps it out of agent
-// lists and pickers; migration 172's index makes (workspace, owner, runtime,
-// system_key) unique, so a concurrent create fails and the caller re-reads.
-// One run at a time: parallel full checks on one host time out each other's
-// tests (STT-366, 22.10.2026: three accepts of one repository at once).
-func (q *Queries) CreateSystemAcceptAgent(ctx context.Context, arg CreateSystemAcceptAgentParams) (Agent, error) {
-	row := q.db.QueryRow(ctx, createSystemAcceptAgent,
-		arg.WorkspaceID,
-		arg.Name,
-		arg.RuntimeMode,
-		arg.RuntimeID,
-		arg.OwnerID,
-	)
-	var i Agent
-	err := row.Scan(
-		&i.ID,
-		&i.WorkspaceID,
-		&i.Name,
-		&i.AvatarUrl,
-		&i.RuntimeMode,
-		&i.RuntimeConfig,
-		&i.Visibility,
-		&i.Status,
-		&i.MaxConcurrentTasks,
-		&i.OwnerID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.Description,
-		&i.RuntimeID,
-		&i.Instructions,
-		&i.ArchivedAt,
-		&i.ArchivedBy,
-		&i.CustomEnv,
-		&i.CustomArgs,
-		&i.McpConfig,
-		&i.Model,
-		&i.ThinkingLevel,
-		&i.ComposioToolkitAllowlist,
-		&i.PermissionMode,
-		&i.Kind,
-		&i.SystemKey,
-		&i.DisabledRuntimeSkills,
-		&i.ServiceTier,
-		&i.ConversationStarters,
-		&i.ModelProfileID,
-		&i.DisallowedTools,
-	)
-	return i, err
-}
-
 const createSystemUserAgent = `-- name: CreateSystemUserAgent :one
 INSERT INTO agent (
     workspace_id, name, description, avatar_url, runtime_mode, runtime_config,
@@ -6679,6 +6606,50 @@ func (q *Queries) ListQueuedClaimCandidatesByRuntimes(ctx context.Context, runti
 			&i.AccountFact,
 			&i.AccountOffer,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRunFacts24Hours = `-- name: ListRunFacts24Hours :many
+SELECT COALESCE(NULLIF(account_fact ->> 'subscription_id', ''), '')::text AS subscription_id,
+       count(*)::bigint AS runs
+FROM agent_task_queue
+WHERE COALESCE(started_at, dispatched_at) >= $1::timestamptz
+  AND COALESCE(started_at, dispatched_at) < $2::timestamptz
+  AND COALESCE(NULLIF(model_choice #>> '{chosen,runtime_id}', ''), runtime_id::text) = $3::text
+GROUP BY 1
+`
+
+type ListRunFacts24HoursParams struct {
+	Since     pgtype.Timestamptz `json:"since"`
+	Until     pgtype.Timestamptz `json:"until"`
+	RuntimeID string             `json:"runtime_id"`
+}
+
+type ListRunFacts24HoursRow struct {
+	SubscriptionID string `json:"subscription_id"`
+	Runs           int64  `json:"runs"`
+}
+
+// Count attempts once, by the runtime the claim recorded and the account the
+// daemon confirmed, never from quota observations or today's mutable
+// agent/profile configuration.
+func (q *Queries) ListRunFacts24Hours(ctx context.Context, arg ListRunFacts24HoursParams) ([]ListRunFacts24HoursRow, error) {
+	rows, err := q.db.Query(ctx, listRunFacts24Hours, arg.Since, arg.Until, arg.RuntimeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListRunFacts24HoursRow{}
+	for rows.Next() {
+		var i ListRunFacts24HoursRow
+		if err := rows.Scan(&i.SubscriptionID, &i.Runs); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
