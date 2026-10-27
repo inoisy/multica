@@ -1325,6 +1325,13 @@ type ModelProfileOption struct {
 	CustomArgs    []byte      `json:"custom_args"`
 }
 
+type ModelTruthBackup struct {
+	Kind    string             `json:"kind"`
+	ID      pgtype.UUID        `json:"id"`
+	Data    []byte             `json:"data"`
+	SavedAt pgtype.Timestamptz `json:"saved_at"`
+}
+
 type NotificationPreference struct {
 	ID          pgtype.UUID        `json:"id"`
 	WorkspaceID pgtype.UUID        `json:"workspace_id"`

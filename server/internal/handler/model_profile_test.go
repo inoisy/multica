@@ -53,7 +53,7 @@ func newModelRig(t *testing.T) *modelRig {
 	}
 	r := &modelRig{t: t, runtimes: map[string]string{}}
 	for name, provider := range map[string]string{"codex-main": "codex", "claude-main": "claude", "glm": "claude"} {
-		r.runtimes[name] = dbfx.Runtime(t, "model "+name, testutil.Cols{"provider": provider, "visibility": "public"})
+		r.runtimes[name] = dbfx.EnvironmentRuntime(t, "model "+name, testutil.Cols{"provider": provider, "visibility": "public"})
 	}
 	dbfx.Cleanup(t, "DELETE FROM model_profile_option WHERE workspace_id=$1", testWorkspaceID)
 	dbfx.Cleanup(t, "DELETE FROM model_profile WHERE workspace_id=$1", testWorkspaceID)
@@ -137,7 +137,10 @@ func TestModelProfileCRUDAndReferences(t *testing.T) {
 	testutil.Call(t, testHandler.SetIssueModelProfile, withURLParam(newRequest("PUT", "/", map[string]any{"model_profile_id": strongID}), "id", issue)).Want(http.StatusOK)
 	r.updateProfile(strongID, map[string]any{"name": "Strong", "options": []map[string]any{r.row("codex-main", "sol", "high")}}).Want(http.StatusOK)
 	del(strongID).Want(http.StatusConflict)
-	r.agentModels(agent, map[string]any{"model_profile_id": nil}).Want(http.StatusOK)
+	// An agent runs on a profile: it cannot be taken off it.
+	r.agentModels(agent, map[string]any{"model_profile_id": nil}).Want(http.StatusBadRequest)
+	del(strongID).Want(http.StatusConflict) // the agent and the open issue still hold it
+	dbfx.Exec(t, "UPDATE agent SET archived_at=now() WHERE id=$1", agent)
 	del(strongID).Want(http.StatusConflict) // the open issue still holds it
 	dbfx.Exec(t, "UPDATE issue SET status='done' WHERE id=$1", issue)
 	del(strongID).Want(http.StatusNoContent)
