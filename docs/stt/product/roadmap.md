@@ -350,6 +350,15 @@ update/creation/deletion/non-fast-forward, **без required_status_checks**.
 Перезапуск обслуживающего рана выполняет независимый механизм. Особые ворота
 релиза и миграций сохраняются; обычное автослияние их не отменяет.
 
+**Операционный блокер 27.10.** GitHub возвращает 422 при dispatch в
+`inoisy/multica`, хотя repository Actions enabled и workflow active.
+По поручению Евгения разбор выполняет Claude по подписке в
+[STT-468](https://multica.yakutov.com/stt/issues/STT-468); фактический запуск
+на `Claude · подписки` подтверждён в 07:10 UTC. Это локальная инфраструктура,
+путь — только у нас. Пока причина не доказана и контрольный запуск не создан,
+Actions и доставку STT-450 считать восстановленными нельзя. Уже собранные
+факты и порядок передачи — [проверка](reviews/2026-10-27-remove-accept.md#чат-с-подписочным-claude-и-отдельный-разбор-actions).
+
 **EPUS, отдельно от РП.** [STT-456] выясняет возможности GitLab Runner Лоции:
 в снимках frontend и configurator только build/deploy, а backend уже вызывает
 PHPUnit на MR с тегом `docker1`. Доступность раннеров, ресурсы, service containers
