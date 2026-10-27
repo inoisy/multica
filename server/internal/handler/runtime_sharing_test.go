@@ -8,8 +8,30 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/multica-ai/multica/server/internal/service"
 	"github.com/multica-ai/multica/server/internal/testutil"
+	"time"
 )
+
+func TestRuntimeRevocationPreservesProfileProjection(t *testing.T) {
+	rtID, ownerID, removedID := runtimeVisibilityFixture(t)
+	dbfx.Exec(t, `UPDATE agent_runtime SET visibility='public' WHERE id=$1`, rtID)
+	agentID := createRuntimePrivacyAgent(t, rtID, removedID, "Profile revocation")
+	profileID := dbfx.Insert(t, "model_profile", testutil.Cols{"workspace_id": testWorkspaceID, "name": "Revocation profile", "owner_agent_id": agentID})
+	dbfx.InsertNoID(t, "model_profile_option", testutil.Cols{"workspace_id": testWorkspaceID, "profile_id": profileID, "runtime_id": rtID, "position": 1, "model": "saved-model", "thinking_level": "high"}, "profile_id = $1", profileID)
+	dbfx.Exec(t, `UPDATE agent SET model_profile_id=$2, model='saved-model', thinking_level='high' WHERE id=$1`, agentID, profileID)
+	runtimePrivacyRequest(t, rtID, ownerID, map[string]any{
+		"expected_nonowner_agent_ids": []string{agentID}, "expected_task_ids": []string{},
+	}).Want(http.StatusOK)
+	agent, err := testHandler.Queries.GetAgent(context.Background(), parseUUID(agentID))
+	if err != nil || uuidToString(agent.RuntimeID) != rtID || agent.Model.String != "saved-model" || agent.ThinkingLevel.String != "high" {
+		t.Fatalf("revocation broke row 1 projection: %+v %v", agent, err)
+	}
+	choice, err := service.PreviewChoice(context.Background(), testHandler.Queries, agent, nil, time.Now())
+	if err != nil || !choice.Waiting() || len(choice.Rows) != 1 || choice.Rows[0].State != service.ModelRowNotPermitted {
+		t.Fatalf("revoked profile may not run: %+v %v", choice, err)
+	}
+}
 
 func runtimeSharingPatch(t *testing.T, runtimeID, actorID string, body map[string]any) *testutil.Response {
 	t.Helper()

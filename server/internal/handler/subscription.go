@@ -729,10 +729,13 @@ func (h *Handler) CreateSubscription(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	taken := map[string]bool{}
+	byKey := map[string]db.Subscription{}
 	for _, s := range existing {
 		taken[s.Key] = true
+		byKey[s.Key] = s
 	}
 	key := strings.TrimSpace(deref(req.Key))
+	explicitKey := key != ""
 	if key == "" {
 		key = deriveSubscriptionKey(title, provider, taken)
 	}
@@ -741,7 +744,7 @@ func (h *Handler) CreateSubscription(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if taken[key] {
-		writeError(w, http.StatusConflict, "a subscription with this key already exists")
+		h.writeExistingSubscription(w, byKey[key], explicitKey, provider, auth)
 		return
 	}
 	if title == "" {
@@ -809,7 +812,13 @@ func (h *Handler) CreateSubscription(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		if isUniqueViolation(err) {
-			writeError(w, http.StatusConflict, "a subscription with this key already exists")
+			// A parallel retry of the same request won the race.
+			current, getErr := h.Queries.GetSubscriptionByKey(r.Context(), key)
+			if getErr != nil {
+				writeError(w, http.StatusConflict, "a subscription with this key already exists")
+				return
+			}
+			h.writeExistingSubscription(w, current, explicitKey, provider, auth)
 			return
 		}
 		slog.Error("CreateSubscription failed", "error", err, "key", key)
@@ -817,6 +826,18 @@ func (h *Handler) CreateSubscription(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, subscriptionToResponse(sub, nil, nil))
+}
+
+// writeExistingSubscription answers a create whose key is taken. A repeat of
+// the same request (same key, provider and sign-in kind) after a partial
+// success returns the account that is already there; anything else is a
+// conflict, so a retry never creates a second account.
+func (h *Handler) writeExistingSubscription(w http.ResponseWriter, sub db.Subscription, explicitKey bool, provider, auth string) {
+	if explicitKey && sub.Provider == provider && sub.Auth == auth {
+		writeJSON(w, http.StatusOK, subscriptionToResponse(sub, nil, nil))
+		return
+	}
+	writeError(w, http.StatusConflict, "a subscription with this key already exists")
 }
 
 func deref(s *string) string {
@@ -1044,6 +1065,10 @@ func (h *Handler) DeleteSubscription(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := qtx.DeleteSubscriptionUsage(r.Context(), sub.ID); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to delete subscription usage")
+		return
+	}
+	if err := qtx.DeleteSubscriptionManualRuns(r.Context(), sub.ID); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to delete manual run journal")
 		return
 	}
 	if err := qtx.DeleteSubscription(r.Context(), sub.ID); err != nil {

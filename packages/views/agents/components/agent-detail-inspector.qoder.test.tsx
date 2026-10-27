@@ -97,10 +97,12 @@ describe("AgentDetailInspector and the Qoder runtime", () => {
     expect(mockInitiateListModels).not.toHaveBeenCalled();
   });
 
-  it("does not offer the Qoder runtime to other agents", () => {
+  it("shows the saved first row of another agent read-only, with no runtime picker", () => {
     renderInspector(claude);
-    expect(picker.props?.canEdit).toBe(true);
-    expect(picker.props?.runtimes.map((r) => r.id)).toEqual(["rt-claude"]);
+    expect(picker.props).toBeNull();
+    expect(screen.queryByTestId("runtime-picker")).toBeNull();
     expect(screen.getByText("Model")).toBeInTheDocument();
+    expect(screen.getByTestId("inspector-saved-row-label").textContent).toBe("rt-claude");
+    expect(screen.getByRole("button", { name: "Change in Models" })).toBeInTheDocument();
   });
 });

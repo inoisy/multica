@@ -12,6 +12,7 @@ import (
 	"github.com/multica-ai/multica/server/internal/testutil"
 	"github.com/multica-ai/multica/server/internal/util"
 	db "github.com/multica-ai/multica/server/pkg/db/generated"
+	"github.com/multica-ai/multica/server/pkg/taskfailure"
 )
 
 // modelClaimRig is a workspace with an owner, four public online runtimes
@@ -640,5 +641,60 @@ func TestStructuredQuotaRefusalStoresCodeAndRetriesWithoutText(t *testing.T) {
 				t.Fatalf("retries %d", n)
 			}
 		})
+	}
+}
+
+// A refusal of sign-in or access is not a quota: the run is not moved to the
+// next row, no runtime is parked, and the reason stays on the failed run.
+func TestAuthFailureDoesNotMoveTheRunToAnotherRow(t *testing.T) {
+	r := newModelClaimRig(t)
+	agent := r.agent("models auth", r.strong)
+	task := r.enqueue(agent, pgtype.UUID{})
+	if r.claim("codex") == nil {
+		t.Fatal("no claim")
+	}
+	failed, err := r.svc.FailTask(r.ctx, task.ID, "401 Unauthorized: invalid api key", "", "", "", "", false, "", "")
+	if err != nil || failed.Status != "failed" {
+		t.Fatalf("fail: %v %+v", err, failed)
+	}
+	if n := r.count("SELECT count(*) FROM agent_task_queue WHERE retry_of_task_id=$1", task.ID); n != 0 {
+		t.Fatalf("an auth failure moved the run to another row: %d retries", n)
+	}
+	if n := r.count("SELECT count(*) FROM runtime_unavailable WHERE runtime_id=$1", r.rt["codex"]); n != 0 {
+		t.Fatalf("an auth failure parked the runtime as if it were a quota: %d", n)
+	}
+	if got := r.task(task.ID).FailureReason.String; got != string(taskfailure.ReasonAgentProviderAuthOrAccess) {
+		t.Fatalf("the reason is on the run: %q", got)
+	}
+}
+
+// Every attempt keeps which row was consulted, which one was rejected and why:
+// the first run chose the first row, the retry shows that row as limited.
+func TestEveryAttemptRecordsTheRejectedRowAndWhy(t *testing.T) {
+	r := newModelClaimRig(t)
+	agent := r.agent("models evidence", r.strong)
+	task := r.enqueue(agent, pgtype.UUID{})
+	if r.claim("codex") == nil {
+		t.Fatal("no claim")
+	}
+	first := choiceOf(t, r.task(task.ID))
+	if first.Chosen == nil || len(first.Rows) < 3 || !first.Rows[0].Chosen {
+		t.Fatalf("first attempt: %+v", first)
+	}
+	if _, err := r.svc.FailTask(r.ctx, task.ID, "You've hit your usage limit. Try again in 2h 5m.", "", "", "", "", false, "", ""); err != nil {
+		t.Fatal(err)
+	}
+	var childID pgtype.UUID
+	r.fx.QueryRow(t, "SELECT id FROM agent_task_queue WHERE retry_of_task_id=$1", task.ID).Scan(&childID)
+	retry := choiceOf(t, r.task(childID))
+	if retry.Chosen == nil || len(retry.Rows) < 3 {
+		t.Fatalf("retry choice: %+v", retry)
+	}
+	rejected := retry.Rows[0]
+	if rejected.Chosen || rejected.State == ModelRowAvailable || rejected.ReasonCode == "" || rejected.Until == nil {
+		t.Fatalf("the rejected row says why and until when: %+v", rejected)
+	}
+	if !retry.Rows[1].Chosen {
+		t.Fatalf("the retry took the next row: %+v", retry.Rows)
 	}
 }

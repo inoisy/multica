@@ -156,7 +156,8 @@
     "runtime_required_toast": "请先绑定运行时，再运行该智能体。",
     "assign_work": "分配工作",
     "more_actions_aria": "智能体操作",
-    "updated": "{{when}}更新"
+    "updated": "{{when}}更新",
+    "model_owned_by_profile_toast": "The runtime, model and thinking level of this agent come from its profile. Change them in Models."
   },
   "inspector": {
     "section_profile": "资料",
@@ -191,7 +192,8 @@
     "description_placeholder": "这个智能体做什么？",
     "save": "保存",
     "cancel": "取消",
-    "model_routed": "运行的模型在下方“模型”部分中选择。"
+    "model_saved_hint": "Row 1 of the saved list. The next run may take another row and the account is chosen at launch: forecast and last run are in Models below.",
+    "model_open_models": "Change in Models"
   },
   "overview": {
     "agent_context": "智能体",
@@ -1043,7 +1045,6 @@
     "profile_none": "No profile",
     "profile_usage": "Editing the profile affects {{agents}} agents and {{issues}} issues.",
     "open_profile": "Open profiles",
-    "now_label": "Now",
     "now_next_run": "What the next run would take",
     "profile_rows": "Models of “{{name}}”",
     "row_primary": "Primary",
@@ -1091,7 +1092,7 @@
     "mode_profile_hint": "多个智能体共用的列表",
     "mode_single": "单一模型",
     "mode_one_hint": "只用此模型，无备选",
-    "mode_fields_hint": "没有配置也没有自有模型：运行使用上方字段中的运行时和模型。",
+    "mode_fields_hint": "No profile and no own model: a run takes the runtime and model from the agent's own fields.",
     "switch_to_profile": "使用配置“{{name}}”",
     "one_title": "智能体模型",
     "one_hint": "无备选：运行时达到上限或离线时，运行会等待重置，并通知所有者。",
@@ -1128,7 +1129,17 @@
     "reason_waiting_why": "所有模型均不可用（{{why}}）——运行等待",
     "reason_fallback_row_why": "第 {{n}} 行不可用（{{why}}）——改用第 {{m}} 行",
     "reset_confirm": "恢复为共用",
-    "unavailable_label": "不可用的运行环境"
+    "unavailable_label": "不可用的运行环境",
+    "model_at_run": "Decided at launch",
+    "setting_label": "Setting",
+    "setting_badge": "saved",
+    "setting_source_profile": "Shared profile “{{name}}”, row 1",
+    "setting_source_personal": "The agent's personal profile, row 1",
+    "setting_source_single": "One model of this agent",
+    "setting_source_fields": "No profile: the agent's own runtime and model",
+    "forecast_label": "Server forecast",
+    "last_label": "Last run",
+    "last_none": "No runs yet"
   },
   "model_profiles": {
     "title": "Profiles",
@@ -1169,7 +1180,8 @@
     "personal_title": "个人配置",
     "personal_empty": "暂无智能体拥有个人配置。",
     "col_agent": "智能体",
-    "col_base": "来源"
+    "col_base": "来源",
+    "delete_blocked": "Cannot delete: {{agents}} agents, {{issues}} open issues and {{profiles}} profiles use it"
   },
   "conveyor": {
     "title": "史诗",
@@ -1225,7 +1237,7 @@
     "saved": "已保存",
     "bad_percent": "上限为 0 到 100 的整数百分比",
     "credential": "主机上的凭据：",
-    "usage_as_of": "{{time}} 的数据",
+    "usage_as_of": "Quota measured {{time}}",
     "limited_banner": "已达智能体上限：{{titles}}。智能体会改用其配置中的下一个模型。",
     "spent_by": "使用方：",
     "spent_by_item": "{{name}}（第 {{position}} 位）",
@@ -1313,7 +1325,6 @@
       "add": "添加账号",
       "add_placeholder": "选择账号…",
       "spend_title": "使用方式",
-      "edit": "组成与顺序",
       "revision": "版本 {{revision}}",
       "moved_on": "编辑期间池已被修改（版本 {{revision}}）。",
       "take_current": "采用当前的池",
@@ -1324,18 +1335,20 @@
       "no_environments": "尚无环境使用此池。授予工作区后会在其中创建环境。",
       "not_found": "该池对你不可见或已被删除。",
       "of_environment": "池“{{name}}”",
-      "workspaces_n_other": "{{count}} 个工作区"
+      "workspaces_n_other": "{{count}} 个工作区",
+      "accounts_elsewhere": "Limits and sign-in of the accounts are on the Accounts tab.",
+      "open_accounts": "Open Accounts"
     },
     "new_pool": {
-      "open": "新建池",
-      "title": "新建池",
+      "open": "Add an environment through accounts",
+      "title": "New environment through accounts",
       "family": "运行的 CLI",
       "name": "名称",
       "name_placeholder": "例如：Claude · 共用",
       "workspaces": "工作区",
       "all_workspaces": "所有工作区，包括新建的",
       "submit": "创建",
-      "done": "已创建池“{{name}}”"
+      "done": "Environment “{{name}}” created"
     },
     "add": {
       "open": "添加订阅",
@@ -1365,15 +1378,6 @@
       "claude_login": "在浏览器已登录此 Claude 账号的电脑上运行 claude setup-token，并粘贴令牌。",
       "key_login": "在提供商控制台中创建密钥并粘贴到这里。",
       "secret_hint": "会发给守护进程并写入主机上的凭据文件（权限 600），不会保存在其他地方。可以留空，稍后在卡片上登录。",
-      "step_spend": "池",
-      "spend_mode": {
-        "existing": "现有池",
-        "new": "新建池",
-        "none": "暂不加入"
-      },
-      "placement": "在顺序中的位置",
-      "placement_last": "最后",
-      "placement_first": "最前",
       "step_caps": "智能体可使用的额度",
       "no_windows": "该提供商没有配额窗口，智能体可用到提供商上限。",
       "submit": "连接",
@@ -1384,27 +1388,7 @@
       "model": "模型",
       "model_hint": "可选。将作为所有级别的默认模型。",
       "model_placeholder": "例如：glm-4.6",
-      "steps_label": "连接步骤",
-      "steps": {
-        "account": "账号与登录",
-        "pool": "加入池",
-        "usage": "使用"
-      },
-      "step_of": "第 {{n}} 步，共 {{total}} 步",
-      "pool_label": "池",
-      "pool_none_hint": "账号保持连接并显示在“无池”中。加入池之前智能体不会使用它。",
-      "no_pool_of_family": "还没有 {{family}} 的池，请新建。",
-      "usage_title": "将在何处使用",
-      "usage_existing": "账号将加入“{{pool}}”。",
-      "usage_envs": "将通过池的环境使用：{{names}}。无需在配置中添加行。",
-      "usage_no_env": "该池尚无环境，授予之前智能体不会使用该账号。",
-      "usage_new": "将用此账号新建池“{{pool}}”。",
-      "usage_new_grant": "被授予的工作区会创建对应环境。",
-      "usage_new_no_grant": "未授予任何工作区，因此不会创建环境。",
-      "usage_running": "进行中的运行保留其账号。",
-      "next": "下一步",
-      "back": "上一步",
-      "stop_here": "不加入池直接连接"
+      "no_pool_note": "The account is not put into a pool here: the pool is composed on the page of the environment that spends it."
     },
     "discrepancies": {
       "title": "不一致",
@@ -1451,7 +1435,21 @@
       "reset": "重置",
       "none": "没有符合筛选条件的项目。"
     },
-    "counted_once": "只计一次，见上方"
+    "counted_once": "只计一次，见上方",
+    "view_only": "View only. Accounts are connected and edited in Environments → Accounts.",
+    "open_accounts": "Open Environments → Accounts",
+    "manual": {
+      "title": "Journal of manual runs",
+      "command_hint": "To run the account's CLI by hand, run this on the daemon host as an instance admin:",
+      "copy": "Copy the command",
+      "unfinished": "not finished",
+      "over_cap": "agent limit was exceeded",
+      "machine": "Machine: {{machine}}",
+      "exit_code": "exit code {{code}}",
+      "load_failed": "The journal is unavailable: only an instance admin reads it.",
+      "empty": "No manual runs yet",
+      "more": "Show more"
+    }
   },
   "verdict": {
     "reason": {
