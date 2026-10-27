@@ -119,8 +119,6 @@ func init() {
 	f.String("credential-path", "", "Credential file on the daemon host (default ~/.config/<key>/...)")
 	f.StringSlice("windows", nil, "Quota windows, e.g. 5h,week")
 	f.StringArray("cap", nil, "Agent cap per window, e.g. --cap 5h=70 (repeatable)")
-	f.Int("reserve", 0, "Deprecated: normalized by the server into agent caps")
-	_ = f.MarkHidden("reserve")
 	f.String("account-group", "", "Account shared with other subscriptions (one usage row)")
 	f.String("settings-json", "", "Non-secret settings as a JSON object (API keys: {\"env\": {...}})")
 	f.Bool("token-stdin", false, "Read the token (claude setup-token) or API key from stdin and sign in right away")
@@ -133,8 +131,6 @@ func init() {
 	u.String("credential-path", "", "New credential file on the daemon host")
 	u.StringSlice("windows", nil, "Quota windows, e.g. 5h,week")
 	u.StringArray("cap", nil, "Agent cap per window, e.g. --cap 5h=70 (repeatable; other windows keep theirs)")
-	u.Int("reserve", 0, "Deprecated: normalized by the server into agent caps")
-	_ = u.MarkHidden("reserve")
 	u.String("account-group", "", "Account shared with other subscriptions")
 	u.String("settings-json", "", "Replace settings with this JSON object")
 	u.String("disable-until", "", "Keep agents off this subscription until this time (RFC 3339, e.g. 2026-10-21T12:00Z)")
@@ -357,14 +353,6 @@ func runSubscriptionAdd(cmd *cobra.Command, args []string) error {
 		}
 		body["caps"] = caps
 	}
-	if cmd.Flags().Changed("reserve") {
-		v, _ := cmd.Flags().GetInt("reserve")
-		if v < 0 || v > 100 {
-			return errors.New("--reserve must be between 0 and 100")
-		}
-		fmt.Fprintln(cmd.ErrOrStderr(), "Warning: --reserve is deprecated; the server normalizes it into --cap=min(cap,100-reserve). Use --cap; people retain 100-cap percent.")
-		body["reserve"] = v
-	}
 	if cmd.Flags().Changed("settings-json") {
 		v, _ := cmd.Flags().GetString("settings-json")
 		settings, err := parseSettingsJSON(v)
@@ -506,14 +494,6 @@ func runSubscriptionUpdate(cmd *cobra.Command, args []string) error {
 			return err
 		}
 		body["caps"] = caps
-	}
-	if cmd.Flags().Changed("reserve") {
-		v, _ := cmd.Flags().GetInt("reserve")
-		if v < 0 || v > 100 {
-			return errors.New("--reserve must be between 0 and 100")
-		}
-		fmt.Fprintln(cmd.ErrOrStderr(), "Warning: --reserve is deprecated; the server normalizes it into --cap=min(cap,100-reserve). Use --cap; people retain 100-cap percent.")
-		body["reserve"] = v
 	}
 	if cmd.Flags().Changed("settings-json") {
 		v, _ := cmd.Flags().GetString("settings-json")

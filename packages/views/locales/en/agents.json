@@ -165,7 +165,8 @@
     "runtime_required_toast": "Bind a runtime before running this agent.",
     "assign_work": "Assign work",
     "more_actions_aria": "Agent actions",
-    "updated": "Updated {{when}}"
+    "updated": "Updated {{when}}",
+    "model_owned_by_profile_toast": "The runtime, model and thinking level of this agent come from its profile. Change them in Models."
   },
   "inspector": {
     "section_profile": "Profile",
@@ -200,7 +201,8 @@
     "description_placeholder": "What does this agent do?",
     "save": "Save",
     "cancel": "Cancel",
-    "model_routed": "The run's model is chosen in the Models section below."
+    "model_saved_hint": "Row 1 of the saved list. The next run may take another row and the account is chosen at launch: forecast and last run are in Models below.",
+    "model_open_models": "Change in Models"
   },
   "overview": {
     "agent_context": "Agent",
@@ -1073,7 +1075,6 @@
     "profile_none": "No profile",
     "profile_usage": "Editing the profile affects {{agents}} agents and {{issues}} issues.",
     "open_profile": "Open profiles",
-    "now_label": "Now",
     "now_next_run": "What the next run would take",
     "profile_rows": "Models of “{{name}}”",
     "row_primary": "Primary",
@@ -1121,7 +1122,7 @@
     "mode_profile_hint": "a list shared by several agents",
     "mode_single": "One model",
     "mode_one_hint": "exactly this model, no fallbacks",
-    "mode_fields_hint": "No profile and no own model: a run takes the runtime and model from the fields above.",
+    "mode_fields_hint": "No profile and no own model: a run takes the runtime and model from the agent's own fields.",
     "switch_to_profile": "Use profile “{{name}}”",
     "one_title": "Agent model",
     "one_hint": "No fallbacks: when the runtime is at its limit or offline, the run waits for the reset and the owner is notified.",
@@ -1158,7 +1159,17 @@
     "reason_waiting_why": "every model unavailable ({{why}}) — the run waits",
     "reason_fallback_row_why": "row {{n}} unavailable ({{why}}) — took row {{m}}",
     "reset_confirm": "Return to shared",
-    "unavailable_label": "Unavailable runtimes"
+    "unavailable_label": "Unavailable runtimes",
+    "model_at_run": "Decided at launch",
+    "setting_label": "Setting",
+    "setting_badge": "saved",
+    "setting_source_profile": "Shared profile “{{name}}”, row 1",
+    "setting_source_personal": "The agent's personal profile, row 1",
+    "setting_source_single": "One model of this agent",
+    "setting_source_fields": "No profile: the agent's own runtime and model",
+    "forecast_label": "Server forecast",
+    "last_label": "Last run",
+    "last_none": "No runs yet"
   },
   "model_profiles": {
     "title": "Profiles",
@@ -1199,7 +1210,8 @@
     "personal_title": "Personal profiles",
     "personal_empty": "No agent has a personal profile.",
     "col_agent": "Agent",
-    "col_base": "Based on"
+    "col_base": "Based on",
+    "delete_blocked": "Cannot delete: {{agents}} agents, {{issues}} open issues and {{profiles}} profiles use it"
   },
   "conveyor": {
     "title": "Epics",
@@ -1255,7 +1267,7 @@
     "saved": "Saved",
     "bad_percent": "The limit is a whole percent from 0 to 100",
     "credential": "Credential on the host:",
-    "usage_as_of": "figures as of {{time}}",
+    "usage_as_of": "Quota measured {{time}}",
     "limited_banner": "At the agents' limit: {{titles}}. Agents move to the next model of their profile.",
     "spent_by": "Spent by:",
     "spent_by_item": "{{name}} (#{{position}})",
@@ -1343,7 +1355,6 @@
       "add": "Add account",
       "add_placeholder": "Pick an account…",
       "spend_title": "How to spend",
-      "edit": "Order and composition",
       "revision": "version {{revision}}",
       "moved_on": "The pool changed while you were editing (version {{revision}}).",
       "take_current": "Take the current pool",
@@ -1355,18 +1366,20 @@
       "not_found": "The pool is not visible to you or was deleted.",
       "of_environment": "Pool “{{name}}”",
       "workspaces_n_one": "{{count}} workspace",
-      "workspaces_n_other": "{{count}} workspaces"
+      "workspaces_n_other": "{{count}} workspaces",
+      "accounts_elsewhere": "Limits and sign-in of the accounts are on the Accounts tab.",
+      "open_accounts": "Open Accounts"
     },
     "new_pool": {
-      "open": "New pool",
-      "title": "New pool",
+      "open": "Add an environment through accounts",
+      "title": "New environment through accounts",
       "family": "Runs on",
       "name": "Name",
       "name_placeholder": "For example, Claude · shared",
       "workspaces": "Workspaces",
       "all_workspaces": "All workspaces, including new ones",
       "submit": "Create",
-      "done": "Pool “{{name}}” created"
+      "done": "Environment “{{name}}” created"
     },
     "add": {
       "open": "Add subscription",
@@ -1396,15 +1409,6 @@
       "claude_login": "On your computer, signed in to this Claude account in the browser, run claude setup-token and paste the token.",
       "key_login": "Create a key in the provider's dashboard and paste it here.",
       "secret_hint": "It goes to the daemon and is written to the credential file on the host (mode 600), nowhere else. Leave it empty to sign in later from the card.",
-      "step_spend": "Pool",
-      "spend_mode": {
-        "existing": "Existing pool",
-        "new": "New pool",
-        "none": "No pool yet"
-      },
-      "placement": "Place in the order",
-      "placement_last": "last",
-      "placement_first": "first",
       "step_caps": "How much agents may use",
       "no_windows": "The provider has no quota windows — agents up to the provider limit.",
       "submit": "Connect",
@@ -1415,27 +1419,7 @@
       "model": "Model",
       "model_hint": "Optional. Becomes the default model for every tier.",
       "model_placeholder": "For example, glm-4.6",
-      "steps_label": "Connection steps",
-      "steps": {
-        "account": "Account and sign-in",
-        "pool": "Add to a pool",
-        "usage": "Use"
-      },
-      "step_of": "Step {{n}} of {{total}}",
-      "pool_label": "Pool",
-      "pool_none_hint": "The account stays connected and is listed under “No pool”. Agents do not spend it until it joins a pool.",
-      "no_pool_of_family": "There is no pool for {{family}} yet — create a new one.",
-      "usage_title": "Where it will be used",
-      "usage_existing": "The account joins “{{pool}}”.",
-      "usage_envs": "It is used through its environments: {{names}}. No profile row needs to be added.",
-      "usage_no_env": "The pool has no environment yet, so agents will not spend the account until one is granted.",
-      "usage_new": "A new pool “{{pool}}” is created with this account.",
-      "usage_new_grant": "A granted workspace gets an environment for it.",
-      "usage_new_no_grant": "It is granted to no workspace, so no environment is created.",
-      "usage_running": "Runs already in progress keep their account.",
-      "next": "Next",
-      "back": "Back",
-      "stop_here": "Connect without a pool"
+      "no_pool_note": "The account is not put into a pool here: the pool is composed on the page of the environment that spends it."
     },
     "discrepancies": {
       "title": "Discrepancies",
@@ -1482,7 +1466,21 @@
       "reset": "Reset",
       "none": "Nothing matches the filters."
     },
-    "counted_once": "counted once, shown above"
+    "counted_once": "counted once, shown above",
+    "view_only": "View only. Accounts are connected and edited in Environments → Accounts.",
+    "open_accounts": "Open Environments → Accounts",
+    "manual": {
+      "title": "Journal of manual runs",
+      "command_hint": "To run the account's CLI by hand, run this on the daemon host as an instance admin:",
+      "copy": "Copy the command",
+      "unfinished": "not finished",
+      "over_cap": "agent limit was exceeded",
+      "machine": "Machine: {{machine}}",
+      "exit_code": "exit code {{code}}",
+      "load_failed": "The journal is unavailable: only an instance admin reads it.",
+      "empty": "No manual runs yet",
+      "more": "Show more"
+    }
   },
   "verdict": {
     "reason": {

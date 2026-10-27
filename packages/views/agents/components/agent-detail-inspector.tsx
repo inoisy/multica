@@ -13,10 +13,7 @@ import {
   AGENT_MAX_CONCURRENT_TASKS_MAX,
   AGENT_MAX_CONCURRENT_TASKS_MIN,
 } from "@multica/core/agents";
-import {
-  isRuntimeUsableForUser,
-  runtimeModelsOptions,
-} from "@multica/core/runtimes";
+import { isRuntimeUsableForUser } from "@multica/core/runtimes";
 import { useConfigStore } from "@multica/core/config";
 import { isImeComposing } from "@multica/core/utils";
 import { useCurrentWorkspace } from "@multica/core/paths";
@@ -38,13 +35,8 @@ import { CharCounter } from "./char-counter";
 import { ConversationStartersEditor } from "./conversation-starters-editor";
 import { NewChatPreview } from "./new-chat-preview";
 import { useConversationStartersFocus } from "./use-conversation-starters-focus";
-import { ModelPicker } from "./inspector/model-picker";
-import {
-  buildModelChangeUpdate,
-  type ModelCatalog,
-} from "./inspector/model-change-cleanup";
 import { RuntimePicker } from "./inspector/runtime-picker";
-import { ThinkingSettingField } from "./inspector/thinking-prop-row";
+import { SavedModelRow } from "./inspector/saved-model-row";
 import { ServiceTierSettingField } from "./inspector/service-tier-setting-field";
 
 interface InspectorProps {
@@ -178,7 +170,6 @@ export function AgentDetailInspector({
   const startersFocus = useConversationStartersFocus(agent.id, showStarters);
   const workspace = useCurrentWorkspace();
   const models = useQuery(agentModelsOptions(workspace?.id ?? "", agent.id));
-  const modelRouted = Boolean(models.data && (models.data.own_list || models.data.model_profile_id));
   const isOnline = runtime?.status === "online";
   const canReadRuntime =
     runtime != null && isRuntimeUsableForUser(runtime, currentUserId);
@@ -190,35 +181,6 @@ export function AgentDetailInspector({
         ? runtimes
         : runtimes.filter((r) => r.provider !== "qoder_cloud"),
     [qoderRuntime, runtimes],
-  );
-
-  // Same query the Thinking / Speed fields already use, so switching model
-  // costs no extra request. `null` = not authoritative (offline runtime, still
-  // loading, or discovery failed) and must not trigger any clearing.
-  const modelsQuery = useQuery(
-    runtimeModelsOptions(canDiscoverRuntimeModels ? agent.runtime_id : null),
-  );
-  const modelCatalog = useMemo<ModelCatalog>(
-    () =>
-      modelsQuery.isSuccess
-        ? modelsQuery.data.supported
-          ? modelsQuery.data.models
-          : []
-        : null,
-    [modelsQuery.data, modelsQuery.isSuccess],
-  );
-  const handleModelChange = useCallback(
-    (model: string) =>
-      update(
-        buildModelChangeUpdate({
-          provider: runtime?.provider ?? "",
-          model,
-          thinkingLevel: agent.thinking_level ?? "",
-          serviceTier: agent.service_tier ?? "",
-          catalog: modelCatalog,
-        }),
-      ),
-    [agent.service_tier, agent.thinking_level, modelCatalog, runtime?.provider, update],
   );
 
   return (
@@ -339,81 +301,43 @@ export function AgentDetailInspector({
             }
           >
             <SettingsCard>
-              {modelRouted && !qoderRuntime ? (
-                <SettingsRow label={t(($) => $.inspector.prop_model)} size="text">
-                  <p className="text-caption text-muted-foreground" data-testid="inspector-model-routed">
-                    {t(($) => $.inspector.model_routed)}
-                  </p>
+              {qoderRuntime ? (
+                <SettingsRow
+                  label={t(($) => $.inspector.prop_runtime)}
+                  size="select-wide"
+                >
+                  <RuntimePicker
+                    variant="field"
+                    showLabel={false}
+                    value={agent.runtime_id}
+                    runtimes={runtimeOptions}
+                    members={members}
+                    currentUserId={currentUserId}
+                    canEdit={false}
+                    onChange={() => undefined}
+                  />
                 </SettingsRow>
               ) : (
                 <>
                   <SettingsRow
-                    label={t(($) => $.inspector.prop_runtime)}
-                    size="select-wide"
+                    label={t(($) => $.inspector.prop_model)}
+                    size="text"
+                    align="start"
                   >
-                    <RuntimePicker
-                      variant="field"
-                      showLabel={false}
-                      value={agent.runtime_id}
-                      runtimes={runtimeOptions}
-                      members={members}
-                      currentUserId={currentUserId}
-                      canEdit={canEdit && !qoderRuntime}
-                      // Model, thinking level, and service tier are runtime/model
-                      // native. Clear them together so the new runtime resolves its
-                      // own defaults instead of inheriting incompatible tokens.
-                      onChange={(id) =>
-                        update({
-                          runtime_id: id,
-                          model: "",
-                          thinking_level: "",
-                          service_tier: "",
-                        })
-                      }
-                    />
+                    <SavedModelRow agent={agent} runtime={runtime} models={models.data} />
                   </SettingsRow>
-                  {qoderRuntime ? null : (
-                    <>
-                      <SettingsRow
-                        label={t(($) => $.inspector.prop_model)}
-                        size="select-wide"
-                      >
-                        <ModelPicker
-                          variant="field"
-                          showLabel={false}
-                          runtimeId={agent.runtime_id}
-                          runtimeOnline={canDiscoverRuntimeModels}
-                          value={agent.model ?? ""}
-                          canEdit={canEdit}
-                          onChange={handleModelChange}
-                        />
-                      </SettingsRow>
-                      <ThinkingSettingField
-                        label={t(($) => $.inspector.prop_thinking)}
-                        runtimeId={agent.runtime_id}
-                        runtimeOnline={canDiscoverRuntimeModels}
-                        provider={runtime?.provider ?? ""}
-                        model={agent.model ?? ""}
-                        value={agent.thinking_level ?? ""}
-                        canEdit={canEdit}
-                        onChange={(thinkingLevel) =>
-                          update({ thinking_level: thinkingLevel })
-                        }
-                      />
-                      <ServiceTierSettingField
-                        label={t(($) => $.inspector.prop_speed)}
-                        runtimeId={agent.runtime_id}
-                        runtimeOnline={canDiscoverRuntimeModels}
-                        provider={runtime?.provider ?? ""}
-                        model={agent.model ?? ""}
-                        value={agent.service_tier ?? ""}
-                        canEdit={canEdit}
-                        onChange={(serviceTier) =>
-                          update({ service_tier: serviceTier })
-                        }
-                      />
-                    </>
-                  )}
+                  <ServiceTierSettingField
+                    label={t(($) => $.inspector.prop_speed)}
+                    runtimeId={agent.runtime_id}
+                    runtimeOnline={canDiscoverRuntimeModels}
+                    provider={runtime?.provider ?? ""}
+                    model={agent.model ?? ""}
+                    value={agent.service_tier ?? ""}
+                    canEdit={canEdit}
+                    onChange={(serviceTier) =>
+                      update({ service_tier: serviceTier })
+                    }
+                  />
                 </>
               )}
               <SettingsRow

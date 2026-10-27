@@ -349,17 +349,3 @@ func TestRuntimeModelUsageListsEveryReference(t *testing.T) {
 	}
 	_ = plainID
 }
-
-func TestProfileEditLeavesTheAcceptCarrierAlone(t *testing.T) {
-	r := newModelClaimRig(t)
-	carrier := r.acceptCarrier()
-	before := r.fieldsOf(carrier)
-	r.saveProfile(r.strong, "Strong", "", "glm:glm")
-	if got := r.fieldsOf(carrier); got != before || r.refetch(carrier).ModelProfileID.Valid {
-		t.Fatalf("the accept carrier changed: %s → %s", before, got)
-	}
-	c, err := PreviewChoice(r.ctx, r.q, carrier, nil, time.Now())
-	if err != nil || c.Source != ModelSourceAgentFields || c.RuntimeID() != r.rt["accept"] {
-		t.Fatalf("accept forecast: %+v %v", c, err)
-	}
-}

@@ -1,5 +1,5 @@
 import type { ModelChoice, ModelRowState } from "@multica/core/types";
-import { modelRowLabel } from "@multica/core/model-profiles";
+import { compactModelRows, modelRowLabel } from "@multica/core/model-profiles";
 import { useT } from "../i18n";
 import { useAvailabilityText } from "./availability-text";
 import { formatModelTime } from "./format-time";
@@ -75,9 +75,12 @@ export function useModelText() {
         return row.state;
     }
   };
+  const atRun = t(($) => $.models.model_at_run);
+  const rowLabel = (row: Parameters<typeof modelRowLabel>[0]) => modelRowLabel(row, atRun);
+  const compact = (rows: ModelRowState[]) => compactModelRows(rows, atRun);
   const chosen = (choice: ModelChoice) => {
     const row = choice.rows.find((r) => r.chosen);
-    return row ? modelRowLabel(row) : "";
+    return row ? rowLabel(row) : "";
   };
-  return { source, reason, state, chosen };
+  return { source, reason, state, chosen, rowLabel, compact, atRun };
 }

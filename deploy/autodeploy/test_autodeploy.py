@@ -45,6 +45,15 @@ class MigrationTests(unittest.TestCase):
         self.assertEqual(len(problems), 3)
         self.assertIn("DROP TABLE", problems[0])
 
+    def test_legacy_cleanup_migration_stops_the_autodeploy(self):
+        name = "617_drop_legacy_model_schema.up.sql"
+        content = (HERE.parent.parent / "server" / "migrations" / name).read_text()
+        problems, added = ad.classify_migrations([{"filename": f"server/migrations/{name}", "status": "added", "content": content}])
+        self.assertEqual(added, [f"server/migrations/{name}"])
+        self.assertEqual(len(problems), 1)
+        for statement in ("DROP TABLE", "ALTER TABLE", "DELETE FROM"):
+            self.assertIn(statement, problems[0])
+
     def test_comment_only_destructive_text_is_ignored(self):
         self.assertEqual(ad.destructive_statements("/* DROP TABLE x */ SELECT 1; -- TRUNCATE y"), [])
 

@@ -1514,8 +1514,7 @@
       "member": "Membre",
       "project_lead": "Responsable du projet",
       "creator": "Créateur de la tâche",
-      "project_lead_named": "{{name}} (responsable du projet)",
-      "accept": "Acceptation automatique"
+      "project_lead_named": "{{name}} (responsable du projet)"
     },
     "settings": {
       "title": "Workflows",
@@ -1712,7 +1711,6 @@
       "mode_member": "Confier à un membre",
       "mode_member_hint": "Change l’assigné ; rien ne s’exécute",
       "project_lead_hint": "Si le responsable du projet est un agent, il démarre une exécution.",
-      "accept_hint": "Fusionne le commit épinglé par l’étape précédente une fois les vérifications du dépôt réussies, puis passe la tâche à la colonne suivante. En cas d’échec, la renvoie en arrière.",
       "pick_agent": "Choisir un agent",
       "pick_member": "Choisir un membre",
       "search_agents": "Rechercher des agents",

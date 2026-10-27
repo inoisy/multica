@@ -6,11 +6,9 @@ import { X } from "lucide-react";
 import { toast } from "sonner";
 import type {
   Agent,
-  AgentModelChoiceEntry,
   AgentModels as AgentModelsData,
   AgentRuntime,
   MemberWithUser,
-  ModelChoice,
   ModelOptionInput,
   ModelRowState,
 } from "@multica/core/types";
@@ -19,7 +17,6 @@ import { useWorkspacePaths } from "@multica/core/paths";
 import {
   agentModelsOptions,
   modelProfileListOptions,
-  modelRowLabel,
   toModelOptionInputs,
   useAgentPersonalProfile,
   useUpdateAgentModels,
@@ -45,6 +42,8 @@ import { ModelRowsEditor } from "../../model-profiles/model-rows-editor";
 import { formatModelTime, useModelText } from "../../model-profiles/model-text";
 import { PersonalRowsList, ProfileDiffBadge } from "../../model-profiles/profile-diff";
 import { ResetPersonalDialog } from "../../model-profiles/reset-personal-dialog";
+import { AGENT_MODELS_ANCHOR } from "./agent-models-anchor";
+import { savedFirstRow } from "./inspector/saved-model-row";
 
 const NO_PROFILE = "none";
 
@@ -129,12 +128,8 @@ export function AgentModels({
     ...(profiles.data ?? []).map((p) => ({ value: p.id, label: p.name })),
   ];
   const profileName = (id: string | null) => (profiles.data ?? []).find((p) => p.id === id)?.name ?? "";
-  // "Now" is the row the last run got; with no run yet, what the next one
-  // would take. Runs that wait for a free model are listed under it.
-  const current: { choice: ModelChoice; entry: AgentModelChoiceEntry | null } = data.last?.choice
-    ? { choice: data.last.choice, entry: data.last }
-    : { choice: data.preview, entry: null };
   const mode: SourceMode = data.mode;
+  const saved = savedFirstRow(data);
   const shown: SourceMode = pending ?? mode;
   const sharedId = mode === "profile" ? data.model_profile_id : data.base_profile_id;
   const sharedName = mode === "profile" ? data.profile_name : data.base_profile_name;
@@ -203,31 +198,36 @@ export function AgentModels({
     );
 
   return (
+    <div id={AGENT_MODELS_ANCHOR} tabIndex={-1} className="scroll-mt-6 outline-none">
     <SettingsSection title={t(($) => $.models.title)}>
       <SettingsCard>
-        <SettingsRow label={t(($) => $.models.now_label)} size="text" align="start">
-          <div className="space-y-0.5 text-body" data-testid="agent-models-now">
+        <SettingsRow label={t(($) => $.models.setting_label)} size="text" align="start">
+          <div className="space-y-0.5 text-body" data-testid="agent-models-setting">
             <p className="flex flex-wrap items-center gap-2 font-medium">
-              <span>{text.chosen(current.choice) || "—"}</span>
-              <Badge variant="outline">{current.entry ? t(($) => $.models.fact_badge) : t(($) => $.models.forecast_badge)}</Badge>
+              <span className="break-words font-mono">{saved ? text.rowLabel(saved) : "—"}</span>
+              <Badge variant="outline">{t(($) => $.models.setting_badge)}</Badge>
             </p>
             <p className="text-caption text-muted-foreground">
-              {text.source(current.choice, current.entry?.issue_identifier)} · {text.reason(current.choice)}
+              {mode === "profile"
+                ? t(($) => $.models.setting_source_profile, { name: data.profile_name })
+                : mode === "personal"
+                  ? t(($) => $.models.setting_source_personal)
+                  : mode === "single"
+                    ? t(($) => $.models.setting_source_single)
+                    : t(($) => $.models.setting_source_fields)}
             </p>
-            {current.entry ? (
-              <>
-                <p className="text-caption text-muted-foreground">
-                  {current.entry.issue_identifier ? `${current.entry.issue_identifier} · ` : ""}
-                  {formatModelTime(current.entry.created_at)}
-                </p>
-                <p className="text-caption" data-testid="agent-models-account">
-                  <span className="text-muted-foreground">{t(($) => $.models.account_label)}: </span>
-                  <AccountFactLine fact={current.entry.account_fact} />
-                </p>
-              </>
-            ) : (
-              <p className="text-caption text-muted-foreground">{t(($) => $.models.now_next_run)}</p>
-            )}
+          </div>
+        </SettingsRow>
+        <SettingsRow label={t(($) => $.models.forecast_label)} size="text" align="start">
+          <div className="space-y-0.5 text-body" data-testid="agent-models-forecast">
+            <p className="flex flex-wrap items-center gap-2 font-medium">
+              <span className="break-words font-mono">{text.chosen(data.preview) || "—"}</span>
+              <Badge variant="outline">{t(($) => $.models.forecast_badge)}</Badge>
+            </p>
+            <p className="text-caption text-muted-foreground">
+              {text.source(data.preview)} · {text.reason(data.preview)}
+            </p>
+            <p className="text-caption text-muted-foreground">{t(($) => $.models.now_next_run)}</p>
             {data.waiting.map((entry) =>
               entry.choice ? (
                 <p key={entry.task_id} className="text-caption text-destructive">
@@ -235,6 +235,31 @@ export function AgentModels({
                   {text.reason(entry.choice)}
                 </p>
               ) : null,
+            )}
+          </div>
+        </SettingsRow>
+        <SettingsRow label={t(($) => $.models.last_label)} size="text" align="start">
+          <div className="space-y-0.5 text-body" data-testid="agent-models-last">
+            {data.last?.choice ? (
+              <>
+                <p className="flex flex-wrap items-center gap-2 font-medium">
+                  <span className="break-words font-mono">{text.chosen(data.last.choice) || "—"}</span>
+                  <Badge variant="outline">{t(($) => $.models.fact_badge)}</Badge>
+                </p>
+                <p className="text-caption text-muted-foreground">
+                  {text.source(data.last.choice, data.last.issue_identifier)} · {text.reason(data.last.choice)}
+                </p>
+                <p className="text-caption text-muted-foreground">
+                  {data.last.issue_identifier ? `${data.last.issue_identifier} · ` : ""}
+                  {formatModelTime(data.last.created_at)}
+                </p>
+                <p className="text-caption" data-testid="agent-models-account">
+                  <span className="text-muted-foreground">{t(($) => $.models.account_label)}: </span>
+                  <AccountFactLine fact={data.last.account_fact} />
+                </p>
+              </>
+            ) : (
+              <p className="text-caption text-muted-foreground">{t(($) => $.models.last_none)}</p>
             )}
           </div>
         </SettingsRow>
@@ -353,7 +378,7 @@ export function AgentModels({
                   <span className="w-16 shrink-0 text-caption text-muted-foreground">
                     {index === 0 ? t(($) => $.models.row_primary) : t(($) => $.models.row_n, { n: index + 1 })}
                   </span>
-                  <span className="min-w-0 flex-1 truncate">{modelRowLabel(row)}</span>
+                  <span className="min-w-0 flex-1 truncate">{text.rowLabel(row)}</span>
                   <Badge variant={rowBadgeVariant(row)}>{text.state(row)}</Badge>
                   {data.preview.source === "agent_profile" && data.preview.profile_id === data.model_profile_id && data.preview.position === row.position ? (
                     <Badge>{t(($) => $.models.current)}</Badge>
@@ -454,7 +479,7 @@ export function AgentModels({
               <ol className="space-y-1.5" data-testid="agent-models-own">
                 {data.personal_rows.slice(0, 1).map((row) => (
                   <li key={row.position} className="flex flex-wrap items-center gap-2 text-body">
-                    <span className="min-w-0 flex-1 truncate">{modelRowLabel(row)}</span>
+                    <span className="min-w-0 flex-1 truncate">{text.rowLabel(row)}</span>
                     {row.state ? <Badge variant={rowBadgeVariant(row)}>{text.state(row)}</Badge> : null}
                   </li>
                 ))}
@@ -596,5 +621,6 @@ export function AgentModels({
         </SettingsCard>
       ) : null}
     </SettingsSection>
+    </div>
   );
 }

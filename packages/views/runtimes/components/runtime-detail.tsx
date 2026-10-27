@@ -29,6 +29,7 @@ import {
   useWorkspacePresenceMap,
 } from "@multica/core/agents";
 import { useWorkspacePaths } from "@multica/core/paths";
+import { runtimeModelUsageOptions } from "@multica/core/runtimes/queries";
 import { Button } from "@multica/ui/components/ui/button";
 import {
   Tooltip,
@@ -47,7 +48,8 @@ import { RuntimeAccessEditor, RuntimeAccessReadout } from "./runtime-access-edit
 import { DeleteRuntimeProfileDialog } from "./delete-runtime-profile-dialog";
 import { runtimeRowLabel } from "./runtime-machines";
 import { useT, useTimeAgo } from "../../i18n";
-import { PoolAccountsSection } from "../../subscriptions";
+import { PoolAccountsSection } from "../accounts";
+import { RuntimeModelFacts } from "./runtime-model-facts";
 
 function getCliVersion(metadata: Record<string, unknown>): string | null {
   if (
@@ -129,8 +131,12 @@ export function RuntimeDetail({
     ? isAdmin && !!runtimeProfile
     : canEditRuntime;
 
-  const servingAgents = agents.filter(
-    (a) => a.runtime_id === runtime.id && !a.archived_at,
+  // Who the environment serves is decided by the rows of the profiles that
+  // select it, not by the agent's projected first row.
+  const usage = useQuery(runtimeModelUsageOptions(runtime.id));
+  const servingIds = usage.data ? new Set(usage.data.serving_agents.map((agent) => agent.id)) : null;
+  const servingAgents = agents.filter((a) =>
+    !a.archived_at && (servingIds ? servingIds.has(a.id) : a.runtime_id === runtime.id),
   );
 
   const deleteDestination = afterDeleteHref ?? paths.runtimes();
@@ -170,9 +176,9 @@ export function RuntimeDetail({
         }
         actions={
           !canEditRuntime ? (
-            <span className="inline-flex items-center gap-1 text-caption text-muted-foreground">
-              <Lock className="h-3 w-3" />
-              {t(($) => $.detail.read_only)}
+            <span className="inline-flex items-center gap-1 text-caption text-muted-foreground" title={t(($) => $.detail.read_only)}>
+              <Lock className="h-3 w-3" aria-hidden="true" />
+              <span className="sr-only sm:not-sr-only">{t(($) => $.detail.read_only)}</span>
             </span>
           ) : null
         }
@@ -195,6 +201,7 @@ export function RuntimeDetail({
               cliVersion={cliVersion}
               daemonShort={daemonShort}
             />
+            {canReadRuntime && <RuntimeModelFacts runtime={runtime} profile={runtimeProfile} />}
             {canReadRuntime && <PoolAccountsSection poolId={runtimeProfile?.pool_id} />}
             {canReadRuntime && <UsageSection runtime={runtime} />}
           </div>

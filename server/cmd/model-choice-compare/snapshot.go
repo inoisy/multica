@@ -202,9 +202,8 @@ func collect(ctx context.Context, tx pgx.Tx, ws pgtype.UUID, now time.Time) (sna
 		})
 	}
 
-	// Workflow steps that hand an issue to an agent, a squad's leader or the
-	// workspace's acceptance carrier: the agent's answer on an issue entering
-	// the step.
+	// Workflow steps that hand an issue to an agent or a squad's leader: the
+	// agent's answer on an issue entering the step.
 	workflows, err := c.q.ListIssueWorkflows(ctx, ws)
 	if err != nil {
 		return snapshot{}, err
@@ -320,16 +319,6 @@ func (c *collector) stepAgent(ctx context.Context, h issueworkflow.Handler) (str
 			return "", err
 		}
 		return util.UUIDToString(leader), nil
-	case issueworkflow.HandlerAccept:
-		var id pgtype.UUID
-		err := c.tx.QueryRow(ctx, `SELECT id FROM agent WHERE workspace_id = $1 AND kind = 'system' AND system_key = 'accept' ORDER BY created_at LIMIT 1`, c.ws).Scan(&id)
-		if errors.Is(err, pgx.ErrNoRows) {
-			return "", nil
-		}
-		if err != nil {
-			return "", err
-		}
-		return util.UUIDToString(id), nil
 	}
 	return "", nil
 }

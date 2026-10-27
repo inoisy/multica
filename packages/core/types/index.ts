@@ -368,6 +368,11 @@ export type {
   SingleModelInput, UpdateAgentModelsInput,
 } from "./model-profile";
 export { AGENT_MODEL_MODES, REASON_CODES } from "./model-profile";
+export type {
+  KnownSelectionState, ManualRun, ManualRunList, RunFacts, RuntimeModelUsage, RuntimeProfileRef, RuntimeRunFacts,
+  RuntimeServingAgent, SelectionState,
+} from "./runtime-model";
+export { SELECTION_STATES } from "./runtime-model";
 export type { IssueStageDispatch, StageDispatchEpic } from "./stage-dispatch";
 export type {
   AvailabilityVerdict, CreatePoolInput, CreateSubscriptionInput, DeleteSubscriptionResult, Pool, PoolAccount,

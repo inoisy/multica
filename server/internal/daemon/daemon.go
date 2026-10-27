@@ -193,7 +193,7 @@ func taskMulticaEnvironment(task Task, provider, agentName, token, configRoot, w
 		"TMP":                  tempDir,
 		"TEMP":                 tempDir,
 	}
-	// The issue the run serves; the accept runtime needs it to find the route.
+	// The issue the run serves, for the multica CLI the run calls.
 	if task.IssueID != "" {
 		env["MULTICA_ISSUE_ID"] = task.IssueID
 	}

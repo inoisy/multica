@@ -57,7 +57,6 @@ func newModelRig(t *testing.T) *modelRig {
 	}
 	dbfx.Cleanup(t, "DELETE FROM model_profile_option WHERE workspace_id=$1", testWorkspaceID)
 	dbfx.Cleanup(t, "DELETE FROM model_profile WHERE workspace_id=$1", testWorkspaceID)
-	dbfx.Cleanup(t, "DELETE FROM agent_model_option WHERE workspace_id=$1", testWorkspaceID)
 	dbfx.Cleanup(t, "DELETE FROM runtime_unavailable WHERE workspace_id=$1", testWorkspaceID)
 	dbfx.Cleanup(t, "UPDATE issue SET model_profile_id=NULL WHERE workspace_id=$1", testWorkspaceID)
 	dbfx.Cleanup(t, "UPDATE agent SET model_profile_id=NULL WHERE workspace_id=$1", testWorkspaceID)

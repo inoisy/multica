@@ -36,7 +36,6 @@ import (
 const (
 	HandlerNone        = "none"
 	HandlerAgent       = "agent"
-	HandlerAccept      = "accept"
 	HandlerSquad       = "squad"
 	HandlerMember      = "member"
 	HandlerProjectLead = "project_lead"
@@ -182,7 +181,7 @@ type Definition struct {
 // HandsOff reports whether entering the step reassigns the issue.
 func (s Step) HandsOff() bool {
 	switch s.Handler.Type {
-	case HandlerAgent, HandlerAccept, HandlerSquad, HandlerMember, HandlerProjectLead, HandlerCreator:
+	case HandlerAgent, HandlerSquad, HandlerMember, HandlerProjectLead, HandlerCreator:
 		return true
 	}
 	return false
@@ -503,7 +502,7 @@ func ValidateHandoff(s Step, def Definition) error {
 		return invalid("status %q is not part of this workflow", s.StatusKey)
 	}
 	switch s.Handler.Type {
-	case HandlerNone, HandlerProjectLead, HandlerAccept:
+	case HandlerNone, HandlerProjectLead:
 	case HandlerAgent, HandlerMember:
 		if s.Handler.ID == "" {
 			return invalid("choose a %s to hand off to", s.Handler.Type)

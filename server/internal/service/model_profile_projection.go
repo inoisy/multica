@@ -19,6 +19,30 @@ func projectProfileOnAgents(ctx context.Context, q *db.Queries, workspaceID, pro
 	return err
 }
 
+// RestoreAgentModelProjections keeps access revocation from becoming a second
+// writer of model settings. Revoked rows stay visible in the saved profile;
+// the choice's permission gate prevents their use.
+func RestoreAgentModelProjections(ctx context.Context, q *db.Queries, agents []db.Agent) ([]db.Agent, error) {
+	seen := map[pgtype.UUID]bool{}
+	for _, a := range agents {
+		if a.ModelProfileID.Valid && !seen[a.ModelProfileID] {
+			if err := projectProfileOnAgents(ctx, q, a.WorkspaceID, a.ModelProfileID); err != nil {
+				return nil, err
+			}
+			seen[a.ModelProfileID] = true
+		}
+	}
+	out := make([]db.Agent, len(agents))
+	for i, a := range agents {
+		var err error
+		out[i], err = q.GetAgent(ctx, a.ID)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
+}
+
 // setAgentProfile points the agent at the profile and projects its row 1; the
 // returned agent carries both.
 func setAgentProfile(ctx context.Context, q *db.Queries, agent db.Agent, profileID pgtype.UUID) (db.Agent, error) {
