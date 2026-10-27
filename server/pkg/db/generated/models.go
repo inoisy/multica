@@ -82,16 +82,6 @@ type AgentMcpServer struct {
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
-type AgentModelOption struct {
-	WorkspaceID   pgtype.UUID `json:"workspace_id"`
-	AgentID       pgtype.UUID `json:"agent_id"`
-	Position      int32       `json:"position"`
-	RuntimeID     pgtype.UUID `json:"runtime_id"`
-	Model         string      `json:"model"`
-	ThinkingLevel string      `json:"thinking_level"`
-	CustomArgs    []byte      `json:"custom_args"`
-}
-
 type AgentRuntime struct {
 	ID             pgtype.UUID        `json:"id"`
 	WorkspaceID    pgtype.UUID        `json:"workspace_id"`
@@ -1325,13 +1315,6 @@ type ModelProfileOption struct {
 	CustomArgs    []byte      `json:"custom_args"`
 }
 
-type ModelTruthBackup struct {
-	Kind    string             `json:"kind"`
-	ID      pgtype.UUID        `json:"id"`
-	Data    []byte             `json:"data"`
-	SavedAt pgtype.Timestamptz `json:"saved_at"`
-}
-
 type NotificationPreference struct {
 	ID          pgtype.UUID        `json:"id"`
 	WorkspaceID pgtype.UUID        `json:"workspace_id"`
@@ -1524,10 +1507,6 @@ type RuntimeProfile struct {
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 	RuntimeType    string             `json:"runtime_type"`
-	Subscriptions  []byte             `json:"subscriptions"`
-	SpendOrder     string             `json:"spend_order"`
-	ShareKey       pgtype.Text        `json:"share_key"`
-	AllWorkspaces  bool               `json:"all_workspaces"`
 	PoolID         pgtype.UUID        `json:"pool_id"`
 }
 
@@ -1639,7 +1618,6 @@ type Subscription struct {
 	CredentialPath string             `json:"credential_path"`
 	Windows        []byte             `json:"windows"`
 	Caps           []byte             `json:"caps"`
-	Reserve        int32              `json:"reserve"`
 	Settings       []byte             `json:"settings"`
 	AccountGroup   string             `json:"account_group"`
 	DisabledUntil  pgtype.Timestamptz `json:"disabled_until"`
@@ -1658,13 +1636,6 @@ type SubscriptionHostState struct {
 	CheckedAt       pgtype.Timestamptz `json:"checked_at"`
 }
 
-type SubscriptionLimitBackup struct {
-	ID      pgtype.UUID        `json:"id"`
-	Caps    []byte             `json:"caps"`
-	Reserve int32              `json:"reserve"`
-	SavedAt pgtype.Timestamptz `json:"saved_at"`
-}
-
 type SubscriptionManualRun struct {
 	ID               pgtype.UUID        `json:"id"`
 	SubscriptionID   pgtype.UUID        `json:"subscription_id"`
@@ -1678,17 +1649,16 @@ type SubscriptionManualRun struct {
 }
 
 type SubscriptionPool struct {
-	ID             pgtype.UUID        `json:"id"`
-	Name           string             `json:"name"`
-	RuntimeType    string             `json:"runtime_type"`
-	Description    string             `json:"description"`
-	SpendOrder     string             `json:"spend_order"`
-	AllWorkspaces  bool               `json:"all_workspaces"`
-	Revision       int32              `json:"revision"`
-	LegacyShareKey pgtype.Text        `json:"legacy_share_key"`
-	CreatedBy      pgtype.UUID        `json:"created_by"`
-	CreatedAt      pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	ID            pgtype.UUID        `json:"id"`
+	Name          string             `json:"name"`
+	RuntimeType   string             `json:"runtime_type"`
+	Description   string             `json:"description"`
+	SpendOrder    string             `json:"spend_order"`
+	AllWorkspaces bool               `json:"all_workspaces"`
+	Revision      int32              `json:"revision"`
+	CreatedBy     pgtype.UUID        `json:"created_by"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
 }
 
 type SubscriptionPoolGrant struct {

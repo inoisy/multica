@@ -36,7 +36,6 @@ const (
 	UnavailableProviderLimit   = protocol.AccountRefusalProviderLimit // a run failed on a provider quota
 	UnavailableAgentCapRefusal = protocol.AccountRefusalAgentCap      // the daemon refused on the agent limit
 	UnavailableDisabledRefusal = protocol.AccountRefusalDisabled      // the daemon refused: every account is off
-	UnavailablePoolVerdict     = "pool_verdict"                       // moved from the old stored verdict; never read
 	UnavailableUnknown         = "unknown"                            // no mark; read as a provider limit
 )
 
