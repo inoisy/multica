@@ -617,68 +617,6 @@ func TestStaleLocalRefusalIsLiftedByAUsableAccount(t *testing.T) {
 	}
 }
 
-// acceptCarrier is the server's hidden accept agent on a runtime of the
-// daemon's model-free accept provider.
-func (r *modelClaimRig) acceptCarrier() db.Agent {
-	r.t.Helper()
-	if _, ok := r.rt["accept"]; !ok {
-		r.rt["accept"] = r.fx.Runtime(r.t, "models-accept", testutil.Cols{"provider": "accept", "visibility": "public"})
-	}
-	id := r.fx.Agent(r.t, "Приёмка", r.rt["accept"], testutil.Cols{"runtime_mode": "local", "kind": "system", "system_key": "accept"})
-	agent, err := r.q.GetAgent(r.ctx, util.MustParseUUID(id))
-	if err != nil {
-		r.t.Fatal(err)
-	}
-	return agent
-}
-
-// Acceptance runs no model (STT-358): the issue's profile must not route an
-// accept run onto a model runtime, where it would run as a prompt and fail on
-// the provider's capacity.
-func TestModelChoiceLeavesAcceptOnItsRuntime(t *testing.T) {
-	r := newModelClaimRig(t)
-	carrier := r.acceptCarrier()
-
-	task := r.enqueue(carrier, r.strong)
-	if r.runtimeOf(task) != "accept" || task.ModelChoice != nil {
-		t.Fatalf("accept run routed to %s with choice %s", r.runtimeOf(task), task.ModelChoice)
-	}
-	if n, err := r.svc.SweepModelRouting(r.ctx); err != nil || n != 0 {
-		t.Fatalf("sweep moved %d accept runs: %v", n, err)
-	}
-	if got := r.claim("codex"); got != nil {
-		t.Fatalf("codex took the accept run: %v", got.ID)
-	}
-	claimed := r.claim("accept")
-	if claimed == nil || claimed.ID != task.ID || claimed.ModelChoice != nil || claimed.ModelPosition.Valid {
-		t.Fatalf("accept claim: %+v", claimed)
-	}
-	choice, err := PreviewChoice(r.ctx, r.q, carrier, nil, time.Now())
-	if err != nil || choice.Source != ModelSourceAgentFields || choice.RuntimeID() != r.rt["accept"] {
-		t.Fatalf("preview of the accept agent: %+v, %v", choice, err)
-	}
-}
-
-// An accept run routed onto a model runtime before the fix goes back to the
-// accept runtime instead of starting there.
-func TestModelChoiceReturnsAStrayAcceptRun(t *testing.T) {
-	r := newModelClaimRig(t)
-	carrier := r.acceptCarrier()
-	task := r.enqueue(carrier, r.strong)
-	r.fx.Exec(t, `UPDATE agent_task_queue SET runtime_id = $2, model_choice = '{"source":"issue_profile"}'::jsonb WHERE id = $1`, task.ID, r.rt["codex"])
-
-	if got := r.claim("codex"); got != nil {
-		t.Fatalf("codex ran the stray accept run: %v", got.ID)
-	}
-	task = r.task(task.ID)
-	if r.runtimeOf(task) != "accept" || task.ModelChoice != nil || task.Status != "queued" {
-		t.Fatalf("stray accept run: on %s, choice %s, status %s", r.runtimeOf(task), task.ModelChoice, task.Status)
-	}
-	if claimed := r.claim("accept"); claimed == nil || claimed.ID != task.ID {
-		t.Fatalf("accept claim after the return: %+v", claimed)
-	}
-}
-
 func TestStructuredQuotaRefusalStoresCodeAndRetriesWithoutText(t *testing.T) {
 	for _, code := range []string{UnavailableAgentCapRefusal, UnavailableDisabledRefusal, UnavailableProviderLimit} {
 		t.Run(code, func(t *testing.T) {

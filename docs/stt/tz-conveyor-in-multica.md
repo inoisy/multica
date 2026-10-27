@@ -1,5 +1,7 @@
 # ТЗ: конвейер целиком в multica — приёмка шагом маршрута, стадии на сервере, сторож удаляется
 
+> **27.10.2026 (STT-429): шаг `accept` удалён целиком.** Обработчика `accept` в Workflow, провайдера демона, команд `multica workflow accept` и `issue conveyor accept` больше нет; `.multica/acceptance.json` платформа не читает. Работу завершает ревьюер в своём ране: проверки на закреплённом SHA, слияние по правилам репозитория, доставка. Ниже — история.
+
 > **26.10.2026 (STT-429): старый маршрут удалён.** Команды `multica issue conveyor enable/pause/resume/disable/get/events/result`,
 > эндпоинты `/api/issues/{id}/conveyor*`, автозапуск по шаблону сквада и ретраи маршрута сняты. Приёмку выполняет шаг
 > Workflow с обработчиком `accept` — `multica workflow accept` (`issue conveyor accept` — алиас на один релиз). Таблицы

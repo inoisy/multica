@@ -1242,8 +1242,9 @@ func (h *Handler) loadAgentForUser(w http.ResponseWriter, r *http.Request, agent
 }
 
 // loadAgentForView is loadAgentForUser for read-only views: it also returns the
-// workspace's hidden accept agent (kind = 'system', system_key = 'accept'), so a
-// run it carried shows its name instead of "Unknown Agent". Mutations keep using
+// workspace's hidden agent of the removed acceptance step (kind = 'system',
+// system_key = 'accept', STT-429), so an archived run it carried shows its name
+// instead of "Unknown Agent". Mutations keep using
 // loadAgentForUser, which still answers 404 for every system agent.
 func (h *Handler) loadAgentForView(w http.ResponseWriter, r *http.Request, agentID string) (db.Agent, bool) {
 	if agentUUID, err := util.ParseUUID(agentID); err == nil {

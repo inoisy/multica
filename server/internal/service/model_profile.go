@@ -879,11 +879,5 @@ func PreviewChoice(ctx context.Context, q *db.Queries, agent db.Agent, issue *db
 	if issue != nil {
 		issueID, issueProfile = issue.ID, issue.ModelProfileID
 	}
-	if isAcceptCarrier(agent) {
-		// Acceptance runs no model: no profile or list may move it off the
-		// daemon's accept runtime onto a model runtime (STT-358).
-		issueProfile = pgtype.UUID{}
-		a.ModelProfileID = ""
-	}
 	return ChooseModel(world.Input(a, issueID, issueProfile), now), nil
 }

@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"context"
 	"net/http"
 	"strings"
 	"testing"
@@ -11,20 +10,6 @@ import (
 )
 
 const testPinnedCommit = "0123456789abcdef0123456789abcdef01234567"
-
-// acceptRuntimeForTest puts an online accept runtime into the shared
-// workspace and removes it, its carrier agent and the carrier's runs after
-// the test.
-func acceptRuntimeForTest(t *testing.T) string {
-	t.Helper()
-	runtimeID := dbfx.Runtime(t, "workflow-accept-"+workflowTestSuffix(), testutil.Cols{"provider": "accept"})
-	t.Cleanup(func() {
-		ctx := context.Background()
-		testPool.Exec(ctx, `DELETE FROM agent_task_queue WHERE agent_id IN (SELECT id FROM agent WHERE runtime_id = $1)`, runtimeID)
-		testPool.Exec(ctx, `DELETE FROM agent WHERE runtime_id = $1`, runtimeID)
-	})
-	return runtimeID
-}
 
 func pinBody(status, commit string) map[string]any {
 	return map[string]any{"status": status, "workflow_artifact": map[string]any{
@@ -52,53 +37,15 @@ func runningTaskOf(t *testing.T, issueID, agentID string) string {
 	return taskID
 }
 
-// The developer hands its commit on with the status change; the acceptance
-// column goes to the server's accept agent without a route, and its run reads
-// exactly the pinned commit and where a pass or a return leads.
-func TestWorkflowPinnedCommitReachesAcceptance(t *testing.T) {
+// Acceptance was removed (STT-429): a step can no longer hand the issue to
+// a system accept handler, the reviewer finishes the work itself.
+func TestWorkflowRejectsTheRemovedAcceptHandler(t *testing.T) {
 	seedTestCatalog(t)
-	acceptRuntimeForTest(t)
 	agentID := seededReadyAgentID(t)
-	projectID := deliveryProject(t, "Workflow acceptance project", agentID)
+	projectID := deliveryProject(t, "Workflow without acceptance", agentID)
 	setColumnHandoff(t, projectID, "in_review", map[string]any{
 		"handler": map[string]any{"type": "accept"}, "next_status_key": "done", "back_status_key": "in_progress",
-	}).Want(http.StatusOK)
-	issueID := dbfx.Issue(t, "accept the pinned commit", testutil.Cols{"project_id": projectID, "status": "todo"})
-
-	updateIssueForTest(t, issueID, map[string]any{"status": "in_progress"}).Want(http.StatusOK)
-	devTask := runningTaskOf(t, issueID, agentID)
-	agentUpdateIssue(t, issueID, agentID, devTask, pinBody("in_review", testPinnedCommit)).Want(http.StatusOK)
-
-	_, assigneeType, acceptID := issueStatusAndAssignee(t, issueID)
-	var kind string
-	dbfx.QueryRow(t, `SELECT kind FROM agent WHERE id = $1`, acceptID).Scan(&kind)
-	if assigneeType != "agent" || kind != "system" {
-		t.Fatalf("acceptance column handed the issue to %s %s (kind %q), want the accept agent", assigneeType, acceptID, kind)
-	}
-	var routes int
-	dbfx.QueryRow(t, `SELECT count(*) FROM issue_conveyor WHERE issue_id = $1`, issueID).Scan(&routes)
-	if routes != 0 {
-		t.Fatalf("acceptance created %d legacy routes", routes)
-	}
-	acceptTask := runningTaskOf(t, issueID, acceptID)
-	if acceptTask == "" {
-		t.Fatal("entering the acceptance column queued no run")
-	}
-	var view struct {
-		Status     string            `json:"status"`
-		NextStatus string            `json:"next_status"`
-		BackStatus string            `json:"back_status"`
-		Artifact   map[string]string `json:"artifact"`
-	}
-	artifactForTest(t, issueID, acceptID, acceptTask).Want(http.StatusOK).JSON(&view)
-	if view.Artifact["commit"] != testPinnedCommit || view.NextStatus != "done" || view.BackStatus != "in_progress" {
-		t.Fatalf("acceptance view = %+v", view)
-	}
-
-	agentUpdateIssue(t, issueID, acceptID, acceptTask, map[string]any{"status": "done"}).Want(http.StatusOK)
-	if status, _, _ := issueStatusAndAssignee(t, issueID); status != "done" {
-		t.Fatalf("status after acceptance = %q, want done", status)
-	}
+	}).Want(http.StatusBadRequest)
 }
 
 // A run that saw an older pin may not hand the issue on: someone replaced

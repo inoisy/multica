@@ -70,13 +70,6 @@ func isModelRouted(task db.AgentTaskQueue, choice ModelChoice) bool {
 	return task.ModelChoice != nil || choice.Source != ModelSourceAgentFields
 }
 
-// strayAcceptRun reports whether a run of the accept agent is off its own
-// runtime or carries a model choice: routed before acceptance was kept out of
-// model choice, it would run as a prompt on a model runtime.
-func strayAcceptRun(agent db.Agent, task db.AgentTaskQueue) bool {
-	return isAcceptCarrier(agent) && (task.RuntimeID != agent.RuntimeID || task.ModelChoice != nil)
-}
-
 // routeKey is what makes two routes of one run the same; equal keys mean the
 // sweep has nothing to write.
 func routeKey(runtime pgtype.UUID, c ModelChoice) string {
@@ -112,20 +105,6 @@ func (s *TaskService) routeTask(ctx context.Context, q *db.Queries, task db.Agen
 	choice, agent, err := choiceForTask(ctx, q, task, now)
 	if err != nil {
 		return task, choice, false, nil, err
-	}
-	if isAcceptCarrier(agent) {
-		if !strayAcceptRun(agent, task) {
-			return task, choice, false, nil, nil
-		}
-		// Back to the accept runtime, without a model choice.
-		routed, err := q.SetTaskModelRoute(ctx, db.SetTaskModelRouteParams{ID: task.ID, RuntimeID: agent.RuntimeID})
-		if errors.Is(err, pgx.ErrNoRows) {
-			return task, choice, false, nil, nil
-		}
-		if err != nil {
-			return task, choice, false, nil, err
-		}
-		return routed, choice, true, nil, nil
 	}
 	if !isModelRouted(task, choice) {
 		return task, choice, false, nil, nil
@@ -193,13 +172,6 @@ func (s *TaskService) claimModelChoice(ctx context.Context, q *db.Queries, task 
 	choice, agent, err := choiceForTask(ctx, q, *task, time.Now())
 	if err != nil {
 		return nil, err
-	}
-	if isAcceptCarrier(agent) {
-		// Acceptance runs only on its own runtime and records no model.
-		if runtimeID != agent.RuntimeID || strayAcceptRun(agent, *task) {
-			return nil, errClaimNotThisRuntime
-		}
-		return nil, nil
 	}
 	if !isModelRouted(*task, choice) {
 		return nil, nil
