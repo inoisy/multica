@@ -67,6 +67,32 @@ class TargetTests(unittest.TestCase):
     def test_no_green_commit(self):
         self.assertIsNone(ad.pick_target(["c1"], {"c1": {"CI": "failure", "STT": "success"}}, ["CI", "STT"]))
 
+    def test_dispatched_stt_counts_for_pin_only_commit(self):
+        runs = [
+            {"head_sha": "c1", "event": "push", "name": "CI", "status": "completed", "conclusion": "success"},
+            {"head_sha": "c1", "event": "workflow_dispatch", "name": "STT", "status": "completed", "conclusion": "success"},
+        ]
+        by_sha = ad.collect_runs(runs, ["STT"])
+        self.assertEqual(by_sha, {"c1": {"CI": "success", "STT": "success"}})
+        self.assertEqual(ad.pick_target(["c1"], by_sha, ["CI", "STT"]), "c1")
+
+    def test_dispatched_ci_and_other_events_are_ignored(self):
+        runs = [
+            {"head_sha": "c1", "event": "workflow_dispatch", "name": "CI", "status": "completed", "conclusion": "success"},
+            {"head_sha": "c1", "event": "pull_request", "name": "STT", "status": "completed", "conclusion": "success"},
+            {"head_sha": "c1", "event": "workflow_dispatch", "name": "STT", "status": "in_progress", "conclusion": None},
+        ]
+        by_sha = ad.collect_runs(runs, ["STT"])
+        self.assertEqual(by_sha, {"c1": {}})
+        self.assertIsNone(ad.pick_target(["c1"], by_sha, ["CI", "STT"]))
+
+    def test_newest_finished_run_wins_per_workflow(self):
+        runs = [
+            {"head_sha": "c1", "event": "workflow_dispatch", "name": "STT", "status": "completed", "conclusion": "failure"},
+            {"head_sha": "c1", "event": "push", "name": "STT", "status": "completed", "conclusion": "success"},
+        ]
+        self.assertEqual(ad.collect_runs(runs, ["STT"]), {"c1": {"STT": "failure"}})
+
     def test_override_render(self):
         cfg = dict(ad.DEFAULTS)
         text = ad.render_override(cfg, "abc")
