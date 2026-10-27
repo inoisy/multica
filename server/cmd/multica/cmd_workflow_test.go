@@ -56,7 +56,7 @@ func TestWorkflowCLIWritePreservesDefinitionAndScope(t *testing.T) {
 					t.Errorf("fields = %+v", body)
 				}
 				step := body["steps"].([]any)[0].(map[string]any)
-				if step["instructions"] != "Проверить\nс возвратом \\n" || step["next_status_key"] != "qa" || step["back_status_key"] != "todo" || step["handler"].(map[string]any)["type"] != "accept" {
+				if step["instructions"] != "Проверить\nс возвратом \\n" || step["next_status_key"] != "qa" || step["back_status_key"] != "todo" || step["handler"].(map[string]any)["type"] != "project_lead" {
 					t.Errorf("step = %+v", step)
 				}
 				if action == "update" && (body["dry_run"] != true || body["status_mapping"].(map[string]any)["review"] != "dev" || len(body["status_mapping"].(map[string]any)) != 1) {
@@ -64,7 +64,7 @@ func TestWorkflowCLIWritePreservesDefinitionAndScope(t *testing.T) {
 				}
 				_ = json.NewEncoder(w).Encode(map[string]any{"id": testWorkflowID, "dry_run": action == "update"})
 			})
-			definition := `{"name":"Пилот","description":"old","steps":[{"status_key":"dev","handler":{"type":"accept"},"instructions":"Проверить\nс возвратом \\n","next_status_key":"qa","back_status_key":"todo"}]}`
+			definition := `{"name":"Пилот","description":"old","steps":[{"status_key":"dev","handler":{"type":"project_lead"},"instructions":"Проверить\nс возвратом \\n","next_status_key":"qa","back_status_key":"todo"}]}`
 			if action == "update" {
 				definition = strings.TrimSuffix(definition, "}") + `,"status_mapping":{"stale":"todo"}}`
 			}
@@ -315,13 +315,13 @@ func TestWorkflowCLIEmptyStepsAndNewStatus(t *testing.T) {
 	}
 }
 
-func TestWorkflowAcceptAndItsDeprecatedConveyorAlias(t *testing.T) {
-	accept, _, err := newWorkflowCommand().Find([]string{"accept"})
-	if err != nil || accept.Name() != "accept" || accept.Deprecated != "" {
-		t.Fatalf("workflow accept: %v %+v", err, accept)
+func TestWorkflowAcceptIsGone(t *testing.T) {
+	// Acceptance was removed (STT-429): the reviewer finishes the work, so
+	// neither `workflow accept` nor the hidden `issue conveyor` group exists.
+	if c, _, err := newWorkflowCommand().Find([]string{"accept"}); err == nil && c.Name() == "accept" {
+		t.Fatal("multica workflow accept still exists")
 	}
-	alias, _, err := newIssueConveyorCommand().Find([]string{"accept"})
-	if err != nil || alias.Name() != "accept" || alias.Deprecated == "" {
-		t.Fatalf("issue conveyor accept must stay as a deprecated alias: %v", err)
+	if c, _, err := issueCmd.Find([]string{"conveyor"}); err == nil && c.Name() == "conveyor" {
+		t.Fatal("multica issue conveyor still exists")
 	}
 }
