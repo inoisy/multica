@@ -5,7 +5,6 @@ import {
   AlarmClock,
   Bell,
   Blocks,
-  CircleDot,
   ChevronDown,
   CreditCard,
   FolderGit2,
@@ -35,7 +34,6 @@ import { useCurrentMember } from "@multica/core/permissions";
 import {
   BILLING_WORKSPACE_SUBSCRIPTIONS_FLAG,
   PLUGINS_V1_FLAG,
-  PROJECT_WORKFLOWS_V1_FLAG,
 } from "@multica/core/feature-flags";
 import { resolvePublicFileUrl } from "@multica/core/workspace/avatar-url";
 import { ActorAvatar } from "@multica/ui/components/common/actor-avatar";
@@ -54,7 +52,6 @@ import { ChannelsTab } from "./channels-tab";
 import { ConnectedAppsTab, useComposioAvailable } from "./connected-apps-tab";
 import { NotificationsTab } from "./notifications-tab";
 import { LabelsTab } from "./labels-tab";
-import { IssueStatusesTab } from "./issue-statuses-tab";
 import { WorkflowsTab } from "../../workflows/workflows-tab";
 import { CustomPagesSettingsTab } from "../../custom-pages";
 import { PropertiesTab } from "./properties-tab";
@@ -117,7 +114,6 @@ export function SettingsPage({ extraDeviceTabs = [] }: SettingsPageProps = {}) {
   const isMember = role === "member";
   const navigation = useNavigation();
   const pluginsEnabled = useFeatureEnabled(PLUGINS_V1_FLAG, false);
-  const workflowsEnabled = useFeatureEnabled(PROJECT_WORKFLOWS_V1_FLAG, false);
   const billingEnabled = useFeatureEnabled(
     BILLING_WORKSPACE_SUBSCRIPTIONS_FLAG,
     false,
@@ -216,14 +212,9 @@ export function SettingsPage({ extraDeviceTabs = [] }: SettingsPageProps = {}) {
           key: "issues",
           label: t(($) => $.page.groups.issues),
           entries: [
-            ...(workflowsEnabled
-              ? [entry("workflows", t(($) => $.page.tabs.workflows), Workflow, <WorkflowsTab />, {
-                  wide: true,
-                })]
-              : [entry("issue-statuses", t(($) => $.page.tabs.issue_statuses), CircleDot, <IssueStatusesTab />, {
-                  wide: true,
-                  adminOnly: true,
-                })]),
+            entry("workflows", t(($) => $.page.tabs.workflows), Workflow, <WorkflowsTab />, {
+              wide: true,
+            }),
             entry("wakeups", t(($) => $.page.tabs.wakeups), AlarmClock, <WakeupsTab />, {
               wide: true,
               adminOnly: true,

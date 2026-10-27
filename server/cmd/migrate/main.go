@@ -173,6 +173,7 @@ var concurrentIndexCleanups = map[string]string{
 	"568_issue_conveyor_event_id_index":                         "issue_conveyor_event_id_uidx",
 	"567_issue_conveyor_issue_index":                            "issue_conveyor_issue_uidx",
 	"566_issue_conveyor_id_index":                               "issue_conveyor_id_uidx",
+	"594_agent_task_process_cleanup_index":                      "idx_agent_task_queue_process_cleanup",
 	"563_search_index_change_changed_at_index":                  "idx_search_index_change_changed_at",
 	"562_search_index_change_workspace_index":                   "idx_search_index_change_workspace_xid",
 	"552_agent_task_history_page_index":                         "idx_agent_task_queue_history_page",
