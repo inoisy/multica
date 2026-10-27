@@ -121,7 +121,7 @@ export function createKoDict(
           {
             title: "처음 실행할 때 자동 등록",
             description:
-              "Multica는 Antigravity, Claude Code, CodeBuddy, CodeArts, Codex, Copilot, Cursor, DeepSeek Harness, DevEco Code, Dim, Grok, Hermes, Kimi, Kiro CLI, MiniMax Code, Muse Code, Oh-My-Pi, OpenClaw, OpenCode, Pi, Qoder, Qoder CN, Qwen Code, QwenPaw, Reasonix, Trae CLI, ZeroClaw 등 27개 지원 도구를 스캔해 이미 설치된 것을 런타임으로 자동 등록합니다.",
+              "Multica는 Antigravity, Claude Code, CodeBuddy, CodeArts, Codex, Copilot, Cursor, DeepSeek Harness, DevEco Code, Devin CLI, Dim, Grok, Hermes, Kimi, Kiro CLI, MiniMax Code, Muse Code, Oh-My-Pi, OpenClaw, OpenCode, Pi, Qoder, Qoder CN, Qwen Code, QwenPaw, Reasonix, Trae CLI, ZeroClaw 등 28개 지원 도구를 스캔해 이미 설치된 것을 런타임으로 자동 등록합니다.",
           },
         ],
       },
@@ -197,7 +197,7 @@ export function createKoDict(
         {
           question: "Multica는 어떤 코딩 에이전트를 지원하나요?",
           answer:
-            "Multica는 Antigravity, Claude Code, CodeBuddy, CodeArts, Codex, Copilot, Cursor, DeepSeek Harness, DevEco Code, Dim, Grok, Hermes, Kimi, Kiro CLI, MiniMax Code, Muse Code, Oh-My-Pi, OpenClaw, OpenCode, Pi, Qoder, Qoder CN, Qwen Code, QwenPaw, Reasonix, Trae CLI, ZeroClaw 등 27개 코딩 도구를 기본 지원합니다. 데몬이 이미 설치된 CLI를 자동으로 찾아 각각 런타임으로 등록합니다. 소스 코드가 공개되어 있으므로 직접 백엔드를 추가할 수도 있습니다. 셀프 호스팅에서는 QCA PAT와 기존 QCA 에이전트를 사용하여 태스크 실행용 관리형 원격 런타임으로 Qoder Cloud Agents를 설정할 수 있습니다.",
+            "Multica는 Antigravity, Claude Code, CodeBuddy, CodeArts, Codex, Copilot, Cursor, DeepSeek Harness, DevEco Code, Devin CLI, Dim, Grok, Hermes, Kimi, Kiro CLI, MiniMax Code, Muse Code, Oh-My-Pi, OpenClaw, OpenCode, Pi, Qoder, Qoder CN, Qwen Code, QwenPaw, Reasonix, Trae CLI, ZeroClaw 등 28개 코딩 도구를 기본 지원합니다. 데몬이 이미 설치된 CLI를 자동으로 찾아 각각 런타임으로 등록합니다. 소스 코드가 공개되어 있으므로 직접 백엔드를 추가할 수도 있습니다. 셀프 호스팅에서는 Qoder PAT와 Qoder Cloud Agents의 기존 에이전트를 사용하여 태스크 실행용 관리형 원격 런타임으로 Qoder Cloud Agents를 설정할 수 있습니다.",
         },
         {
           question: "셀프 호스팅만 가능한가요, 클라우드 버전도 있나요?",
@@ -281,7 +281,7 @@ export function createKoDict(
         {
           version: "0.7.0",
           date: "2026-10-23",
-          title: "Qoder Cloud Agents 지원, 지정한 멤버와 런타임 공유, PR 충돌 시 깨우기, 더 안전한 실행",
+          title: "워크플로 기능 전면 개방, Qoder Cloud Agents 지원, 지정한 멤버와 런타임 공유",
           changes: [],
           features: [
             "Qoder Cloud Agents로 Issue를 실행할 수 있습니다. 에이전트를 만들 때 머신이나 클라우드 서비스를 고른 뒤 Qoder Cloud Agents의 에이전트를 연결합니다.",
