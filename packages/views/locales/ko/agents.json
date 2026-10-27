@@ -156,7 +156,8 @@
     "runtime_required_toast": "이 에이전트를 실행하기 전에 런타임을 연결하세요.",
     "assign_work": "작업 할당",
     "more_actions_aria": "에이전트 작업",
-    "updated": "{{when}} 업데이트됨"
+    "updated": "{{when}} 업데이트됨",
+    "model_owned_by_profile_toast": "The runtime, model and thinking level of this agent come from its profile. Change them in Models."
   },
   "inspector": {
     "section_profile": "프로필",
@@ -191,7 +192,8 @@
     "description_placeholder": "이 에이전트는 무엇을 하나요?",
     "save": "저장",
     "cancel": "취소",
-    "model_routed": "실행 모델은 아래 “모델” 섹션에서 선택됩니다."
+    "model_saved_hint": "Row 1 of the saved list. The next run may take another row and the account is chosen at launch: forecast and last run are in Models below.",
+    "model_open_models": "Change in Models"
   },
   "overview": {
     "agent_context": "에이전트",
@@ -1043,7 +1045,6 @@
     "profile_none": "No profile",
     "profile_usage": "Editing the profile affects {{agents}} agents and {{issues}} issues.",
     "open_profile": "Open profiles",
-    "now_label": "Now",
     "now_next_run": "What the next run would take",
     "profile_rows": "Models of “{{name}}”",
     "row_primary": "Primary",
@@ -1091,7 +1092,7 @@
     "mode_profile_hint": "여러 에이전트가 공유하는 목록",
     "mode_single": "단일 모델",
     "mode_one_hint": "이 모델만, 대체 없음",
-    "mode_fields_hint": "프로필도 자체 모델도 없습니다. 실행은 위 필드의 런타임과 모델을 사용합니다.",
+    "mode_fields_hint": "No profile and no own model: a run takes the runtime and model from the agent's own fields.",
     "switch_to_profile": "프로필 “{{name}}” 사용",
     "one_title": "에이전트 모델",
     "one_hint": "대체 없음: 런타임이 한도에 도달하거나 오프라인이면 실행은 초기화까지 기다리고 소유자에게 알림이 갑니다.",
@@ -1128,7 +1129,17 @@
     "reason_waiting_why": "모든 모델 사용 불가({{why}}) — 실행이 대기합니다",
     "reason_fallback_row_why": "{{n}}번 행 사용 불가({{why}}) — {{m}}번 행 선택",
     "reset_confirm": "공통으로 되돌리기",
-    "unavailable_label": "사용할 수 없는 런타임"
+    "unavailable_label": "사용할 수 없는 런타임",
+    "model_at_run": "Decided at launch",
+    "setting_label": "Setting",
+    "setting_badge": "saved",
+    "setting_source_profile": "Shared profile “{{name}}”, row 1",
+    "setting_source_personal": "The agent's personal profile, row 1",
+    "setting_source_single": "One model of this agent",
+    "setting_source_fields": "No profile: the agent's own runtime and model",
+    "forecast_label": "Server forecast",
+    "last_label": "Last run",
+    "last_none": "No runs yet"
   },
   "model_profiles": {
     "title": "Profiles",
@@ -1169,7 +1180,8 @@
     "personal_title": "개인 프로필",
     "personal_empty": "개인 프로필이 있는 에이전트가 없습니다.",
     "col_agent": "에이전트",
-    "col_base": "기반"
+    "col_base": "기반",
+    "delete_blocked": "Cannot delete: {{agents}} agents, {{issues}} open issues and {{profiles}} profiles use it"
   },
   "conveyor": {
     "title": "에픽",
@@ -1225,7 +1237,7 @@
     "saved": "저장됨",
     "bad_percent": "한도는 0~100 사이의 정수(%)입니다",
     "credential": "호스트의 자격 증명:",
-    "usage_as_of": "{{time}} 기준 수치",
+    "usage_as_of": "Quota measured {{time}}",
     "limited_banner": "에이전트 한도에 도달: {{titles}}. 에이전트는 프로필의 다음 모델로 이동합니다.",
     "spent_by": "사용처:",
     "spent_by_item": "{{name}} ({{position}}번째)",
@@ -1313,7 +1325,6 @@
       "add": "계정 추가",
       "add_placeholder": "계정 선택…",
       "spend_title": "사용 방식",
-      "edit": "구성과 순서",
       "revision": "버전 {{revision}}",
       "moved_on": "편집 중 풀이 변경되었습니다(버전 {{revision}}).",
       "take_current": "현재 풀 가져오기",
@@ -1324,18 +1335,20 @@
       "no_environments": "이 풀을 사용하는 환경이 아직 없습니다. 워크스페이스에 부여하면 생성됩니다.",
       "not_found": "풀이 보이지 않거나 삭제되었습니다.",
       "of_environment": "풀 “{{name}}”",
-      "workspaces_n_other": "워크스페이스 {{count}}개"
+      "workspaces_n_other": "워크스페이스 {{count}}개",
+      "accounts_elsewhere": "Limits and sign-in of the accounts are on the Accounts tab.",
+      "open_accounts": "Open Accounts"
     },
     "new_pool": {
-      "open": "새 풀",
-      "title": "새 풀",
+      "open": "Add an environment through accounts",
+      "title": "New environment through accounts",
       "family": "실행 CLI",
       "name": "이름",
       "name_placeholder": "예: Claude · 공통",
       "workspaces": "워크스페이스",
       "all_workspaces": "새 워크스페이스를 포함한 모든 워크스페이스",
       "submit": "만들기",
-      "done": "풀 “{{name}}” 생성됨"
+      "done": "Environment “{{name}}” created"
     },
     "add": {
       "open": "구독 추가",
@@ -1365,15 +1378,6 @@
       "claude_login": "브라우저에서 이 Claude 계정에 로그인한 컴퓨터에서 claude setup-token을 실행하고 토큰을 붙여 넣으세요.",
       "key_login": "제공자 대시보드에서 키를 만들어 여기에 붙여 넣으세요.",
       "secret_hint": "데몬으로 전달되어 호스트의 자격 증명 파일(모드 600)에만 기록됩니다. 비워 두고 나중에 카드에서 로그인할 수도 있습니다.",
-      "step_spend": "풀",
-      "spend_mode": {
-        "existing": "기존 풀",
-        "new": "새 풀",
-        "none": "아직 풀 없음"
-      },
-      "placement": "순서에서의 위치",
-      "placement_last": "마지막",
-      "placement_first": "처음",
       "step_caps": "에이전트가 쓸 수 있는 양",
       "no_windows": "제공자에 쿼터 창이 없습니다. 에이전트는 제공자 한도까지 사용합니다.",
       "submit": "연결",
@@ -1384,27 +1388,7 @@
       "model": "모델",
       "model_hint": "선택 사항. 모든 등급의 기본 모델이 됩니다.",
       "model_placeholder": "예: glm-4.6",
-      "steps_label": "연결 단계",
-      "steps": {
-        "account": "계정과 로그인",
-        "pool": "풀에 추가",
-        "usage": "사용"
-      },
-      "step_of": "{{total}}단계 중 {{n}}단계",
-      "pool_label": "풀",
-      "pool_none_hint": "계정은 연결된 상태로 “풀 없음”에 표시됩니다. 풀에 들어가기 전까지 에이전트는 사용하지 않습니다.",
-      "no_pool_of_family": "{{family}}용 풀이 아직 없습니다. 새로 만드세요.",
-      "usage_title": "사용될 곳",
-      "usage_existing": "계정이 “{{pool}}”에 추가됩니다.",
-      "usage_envs": "풀의 환경 {{names}}을(를) 통해 사용됩니다. 프로필에 행을 추가할 필요가 없습니다.",
-      "usage_no_env": "풀에 아직 환경이 없어 부여되기 전까지 에이전트가 계정을 사용하지 않습니다.",
-      "usage_new": "이 계정으로 새 풀 “{{pool}}”을(를) 만듭니다.",
-      "usage_new_grant": "부여된 워크스페이스에 환경이 생성됩니다.",
-      "usage_new_no_grant": "어떤 워크스페이스에도 부여되지 않아 환경이 생성되지 않습니다.",
-      "usage_running": "진행 중인 실행은 계정을 유지합니다.",
-      "next": "다음",
-      "back": "뒤로",
-      "stop_here": "풀 없이 연결"
+      "no_pool_note": "The account is not put into a pool here: the pool is composed on the page of the environment that spends it."
     },
     "discrepancies": {
       "title": "불일치",
@@ -1451,7 +1435,21 @@
       "reset": "초기화",
       "none": "필터와 일치하는 항목이 없습니다."
     },
-    "counted_once": "한 번만 집계되며 위에 표시됨"
+    "counted_once": "한 번만 집계되며 위에 표시됨",
+    "view_only": "View only. Accounts are connected and edited in Environments → Accounts.",
+    "open_accounts": "Open Environments → Accounts",
+    "manual": {
+      "title": "Journal of manual runs",
+      "command_hint": "To run the account's CLI by hand, run this on the daemon host as an instance admin:",
+      "copy": "Copy the command",
+      "unfinished": "not finished",
+      "over_cap": "agent limit was exceeded",
+      "machine": "Machine: {{machine}}",
+      "exit_code": "exit code {{code}}",
+      "load_failed": "The journal is unavailable: only an instance admin reads it.",
+      "empty": "No manual runs yet",
+      "more": "Show more"
+    }
   },
   "verdict": {
     "reason": {

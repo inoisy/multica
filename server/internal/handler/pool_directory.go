@@ -77,14 +77,9 @@ func (d *poolDirectory) keys(poolID string) []string {
 	return out
 }
 
-// legacyShareKey is the share_key older clients know a pool by: the key it was
-// moved from, else a stable one made from its id when it reaches several
-// workspaces, else none.
+// legacyShareKey is the share_key older clients know a pool by: a stable one
+// made from its id when it reaches several workspaces, else none.
 func legacyShareKey(p db.SubscriptionPool, grants int) *string {
-	if p.LegacyShareKey.Valid && p.LegacyShareKey.String != "" {
-		key := p.LegacyShareKey.String
-		return &key
-	}
 	if p.AllWorkspaces || grants > 1 {
 		sum := md5.Sum([]byte(uuidToString(p.ID)))
 		key := "pool-" + hex.EncodeToString(sum[:])[:16]

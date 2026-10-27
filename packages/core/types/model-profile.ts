@@ -82,6 +82,13 @@ export interface ModelRowState extends ModelOption {
   reason_code: ReasonCode | null;
   until_estimated: boolean;
   chosen: boolean;
+  /**
+   * The model the row runs with: the account's model for an environment that
+   * spends API-key accounts, else the row's own. Empty when `model_at_run`.
+   */
+  effective_model: string;
+  /** The model depends on which account of the pool the run gets: "decided at launch". */
+  model_at_run: boolean;
 }
 
 export interface ModelChoice {

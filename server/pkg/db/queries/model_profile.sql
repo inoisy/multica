@@ -93,6 +93,50 @@ UPDATE agent SET model_profile_id = sqlc.narg(model_profile_id), updated_at = no
 WHERE id = $1 AND workspace_id = $2
 RETURNING *;
 
+-- name: ProjectModelProfileRow1OnAgents :execrows
+-- Row 1 of a profile is the projection every agent on it carries in
+-- runtime_id/model/thinking_level (old clients read those fields). The raw row
+-- is copied: the model an API-key account sets is decided at launch, not here.
+-- A profile without rows leaves the fields alone; such an agent does not run.
+UPDATE agent a
+SET runtime_id = o.runtime_id,
+    runtime_mode = r.runtime_mode,
+    model = NULLIF(o.model, ''),
+    thinking_level = NULLIF(o.thinking_level, ''),
+    updated_at = now()
+FROM model_profile_option o
+JOIN agent_runtime r ON r.id = o.runtime_id
+WHERE a.model_profile_id = sqlc.arg(profile_id)
+  AND a.workspace_id = sqlc.arg(workspace_id)
+  AND o.profile_id = sqlc.arg(profile_id)
+  AND o.position = (SELECT min(m.position) FROM model_profile_option m WHERE m.profile_id = sqlc.arg(profile_id))
+  AND (a.runtime_id IS DISTINCT FROM o.runtime_id
+    OR a.runtime_mode IS DISTINCT FROM r.runtime_mode
+    OR a.model IS DISTINCT FROM NULLIF(o.model, '')
+    OR a.thinking_level IS DISTINCT FROM NULLIF(o.thinking_level, ''));
+
+-- name: ListModelProfileOptionsOfRuntime :many
+SELECT * FROM model_profile_option WHERE runtime_id = $1 ORDER BY profile_id, position;
+
+-- name: ShiftModelProfileOptionPositions :exec
+-- First half of closing the gaps a deleted row leaves: the unique index on
+-- (profile_id, position) forbids renumbering in place.
+UPDATE model_profile_option SET position = position + 1000 WHERE profile_id = $1;
+
+-- name: CompactModelProfileOptionPositions :exec
+UPDATE model_profile_option o
+SET position = ranked.n
+FROM (
+    SELECT m.position, row_number() OVER (ORDER BY m.position)::int AS n
+    FROM model_profile_option m WHERE m.profile_id = $1
+) ranked
+WHERE o.profile_id = $1 AND o.position = ranked.position;
+
+-- name: ListActiveAgentsByModelProfiles :many
+SELECT * FROM agent
+WHERE workspace_id = sqlc.arg(workspace_id) AND model_profile_id = ANY(sqlc.arg(profile_ids)::uuid[]) AND archived_at IS NULL
+ORDER BY name;
+
 -- name: SetAgentDisallowedTools :one
 UPDATE agent SET disallowed_tools = $3, updated_at = now()
 WHERE id = $1 AND workspace_id = $2
@@ -174,8 +218,6 @@ RETURNING *;
 -- A deleted runtime leaves no model rows or unavailability behind.
 WITH deleted_profile_rows AS (
  DELETE FROM model_profile_option WHERE model_profile_option.runtime_id = $1
-), deleted_agent_rows AS (
- DELETE FROM agent_model_option WHERE agent_model_option.runtime_id = $1
 )
 DELETE FROM runtime_unavailable WHERE runtime_unavailable.runtime_id = $1;
 
@@ -195,8 +237,6 @@ LIMIT $2;
 -- follow the runtime instead of disappearing with it.
 WITH moved_profile_rows AS (
  UPDATE model_profile_option SET runtime_id = sqlc.arg(new_runtime_id) WHERE model_profile_option.runtime_id = sqlc.arg(old_runtime_id)
-), moved_agent_rows AS (
- UPDATE agent_model_option SET runtime_id = sqlc.arg(new_runtime_id) WHERE agent_model_option.runtime_id = sqlc.arg(old_runtime_id)
 )
 UPDATE runtime_unavailable SET runtime_id = sqlc.arg(new_runtime_id) WHERE runtime_unavailable.runtime_id = sqlc.arg(old_runtime_id);
 

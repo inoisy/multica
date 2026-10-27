@@ -38,7 +38,9 @@ jobs:
           BASE: ${{ github.event.pull_request.base.sha }}
           HEAD: ${{ github.event.pull_request.head.sha }}
         run: |
-          found=$(git log "$BASE..$HEAD" --format='%h %B' | grep -iE '^(co-authored-by|claude-session):|generated with' || true)
+          # Upstream commits arrive with their own trailers on every sync; only our commits are checked.
+          git fetch --quiet https://github.com/multica-ai/multica.git main
+          found=$(git log "$BASE..$HEAD" --not FETCH_HEAD --format='%h %B' | grep -iE '^(co-authored-by|claude-session):|generated with' || true)
           if [ -n "$found" ]; then
             echo "::error::AI signatures found in commit messages:"
             echo "$found"

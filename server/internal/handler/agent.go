@@ -1663,6 +1663,12 @@ func (h *Handler) CreateAgent(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to create agent")
 		return
 	}
+	// The agent form still takes runtime, model and thinking level; they become
+	// the one row of a personal profile, which is what the agent runs on.
+	if created, err = service.ProfileFromAgentFields(r.Context(), qtx, created); err != nil {
+		writeModelProfileError(w, err)
+		return
+	}
 	if err := replaceInvocationTargetsWithQueries(r.Context(), qtx, created.ID, parseUUID(ownerID), perm.targets); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to save agent access")
 		return
@@ -1940,6 +1946,18 @@ func (h *Handler) canManageAgent(w http.ResponseWriter, r *http.Request, agent d
 	return true
 }
 
+// changesProfileOwnedFields reports a request that would move runtime, model
+// or thinking level of an agent whose model profile owns them. Sending the
+// stored value again is not a change: older clients post the whole form back.
+func changesProfileOwnedFields(existing db.Agent, req UpdateAgentRequest) bool {
+	if !existing.ModelProfileID.Valid {
+		return false
+	}
+	return (req.RuntimeID != nil && *req.RuntimeID != uuidToString(existing.RuntimeID)) ||
+		(req.Model != nil && *req.Model != existing.Model.String) ||
+		(req.ThinkingLevel != nil && *req.ThinkingLevel != existing.ThinkingLevel.String)
+}
+
 func (h *Handler) UpdateAgent(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	existing, ok := h.loadAgentForUser(w, r, id)
@@ -1954,6 +1972,12 @@ func (h *Handler) UpdateAgent(w http.ResponseWriter, r *http.Request) {
 	rawFields, err := decodeJSONBodyWithRawFields(r.Body, &req)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if changesProfileOwnedFields(existing, req) {
+		writeErrorCode(w, http.StatusConflict, "agent_model_owned_by_profile",
+			"the runtime, model and thinking level of this agent come from its model profile; change them on the Models tab of the agent")
 		return
 	}
 

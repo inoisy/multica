@@ -193,7 +193,7 @@ func taskMulticaEnvironment(task Task, provider, agentName, token, configRoot, w
 		"TMP":                  tempDir,
 		"TEMP":                 tempDir,
 	}
-	// The issue the run serves; the accept runtime needs it to find the route.
+	// The issue the run serves, for the multica CLI the run calls.
 	if task.IssueID != "" {
 		env["MULTICA_ISSUE_ID"] = task.IssueID
 	}
@@ -442,11 +442,13 @@ type repoCacheBackend interface {
 
 // Daemon is the local agent runtime that polls for and executes tasks.
 type Daemon struct {
-	cfg        Config
-	client     *Client
-	repoCache  repoCacheBackend
-	skillCache *SkillBundleCache
-	logger     *slog.Logger
+	cfg           Config
+	runMemory     *runMemoryGuard
+	runMemoryOnce sync.Once
+	client        *Client
+	repoCache     repoCacheBackend
+	skillCache    *SkillBundleCache
+	logger        *slog.Logger
 
 	// gitCALastErr is the last applyGitCACerts failure, so a persistent one
 	// (e.g. on Windows) is logged once rather than on every repo refresh.
@@ -2177,6 +2179,7 @@ func (d *Daemon) run(ctx context.Context, healthLn net.Listener) error {
 	go d.heartbeatLoop(ctx)
 	go d.subscriptionProbeLoop(ctx)
 	go d.gcLoop(ctx)
+	go d.runMemoryGuard().Run(ctx)
 	go d.autoUpdateLoop(ctx)
 	go d.tokenRenewalLoop(ctx)
 
@@ -8644,6 +8647,11 @@ func (d *Daemon) runTask(ctx context.Context, task Task, provider string, slot i
 		binDir := filepath.Dir(selfBin)
 		agentEnv["PATH"] = binDir + string(os.PathListSeparator) + os.Getenv("PATH")
 	}
+	// Default V8 heap cap for Node tools the run starts (next dev, tsc); an
+	// existing NODE_OPTIONS limit, or the agent's custom_env below, wins.
+	if opts := withNodeHeapLimit(os.Getenv("NODE_OPTIONS"), d.cfg.RunMemory.NodeMaxOldSpaceMB); opts != os.Getenv("NODE_OPTIONS") {
+		agentEnv["NODE_OPTIONS"] = opts
+	}
 	// Point Codex to the per-task CODEX_HOME so it discovers skills natively
 	// without polluting the system ~/.codex/skills/.
 	if env.CodexHome != "" {
@@ -10929,4 +10937,10 @@ func defaultArgsForProvider(cfg Config, provider string) []string {
 		return nil
 	}
 	return append([]string(nil), args...)
+}
+
+// runMemoryGuard returns the daemon's guard, creating it on first use.
+func (d *Daemon) runMemoryGuard() *runMemoryGuard {
+	d.runMemoryOnce.Do(func() { d.runMemory = newRunMemoryGuard(d.cfg.RunMemory, d.logger) })
+	return d.runMemory
 }

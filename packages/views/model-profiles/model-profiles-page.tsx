@@ -11,7 +11,6 @@ import { useCurrentMember } from "@multica/core/permissions";
 import { agentListOptions, memberListOptions } from "@multica/core/workspace/queries";
 import { runtimeListOptions } from "@multica/core/runtimes";
 import {
-  compactModelRows,
   modelProfileListOptions,
   modelRowLabel,
   toModelOptionInputs,
@@ -46,6 +45,7 @@ import { CollectionPageHeader, CollectionPageHeaderAction } from "../layout/coll
 import { SectionTabs } from "../layout/section-tabs";
 import { PAGE_GUTTER } from "../layout/page-header";
 import { AppLink, useNavigation } from "../navigation";
+import { useModelText } from "./model-text";
 import { useT } from "../i18n";
 import { ModelRowsEditor } from "./model-rows-editor";
 import { ProfileDiffBadge } from "./profile-diff";
@@ -117,6 +117,7 @@ function ResetPersonalButton({ wsId, agent, baseName }: { wsId: string; agent: {
  */
 export function ModelProfilesPage() {
   const { t } = useT("agents");
+  const text = useModelText();
   const wsId = useWorkspaceId();
   const paths = useWorkspacePaths();
   const { role, userId } = useCurrentMember(wsId);
@@ -138,7 +139,12 @@ export function ModelProfilesPage() {
   const previewing = previewMutation.isPending;
 
   const list = profiles.data ?? [];
-  const personalList = personalProfiles.data ?? [];
+  // A personal profile belongs to one agent and is shown only where the
+  // reader can see that agent; the agent list is already limited to those.
+  const visibleAgentIds = new Set(agents.map((agent) => agent.id));
+  const personalList = (personalProfiles.data ?? []).filter(
+    (profile) => profile.owner_agent !== null && visibleAgentIds.has(profile.owner_agent.id),
+  );
   const showShared = kind !== "personal";
   const showPersonal = kind !== "shared";
   const setKind = (next: ModelProfileKind) => {
@@ -202,6 +208,8 @@ export function ModelProfilesPage() {
     { value: EMPTY, label: t(($) => $.model_profiles.from_scratch) },
     ...agents.map((a) => ({ value: a.id, label: a.name })),
   ];
+  const visiblePersonal = (profile: ModelProfile) =>
+    profile.personal_profiles.filter((personal) => visibleAgentIds.has(personal.agent.id));
   const renderRefs = (profile: ModelProfile) => (
     <>
       <div>
@@ -218,10 +226,10 @@ export function ModelProfilesPage() {
       <div>
         {t(($) => $.model_profiles.refs_issues)}: {renderIssues(profile)}
       </div>
-      {profile.personal_profiles.length ? (
+      {visiblePersonal(profile).length ? (
         <div className="space-y-1 pt-1" data-testid="personal-of-profile">
           <div className="text-muted-foreground">{t(($) => $.model_profiles.refs_personal)}</div>
-          {profile.personal_profiles.map((personal) => (
+          {visiblePersonal(profile).map((personal) => (
             <div key={personal.profile_id} className="flex flex-wrap items-center gap-x-2 gap-y-1">
               <AppLink href={paths.agentDetail(personal.agent.id)} className="hover:underline">
                 {personal.agent.name}
@@ -243,6 +251,16 @@ export function ModelProfilesPage() {
           </span>
         ))
       : "—";
+  // The server refuses to delete a profile any agent, open issue or other
+  // profile still references; the button says so before it is pressed.
+  const deleteBlock = (profile: ModelProfile) =>
+    profile.agents.length || profile.open_issues.length || profile.fallback_of.length
+      ? t(($) => $.model_profiles.delete_blocked, {
+          agents: profile.agents.length,
+          issues: profile.open_issues.length,
+          profiles: profile.fallback_of.length,
+        })
+      : null;
   const renderActions = (profile: ModelProfile) =>
     canManage ? (
       <div className="flex shrink-0 justify-end gap-1">
@@ -258,7 +276,8 @@ export function ModelProfilesPage() {
           size="icon-sm"
           variant="ghost"
           aria-label={t(($) => $.model_profiles.delete, { name: profile.name })}
-          disabled={remove.isPending}
+          title={deleteBlock(profile) ?? undefined}
+          disabled={remove.isPending || deleteBlock(profile) !== null}
           onClick={() => void del(profile)}
         >
           <Trash2 />
@@ -336,7 +355,7 @@ export function ModelProfilesPage() {
                     </div>
                     {renderActions(profile)}
                   </div>
-                  <p className="break-words font-mono text-caption">{compactModelRows(profile.options) || "—"}</p>
+                  <p className="break-words font-mono text-caption">{text.compact(profile.options) || "—"}</p>
                   <p className="text-caption text-muted-foreground">
                     {t(($) => $.model_profiles.col_exhausted)}:{" "}
                     {profile.when_exhausted_profile_id ? nameOf(profile.when_exhausted_profile_id) : t(($) => $.model_profiles.exhausted_wait)}
@@ -364,7 +383,7 @@ export function ModelProfilesPage() {
                         <div className="font-medium">{profile.name}</div>
                         {profile.description ? <div className="text-caption text-muted-foreground">{profile.description}</div> : null}
                       </TableCell>
-                      <TableCell className="px-3 py-2 font-mono text-caption">{compactModelRows(profile.options) || "—"}</TableCell>
+                      <TableCell className="px-3 py-2 font-mono text-caption">{text.compact(profile.options) || "—"}</TableCell>
                       <TableCell className="px-3 py-2 text-caption">
                         {profile.when_exhausted_profile_id ? nameOf(profile.when_exhausted_profile_id) : t(($) => $.model_profiles.exhausted_wait)}
                       </TableCell>
@@ -399,7 +418,7 @@ export function ModelProfilesPage() {
                         <span className="text-muted-foreground">{profile.based_on ? profile.based_on.name : "—"}</span>
                         <ProfileDiffBadge matchesBase={profile.matches_base} diffRows={profile.diff_rows} />
                       </div>
-                      <p className="break-words font-mono text-caption">{compactModelRows(profile.options) || "—"}</p>
+                      <p className="break-words font-mono text-caption">{text.compact(profile.options) || "—"}</p>
                       <div className="text-caption">{renderIssues(profile)}</div>
                     </li>
                   ))}
@@ -424,7 +443,7 @@ export function ModelProfilesPage() {
                             <div>{profile.based_on ? profile.based_on.name : "—"}</div>
                             <ProfileDiffBadge matchesBase={profile.matches_base} diffRows={profile.diff_rows} />
                           </TableCell>
-                          <TableCell className="px-3 py-2 font-mono text-caption">{compactModelRows(profile.options) || "—"}</TableCell>
+                          <TableCell className="px-3 py-2 font-mono text-caption">{text.compact(profile.options) || "—"}</TableCell>
                           <TableCell className="space-y-1 whitespace-normal px-3 py-2 text-caption">{renderIssues(profile)}</TableCell>
                           <TableCell className="px-3 py-2">{renderPersonalActions(profile)}</TableCell>
                         </TableRow>

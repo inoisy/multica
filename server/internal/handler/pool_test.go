@@ -137,3 +137,59 @@ func TestDaemonFailureRejectsUnknownRefusalCode(t *testing.T) {
 		t.Fatalf("rejected request changed status to %s", status)
 	}
 }
+
+func TestAccountWritesRefuseEveryMachineAndNonAdminCaller(t *testing.T) {
+	h := subscriptionTestHandler(t)
+	member := subtestOutsider(t)
+	_, rtID := poolFixture(t, h, "subtest-denied")
+	var poolID string
+	if err := testPool.QueryRow(t.Context(), `SELECT pool_id FROM runtime_profile WHERE id = (SELECT profile_id FROM agent_runtime WHERE id=$1)`, rtID).Scan(&poolID); err != nil {
+		t.Fatal(err)
+	}
+	writes := map[string]func(*http.Request) *http.Request{
+		"create account": func(r *http.Request) *http.Request { return r },
+		"create pool":    func(r *http.Request) *http.Request { return r },
+		"set grants":     func(r *http.Request) *http.Request { return withURLParam(r, "id", poolID) },
+	}
+	handlers := map[string]http.HandlerFunc{"create account": h.CreateSubscription, "create pool": h.CreateRuntimePool, "set grants": h.SetPoolGrants}
+	bodies := map[string]any{
+		"create account": map[string]any{"key": "subtest-denied-new", "provider": "claude"},
+		"create pool":    map[string]any{"display_name": "denied", "all_workspaces": true},
+		"set grants":     map[string]any{"revision": 1, "workspace_ids": []string{testWorkspaceID}},
+	}
+	for name, wrap := range writes {
+		for _, source := range []string{"member", "task_token", "cloud_pat"} {
+			req := newRequest("POST", "/api/x", bodies[name])
+			if source == "member" {
+				req.Header.Set("X-User-ID", member)
+			} else {
+				req.Header.Set("X-Actor-Source", source)
+			}
+			testutil.Call(t, handlers[name], wrap(req)).Want(http.StatusForbidden)
+		}
+	}
+	var n int
+	_ = testPool.QueryRow(t.Context(), `SELECT count(*) FROM subscription WHERE key='subtest-denied-new'`).Scan(&n)
+	if n != 0 {
+		t.Fatal("a refused write created an account")
+	}
+}
+
+func TestAddingAnAccountTwiceAfterPartialSuccessCreatesOne(t *testing.T) {
+	h := subscriptionTestHandler(t)
+	body := map[string]any{"key": "subtest-retry", "provider": "claude", "title": "Retry"}
+	first := callSubscription(t, h.CreateSubscription, newRequest("POST", "/api/subscriptions", body), http.StatusCreated)
+	again := callSubscription(t, h.CreateSubscription, newRequest("POST", "/api/subscriptions", body), http.StatusOK)
+	if first["id"] != again["id"] {
+		t.Fatalf("retry returned another account: %v %v", first["id"], again["id"])
+	}
+	// The same key for another kind of account is a conflict, not a reuse.
+	callSubscription(t, h.CreateSubscription, newRequest("POST", "/api/subscriptions", map[string]any{"key": "subtest-retry", "provider": "codex"}), http.StatusConflict)
+	// Without a key the server cannot know it is a retry and derives a new one.
+	callSubscription(t, h.CreateSubscription, newRequest("POST", "/api/subscriptions", map[string]any{"provider": "claude", "title": "subtest-retry"}), http.StatusCreated)
+	var n int
+	_ = testPool.QueryRow(t.Context(), `SELECT count(*) FROM subscription WHERE key='subtest-retry'`).Scan(&n)
+	if n != 1 {
+		t.Fatalf("accounts with the key: %d", n)
+	}
+}

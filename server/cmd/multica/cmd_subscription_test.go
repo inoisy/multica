@@ -58,7 +58,6 @@ func addFlags(cmd *cobra.Command) {
 	}
 	f.StringSlice("windows", nil, "")
 	f.StringArray("cap", nil, "")
-	f.Int("reserve", 0, "")
 	f.Bool("token-stdin", false, "")
 	f.Bool("login", false, "")
 	f.Bool("enable", false, "")
@@ -72,7 +71,6 @@ func TestSubscriptionAddSendsNoSecrets(t *testing.T) {
 	_ = cmd.Flags().Set("title", "Claude, третья")
 	_ = cmd.Flags().Set("cap", "5h=70")
 	_ = cmd.Flags().Set("cap", "week=90%")
-	_ = cmd.Flags().Set("reserve", "18")
 	if err := runSubscriptionAdd(cmd, []string{"claude"}); err != nil {
 		t.Fatalf("add: %v", err)
 	}
@@ -80,7 +78,7 @@ func TestSubscriptionAddSendsNoSecrets(t *testing.T) {
 		t.Fatalf("requests: %+v", *got)
 	}
 	body := (*got)[0].Body
-	if body["provider"] != "claude" || body["title"] != "Claude, третья" || body["reserve"] != float64(18) {
+	if body["provider"] != "claude" || body["title"] != "Claude, третья" {
 		t.Fatalf("body: %v", body)
 	}
 	if !reflect.DeepEqual(body["caps"], map[string]any{"5h": float64(70), "week": float64(90)}) {
@@ -125,13 +123,12 @@ func TestSubscriptionUpdateFlags(t *testing.T) {
 	})
 	cmd := subscriptionTestCmd(addFlags)
 	_ = cmd.Flags().Set("cap", "5h=70")
-	_ = cmd.Flags().Set("reserve", "18")
 	_ = cmd.Flags().Set("disable-until", "2026-10-21T12:00Z")
 	if err := runSubscriptionUpdate(cmd, []string{"claude-3"}); err != nil {
 		t.Fatalf("update: %v", err)
 	}
 	body := (*got)[0].Body
-	if body["disabled_until"] != "2026-10-21T12:00Z" || body["reserve"] != float64(18) ||
+	if body["disabled_until"] != "2026-10-21T12:00Z" ||
 		!reflect.DeepEqual(body["caps"], map[string]any{"5h": float64(70)}) {
 		t.Fatalf("body: %v", body)
 	}

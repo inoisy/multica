@@ -226,6 +226,7 @@ vi.mock("@multica/core/api", () => ({
 vi.mock("@multica/core/paths", () => ({
   useWorkspacePaths: () => ({
     agentDetail: (id: string) => `/acme/agents/${id}`,
+    runtimes: () => "/acme/runtimes",
   }),
 }));
 

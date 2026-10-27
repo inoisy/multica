@@ -74,6 +74,8 @@ type RuntimeAvailability struct {
 	// when nobody reported a reset and UnavailableUntil is only a guess.
 	UnavailableCode      string
 	UnavailableEstimated bool
+	AccountModels        []Account
+	HasPool              bool
 	PoolID               string
 }
 
@@ -98,11 +100,8 @@ type ModelChoiceInput struct {
 	Agent          ModelChoiceAgent
 	IssueID        string
 	IssueProfileID string
-	// ExcludeFamily, when set, makes every row of that model family
-	// unavailable: a route step that must judge work on another family.
-	ExcludeFamily string
-	Profiles      map[string]ModelProfileData
-	Runtimes      map[string]RuntimeAvailability
+	Profiles       map[string]ModelProfileData
+	Runtimes       map[string]RuntimeAvailability
 }
 
 // ModelRowState is one row of the list that was consulted, with its state.
@@ -118,6 +117,8 @@ type ModelRowState struct {
 	ReasonCode     string `json:"reason_code,omitempty"`
 	UntilEstimated bool   `json:"until_estimated,omitempty"`
 	Chosen         bool   `json:"chosen"`
+	EffectiveModel string `json:"effective_model"`
+	ModelAtRun     bool   `json:"model_at_run"`
 }
 
 // ModelChoice is the outcome: the chosen row (nil when the run must wait) and
@@ -127,7 +128,8 @@ type ModelChoice struct {
 	ProfileID   string `json:"profile_id,omitempty"`
 	ProfileName string `json:"profile_name,omitempty"`
 	IssueID     string `json:"issue_id,omitempty"`
-	// ExcludedFamily is the model family the route ruled out for this run.
+	// ExcludedFamily is read from runs chosen while the route could exclude a
+	// model family; nothing sets it any more.
 	ExcludedFamily string       `json:"excluded_family,omitempty"`
 	Reason         string       `json:"reason"`
 	Position       int32        `json:"position,omitempty"`
@@ -230,8 +232,10 @@ type modelList struct {
 }
 
 // ResolveModelList picks the list of a run: issue profile, else the agent's
-// profile (shared or personal), else the agent's plain fields. A reference to a
-// profile that no longer exists is skipped.
+// profile (shared or personal). The agent's plain fields stand in only for an
+// agent that has no profile at all (the accept carrier); an agent whose
+// profile is gone or empty has no list and waits, it never falls back to the
+// projection in its fields. An issue profile that no longer exists is skipped.
 func ResolveModelList(in ModelChoiceInput) (source string, profile *ModelProfileData, options []ModelOption) {
 	l := resolveModelList(in)
 	return l.source, l.profile, l.options
@@ -241,7 +245,11 @@ func resolveModelList(in ModelChoiceInput) modelList {
 	if p, ok := in.Profiles[in.IssueProfileID]; ok && in.IssueProfileID != "" {
 		return modelList{source: ModelSourceIssueProfile, profile: &p, options: p.Options}
 	}
-	if p, ok := in.Profiles[in.Agent.ModelProfileID]; ok && in.Agent.ModelProfileID != "" {
+	if in.Agent.ModelProfileID != "" {
+		p, ok := in.Profiles[in.Agent.ModelProfileID]
+		if !ok {
+			return modelList{source: ModelSourceAgentProfile}
+		}
 		return modelList{source: ModelSourceAgentProfile, profile: &p, options: p.Options}
 	}
 	if in.Agent.RuntimeID == "" {
@@ -275,45 +283,8 @@ func rowState(in ModelChoiceInput, o ModelOption, now time.Time) (state string, 
 		return ModelRowLimited, &u, code, rt.UnavailableEstimated
 	case !rt.Online:
 		return ModelRowOffline, nil, ModelRowOffline, false
-	case in.ExcludeFamily != "" && ModelFamily(rt.Provider, o.Model) == in.ExcludeFamily:
-		return ModelRowSameFamily, nil, ModelRowSameFamily, false
 	}
 	return ModelRowAvailable, nil, "", false
-}
-
-// ModelFamily names who trained the model, so a reviewer can be put on a
-// different family than the author. The model name decides: a Claude-CLI
-// runtime may serve GLM or MiniMax. Without a model the provider stands in.
-func ModelFamily(provider, model string) string {
-	m := strings.ToLower(strings.TrimSpace(model))
-	switch {
-	case m == "":
-	case strings.HasPrefix(m, "claude") || strings.Contains(m, "opus") || strings.Contains(m, "sonnet") ||
-		strings.Contains(m, "haiku") || strings.Contains(m, "fable"):
-		return "anthropic"
-	case strings.HasPrefix(m, "gpt") || strings.HasPrefix(m, "codex") || strings.HasPrefix(m, "o1") ||
-		strings.HasPrefix(m, "o3") || strings.HasPrefix(m, "o4"):
-		return "openai"
-	case strings.HasPrefix(m, "glm"):
-		return "zhipu"
-	case strings.Contains(m, "minimax"):
-		return "minimax"
-	case strings.Contains(m, "gemini"):
-		return "google"
-	case strings.Contains(m, "qwen"):
-		return "qwen"
-	case strings.Contains(m, "deepseek"):
-		return "deepseek"
-	case strings.Contains(m, "kimi"):
-		return "moonshot"
-	}
-	switch strings.ToLower(provider) {
-	case "claude":
-		return "anthropic"
-	case "codex":
-		return "openai"
-	}
-	return strings.ToLower(provider)
 }
 
 // DiffRows lists the 1-based places at which two lists differ, comparing row
@@ -355,7 +326,7 @@ func sortedOptions(options []ModelOption) []ModelOption {
 // agent's own list and plain fields have no exhausted-profile: they wait.
 func ChooseModel(in ModelChoiceInput, now time.Time) ModelChoice {
 	list := resolveModelList(in)
-	choice := ModelChoice{Source: list.source, IssueID: in.IssueID, ExcludedFamily: in.ExcludeFamily, Rows: []ModelRowState{}}
+	choice := ModelChoice{Source: list.source, IssueID: in.IssueID, Rows: []ModelRowState{}}
 	var waitFirstCode string
 	var waitEstimated bool
 	waitCode := ""
@@ -388,6 +359,11 @@ func ChooseModel(in ModelChoiceInput, now time.Time) ModelChoice {
 			}
 			if rt, ok := in.Runtimes[o.RuntimeID]; ok {
 				row.RuntimeName, row.Provider = rt.Name, rt.Provider
+				row.EffectiveModel = o.Model
+				if rt.HasPool {
+					m := modelForAccounts(o.Model, rt.AccountModels)
+					row.EffectiveModel, row.ModelAtRun = m.Model, m.AtRun
+				}
 			}
 			if state == ModelRowAvailable && choice.Chosen == nil {
 				row.Chosen = true

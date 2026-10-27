@@ -350,6 +350,12 @@ func (h *Handler) UpdateRuntimeProfile(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
+		next := before
+		next.CommandName = cmd
+		if !service.PoolCommandMatches(next) {
+			writeError(w, http.StatusBadRequest, fmt.Sprintf("an environment with accounts runs the standard %q command; a wrapper would spend an account outside the pool", agent.ProfileRuntimeType(before.RuntimeType, before.ProtocolFamily)))
+			return
+		}
 		params.CommandName = strToText(cmd)
 	}
 	if req.Description != nil && !before.PoolID.Valid {
@@ -663,7 +669,7 @@ func (h *Handler) DeleteRuntimeProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, rt := range deletedRuntimes {
-		if err := qtx.DeleteRuntimeModelReferences(r.Context(), rt.ID); err != nil {
+		if err := service.RemoveRuntimeModelRows(r.Context(), qtx, rt.ID); err != nil {
 			slog.Error("DeleteRuntimeModelReferences failed", "error", err, "runtime_id", uuidToString(rt.ID))
 			writeError(w, http.StatusInternalServerError, "failed to clean up runtime instances")
 			return
