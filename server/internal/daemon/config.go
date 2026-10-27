@@ -150,9 +150,10 @@ type Config struct {
 	// latency recorded in the Codex lifecycle logs.
 	CodexTurnInterruptTimeout   time.Duration
 	CodexThreadHandshakeTimeout time.Duration
-	OpenCodeIdleWatchdog        time.Duration // OpenCode-specific no-message window; 0 falls back to AgentIdleWatchdog and values above it cannot extend the global bound
-	AgentIdleWatchdog           time.Duration // force-stop a run when the backend goes silent this long with an empty queue (0 = disabled)
-	AgentToolWatchdog           time.Duration // force-stop a run when a single tool call stays in flight (silent) this long (0 = never force-stop during a tool call, which now also covers a live Cursor background shell); defaults to AgentIdleWatchdog, so operators tune one number unless they deliberately want a wider tool budget
+	OpenCodeIdleWatchdog        time.Duration   // OpenCode-specific no-message window; 0 falls back to AgentIdleWatchdog and values above it cannot extend the global bound
+	RunMemory                   RunMemoryConfig // per-run memory guard and NODE_OPTIONS default (MULTICA_RUN_*)
+	AgentIdleWatchdog           time.Duration   // force-stop a run when the backend goes silent this long with an empty queue (0 = disabled)
+	AgentToolWatchdog           time.Duration   // force-stop a run when a single tool call stays in flight (silent) this long (0 = never force-stop during a tool call, which now also covers a live Cursor background shell); defaults to AgentIdleWatchdog, so operators tune one number unless they deliberately want a wider tool budget
 	ClaudeArgs                  []string
 	CodexArgs                   []string
 	CodebuddyArgs               []string
@@ -351,6 +352,10 @@ func LoadConfig(overrides Overrides) (Config, error) {
 		return Config{}, err
 	}
 	subscriptionClaudeProbeInterval, err := durationFromEnv("MULTICA_SUBSCRIPTION_CLAUDE_PROBE_INTERVAL", 0)
+	if err != nil {
+		return Config{}, err
+	}
+	runMemory, err := runMemoryConfigFromEnv()
 	if err != nil {
 		return Config{}, err
 	}
@@ -681,6 +686,7 @@ func LoadConfig(overrides Overrides) (Config, error) {
 		CodexTurnInterruptTimeout:       codexTurnInterruptTimeout,
 		CodexThreadHandshakeTimeout:     codexThreadHandshakeTimeout,
 		OpenCodeIdleWatchdog:            openCodeIdleWatchdog,
+		RunMemory:                       runMemory,
 		AgentIdleWatchdog:               agentIdleWatchdog,
 		AgentToolWatchdog:               agentToolWatchdog,
 		ClaudeArgs:                      claudeArgs,
