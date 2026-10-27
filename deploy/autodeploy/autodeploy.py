@@ -31,6 +31,7 @@ DEFAULTS = {
     "repo": "inoisy/multica",
     "branch": "main",
     "required_workflows": ["CI", "STT"],
+    "dispatch_workflows": ["STT"],
     "image_prefix": "ghcr.io/inoisy/multica-",
     "health_url": "https://multica.yakutov.com/health",
     "health_timeout_s": 240,
@@ -117,6 +118,22 @@ def pick_target(commits, runs_by_sha, required):
         if all(runs.get(name) == "success" for name in required):
             return sha
     return None
+
+
+def collect_runs(workflow_runs, dispatch_workflows):
+    """Per head sha, the conclusion of each finished workflow.
+
+    A push run counts for every workflow. A workflow_dispatch run counts only for dispatch_workflows
+    (STT): a commit under deploy/** is skipped by the STT push trigger, so its images are built by hand.
+    """
+    runs_by_sha = {}
+    for run in workflow_runs:
+        if run["event"] != "push" and not (run["event"] == "workflow_dispatch" and run["name"] in dispatch_workflows):
+            continue
+        per = runs_by_sha.setdefault(run["head_sha"], {})
+        if run["status"] == "completed":
+            per.setdefault(run["name"], run["conclusion"])
+    return runs_by_sha
 
 
 def parse_mcp_pin(cfg, text):
@@ -289,11 +306,8 @@ class Deployer:
     # ---- steps ------------------------------------------------------------
     def target_commit(self):
         commits = [c["sha"] for c in self.gh(f"/commits?sha={self.cfg['branch']}&per_page=20")]
-        runs_by_sha = {}
-        for run in self.gh(f"/actions/runs?branch={self.cfg['branch']}&event=push&per_page=50")["workflow_runs"]:
-            per = runs_by_sha.setdefault(run["head_sha"], {})
-            if run["status"] == "completed":
-                per.setdefault(run["name"], run["conclusion"])
+        runs = self.gh(f"/actions/runs?branch={self.cfg['branch']}&per_page=100")["workflow_runs"]
+        runs_by_sha = collect_runs(runs, self.cfg["dispatch_workflows"])
         return pick_target(commits, runs_by_sha, self.cfg["required_workflows"])
 
     def mcp_pin(self, target):
