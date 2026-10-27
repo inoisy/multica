@@ -51,7 +51,7 @@ func newModelClaimRig(t *testing.T) *modelClaimRig {
 		}
 		r.rt[name] = fx.EnvironmentRuntime(t, "models-"+name, testutil.Cols{"provider": provider, "visibility": "public"})
 	}
-	for _, table := range []string{"runtime_unavailable", "model_profile_option", "model_profile", "agent_model_option", "model_idle_episode", "inbox_item"} {
+	for _, table := range []string{"runtime_unavailable", "model_profile_option", "model_profile", "model_idle_episode", "inbox_item"} {
 		fx.Cleanup(t, "DELETE FROM "+table+" WHERE workspace_id=$1", ws)
 	}
 	fx.Cleanup(t, "DELETE FROM agent_task_queue WHERE agent_id IN (SELECT id FROM agent WHERE workspace_id=$1)", ws)
