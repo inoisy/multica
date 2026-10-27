@@ -176,6 +176,9 @@ func replaceMembers(ctx context.Context, q *db.Queries, poolID pgtype.UUID, subs
 func ensureEnvironment(ctx context.Context, q *db.Queries, pool db.SubscriptionPool, workspaceID, actor pgtype.UUID) (db.RuntimeProfile, bool, error) {
 	existing, err := q.GetPoolRuntimeProfileInWorkspace(ctx, db.GetPoolRuntimeProfileInWorkspaceParams{PoolID: pool.ID, WorkspaceID: workspaceID})
 	if err == nil {
+		if !PoolCommandMatches(existing) {
+			return db.RuntimeProfile{}, false, poolInvalid("environment %q runs %q instead of the standard command of its type", existing.DisplayName, existing.CommandName)
+		}
 		if existing.Enabled {
 			return existing, true, nil
 		}

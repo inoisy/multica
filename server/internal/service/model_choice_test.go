@@ -142,12 +142,13 @@ func TestModelOptionListPriority(t *testing.T) {
 		t.Fatalf("another issue keeps the agent's list: %+v", c)
 	}
 
-	// A profile that no longer exists is skipped, never an error.
+	// A profile that no longer exists leaves the agent without a list: the
+	// projection in its fields never starts a run.
 	in.Agent.ModelProfileID = "gone"
-	if c = ChooseModel(in, choiceNow); c.Source != ModelSourceAgentFields {
+	if c = ChooseModel(in, choiceNow); c.Reason != ModelReasonNoModels || !c.Waiting() || c.Source != ModelSourceAgentProfile {
 		t.Fatalf("missing profile: %+v", c)
 	}
-	in.Agent.RuntimeID = ""
+	in.Agent.ModelProfileID, in.Agent.RuntimeID = "", ""
 	if c = ChooseModel(in, choiceNow); c.Reason != ModelReasonNoModels || !c.Waiting() {
 		t.Fatalf("nothing at all: %+v", c)
 	}

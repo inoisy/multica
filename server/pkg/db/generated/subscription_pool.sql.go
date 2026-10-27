@@ -17,7 +17,7 @@ INSERT INTO runtime_profile (
     fixed_args, visibility, created_by, enabled, runtime_type, pool_id
 ) VALUES ($1, $2, $3, $3, $4, '[]'::jsonb, 'workspace', $5, true, $3, $6)
 ON CONFLICT DO NOTHING
-RETURNING id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, subscriptions, spend_order, share_key, all_workspaces, pool_id
+RETURNING id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, pool_id
 `
 
 type CreatePoolRuntimeProfileParams struct {
@@ -54,10 +54,6 @@ func (q *Queries) CreatePoolRuntimeProfile(ctx context.Context, arg CreatePoolRu
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.RuntimeType,
-		&i.Subscriptions,
-		&i.SpendOrder,
-		&i.ShareKey,
-		&i.AllWorkspaces,
 		&i.PoolID,
 	)
 	return i, err
@@ -66,7 +62,7 @@ func (q *Queries) CreatePoolRuntimeProfile(ctx context.Context, arg CreatePoolRu
 const createSubscriptionPool = `-- name: CreateSubscriptionPool :one
 INSERT INTO subscription_pool (id, name, runtime_type, description, spend_order, all_workspaces, created_by)
 VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING id, name, runtime_type, description, spend_order, all_workspaces, revision, legacy_share_key, created_by, created_at, updated_at
+RETURNING id, name, runtime_type, description, spend_order, all_workspaces, revision, created_by, created_at, updated_at
 `
 
 type CreateSubscriptionPoolParams struct {
@@ -98,7 +94,6 @@ func (q *Queries) CreateSubscriptionPool(ctx context.Context, arg CreateSubscrip
 		&i.SpendOrder,
 		&i.AllWorkspaces,
 		&i.Revision,
-		&i.LegacyShareKey,
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -169,7 +164,7 @@ const disablePoolRuntimeProfileInWorkspace = `-- name: DisablePoolRuntimeProfile
 UPDATE runtime_profile
 SET enabled = false, updated_at = now()
 WHERE pool_id = $1 AND workspace_id = $2 AND enabled
-RETURNING id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, subscriptions, spend_order, share_key, all_workspaces, pool_id
+RETURNING id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, pool_id
 `
 
 type DisablePoolRuntimeProfileInWorkspaceParams struct {
@@ -201,10 +196,6 @@ func (q *Queries) DisablePoolRuntimeProfileInWorkspace(ctx context.Context, arg 
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.RuntimeType,
-			&i.Subscriptions,
-			&i.SpendOrder,
-			&i.ShareKey,
-			&i.AllWorkspaces,
 			&i.PoolID,
 		); err != nil {
 			return nil, err
@@ -218,7 +209,7 @@ func (q *Queries) DisablePoolRuntimeProfileInWorkspace(ctx context.Context, arg 
 }
 
 const getPoolRuntimeProfileInWorkspace = `-- name: GetPoolRuntimeProfileInWorkspace :one
-SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, subscriptions, spend_order, share_key, all_workspaces, pool_id FROM runtime_profile WHERE pool_id = $1 AND workspace_id = $2
+SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, pool_id FROM runtime_profile WHERE pool_id = $1 AND workspace_id = $2
 `
 
 type GetPoolRuntimeProfileInWorkspaceParams struct {
@@ -243,17 +234,13 @@ func (q *Queries) GetPoolRuntimeProfileInWorkspace(ctx context.Context, arg GetP
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.RuntimeType,
-		&i.Subscriptions,
-		&i.SpendOrder,
-		&i.ShareKey,
-		&i.AllWorkspaces,
 		&i.PoolID,
 	)
 	return i, err
 }
 
 const getSubscriptionPool = `-- name: GetSubscriptionPool :one
-SELECT id, name, runtime_type, description, spend_order, all_workspaces, revision, legacy_share_key, created_by, created_at, updated_at FROM subscription_pool WHERE id = $1
+SELECT id, name, runtime_type, description, spend_order, all_workspaces, revision, created_by, created_at, updated_at FROM subscription_pool WHERE id = $1
 `
 
 func (q *Queries) GetSubscriptionPool(ctx context.Context, id pgtype.UUID) (SubscriptionPool, error) {
@@ -267,7 +254,6 @@ func (q *Queries) GetSubscriptionPool(ctx context.Context, id pgtype.UUID) (Subs
 		&i.SpendOrder,
 		&i.AllWorkspaces,
 		&i.Revision,
-		&i.LegacyShareKey,
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -348,7 +334,7 @@ func (q *Queries) ListActiveAccountRefusals(ctx context.Context, arg ListActiveA
 }
 
 const listAllWorkspacePools = `-- name: ListAllWorkspacePools :many
-SELECT id, name, runtime_type, description, spend_order, all_workspaces, revision, legacy_share_key, created_by, created_at, updated_at FROM subscription_pool WHERE all_workspaces ORDER BY created_at, id
+SELECT id, name, runtime_type, description, spend_order, all_workspaces, revision, created_by, created_at, updated_at FROM subscription_pool WHERE all_workspaces ORDER BY created_at, id
 `
 
 // Pools every workspace gets an environment for.
@@ -369,7 +355,6 @@ func (q *Queries) ListAllWorkspacePools(ctx context.Context) ([]SubscriptionPool
 			&i.SpendOrder,
 			&i.AllWorkspaces,
 			&i.Revision,
-			&i.LegacyShareKey,
 			&i.CreatedBy,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -385,7 +370,7 @@ func (q *Queries) ListAllWorkspacePools(ctx context.Context) ([]SubscriptionPool
 }
 
 const listEnabledPoolRuntimeProfilesForWorkspace = `-- name: ListEnabledPoolRuntimeProfilesForWorkspace :many
-SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, subscriptions, spend_order, share_key, all_workspaces, pool_id FROM runtime_profile
+SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, pool_id FROM runtime_profile
 WHERE workspace_id = $1 AND enabled AND pool_id IS NOT NULL
 ORDER BY created_at
 `
@@ -414,10 +399,6 @@ func (q *Queries) ListEnabledPoolRuntimeProfilesForWorkspace(ctx context.Context
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.RuntimeType,
-			&i.Subscriptions,
-			&i.SpendOrder,
-			&i.ShareKey,
-			&i.AllWorkspaces,
 			&i.PoolID,
 		); err != nil {
 			return nil, err
@@ -467,7 +448,7 @@ func (q *Queries) ListLatestSubscriptionUsageBySubscriptions(ctx context.Context
 }
 
 const listPoolRuntimeProfiles = `-- name: ListPoolRuntimeProfiles :many
-SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, subscriptions, spend_order, share_key, all_workspaces, pool_id FROM runtime_profile WHERE pool_id = $1 ORDER BY created_at, id
+SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, pool_id FROM runtime_profile WHERE pool_id = $1 ORDER BY created_at, id
 `
 
 // The environments of a pool, one per workspace it reaches.
@@ -494,10 +475,6 @@ func (q *Queries) ListPoolRuntimeProfiles(ctx context.Context, poolID pgtype.UUI
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.RuntimeType,
-			&i.Subscriptions,
-			&i.SpendOrder,
-			&i.ShareKey,
-			&i.AllWorkspaces,
 			&i.PoolID,
 		); err != nil {
 			return nil, err
@@ -511,7 +488,7 @@ func (q *Queries) ListPoolRuntimeProfiles(ctx context.Context, poolID pgtype.UUI
 }
 
 const listPoolRuntimeProfilesAll = `-- name: ListPoolRuntimeProfilesAll :many
-SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, subscriptions, spend_order, share_key, all_workspaces, pool_id FROM runtime_profile WHERE pool_id IS NOT NULL ORDER BY workspace_id, created_at, id
+SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, pool_id FROM runtime_profile WHERE pool_id IS NOT NULL ORDER BY workspace_id, created_at, id
 `
 
 // Every environment that spends a pool, in every workspace.
@@ -538,10 +515,6 @@ func (q *Queries) ListPoolRuntimeProfilesAll(ctx context.Context) ([]RuntimeProf
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.RuntimeType,
-			&i.Subscriptions,
-			&i.SpendOrder,
-			&i.ShareKey,
-			&i.AllWorkspaces,
 			&i.PoolID,
 		); err != nil {
 			return nil, err
@@ -555,7 +528,7 @@ func (q *Queries) ListPoolRuntimeProfilesAll(ctx context.Context) ([]RuntimeProf
 }
 
 const listRuntimeProfilesByPools = `-- name: ListRuntimeProfilesByPools :many
-SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, subscriptions, spend_order, share_key, all_workspaces, pool_id FROM runtime_profile WHERE pool_id = ANY($1::uuid[]) ORDER BY created_at, id
+SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, pool_id FROM runtime_profile WHERE pool_id = ANY($1::uuid[]) ORDER BY created_at, id
 `
 
 func (q *Queries) ListRuntimeProfilesByPools(ctx context.Context, poolIds []pgtype.UUID) ([]RuntimeProfile, error) {
@@ -581,10 +554,6 @@ func (q *Queries) ListRuntimeProfilesByPools(ctx context.Context, poolIds []pgty
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.RuntimeType,
-			&i.Subscriptions,
-			&i.SpendOrder,
-			&i.ShareKey,
-			&i.AllWorkspaces,
 			&i.PoolID,
 		); err != nil {
 			return nil, err
@@ -756,7 +725,7 @@ func (q *Queries) ListSubscriptionPoolMembersBySubscription(ctx context.Context,
 
 const listSubscriptionPools = `-- name: ListSubscriptionPools :many
 
-SELECT id, name, runtime_type, description, spend_order, all_workspaces, revision, legacy_share_key, created_by, created_at, updated_at FROM subscription_pool
+SELECT id, name, runtime_type, description, spend_order, all_workspaces, revision, created_by, created_at, updated_at FROM subscription_pool
 ORDER BY lower(name), created_at, id
 `
 
@@ -781,7 +750,6 @@ func (q *Queries) ListSubscriptionPools(ctx context.Context) ([]SubscriptionPool
 			&i.SpendOrder,
 			&i.AllWorkspaces,
 			&i.Revision,
-			&i.LegacyShareKey,
 			&i.CreatedBy,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -797,7 +765,7 @@ func (q *Queries) ListSubscriptionPools(ctx context.Context) ([]SubscriptionPool
 }
 
 const listSubscriptionsByIDs = `-- name: ListSubscriptionsByIDs :many
-SELECT id, key, provider, title, owner_note, auth, credential_path, windows, caps, reserve, settings, account_group, disabled_until, created_by, created_at, updated_at FROM subscription WHERE id = ANY($1::uuid[])
+SELECT id, key, provider, title, owner_note, auth, credential_path, windows, caps, settings, account_group, disabled_until, created_by, created_at, updated_at FROM subscription WHERE id = ANY($1::uuid[])
 `
 
 func (q *Queries) ListSubscriptionsByIDs(ctx context.Context, ids []pgtype.UUID) ([]Subscription, error) {
@@ -819,7 +787,6 @@ func (q *Queries) ListSubscriptionsByIDs(ctx context.Context, ids []pgtype.UUID)
 			&i.CredentialPath,
 			&i.Windows,
 			&i.Caps,
-			&i.Reserve,
 			&i.Settings,
 			&i.AccountGroup,
 			&i.DisabledUntil,
@@ -915,7 +882,7 @@ func (q *Queries) LockAgentTaskForAccount(ctx context.Context, id pgtype.UUID) (
 }
 
 const lockSubscriptionPool = `-- name: LockSubscriptionPool :one
-SELECT id, name, runtime_type, description, spend_order, all_workspaces, revision, legacy_share_key, created_by, created_at, updated_at FROM subscription_pool WHERE id = $1 FOR UPDATE
+SELECT id, name, runtime_type, description, spend_order, all_workspaces, revision, created_by, created_at, updated_at FROM subscription_pool WHERE id = $1 FOR UPDATE
 `
 
 // Serializes writes of one pool: members, order, grants and revision.
@@ -930,7 +897,6 @@ func (q *Queries) LockSubscriptionPool(ctx context.Context, id pgtype.UUID) (Sub
 		&i.SpendOrder,
 		&i.AllWorkspaces,
 		&i.Revision,
-		&i.LegacyShareKey,
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -939,7 +905,7 @@ func (q *Queries) LockSubscriptionPool(ctx context.Context, id pgtype.UUID) (Sub
 }
 
 const lockSubscriptionPoolShared = `-- name: LockSubscriptionPoolShared :one
-SELECT id, name, runtime_type, description, spend_order, all_workspaces, revision, legacy_share_key, created_by, created_at, updated_at FROM subscription_pool WHERE id = $1 FOR SHARE
+SELECT id, name, runtime_type, description, spend_order, all_workspaces, revision, created_by, created_at, updated_at FROM subscription_pool WHERE id = $1 FOR SHARE
 `
 
 // A claim reads the pool and its members under a shared lock so a concurrent
@@ -955,7 +921,6 @@ func (q *Queries) LockSubscriptionPoolShared(ctx context.Context, id pgtype.UUID
 		&i.SpendOrder,
 		&i.AllWorkspaces,
 		&i.Revision,
-		&i.LegacyShareKey,
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -989,7 +954,7 @@ WHERE rp.pool_id = $2
   AND ($1::bool = false OR rp.workspace_id IN (
         SELECT g.workspace_id FROM subscription_pool_grant g WHERE g.pool_id = $2
         UNION SELECT w.id FROM workspace w WHERE EXISTS (SELECT 1 FROM subscription_pool p WHERE p.id = $2 AND p.all_workspaces)))
-RETURNING id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, subscriptions, spend_order, share_key, all_workspaces, pool_id
+RETURNING id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, pool_id
 `
 
 type SetPoolRuntimeProfilesEnabledParams struct {
@@ -1022,10 +987,6 @@ func (q *Queries) SetPoolRuntimeProfilesEnabled(ctx context.Context, arg SetPool
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.RuntimeType,
-			&i.Subscriptions,
-			&i.SpendOrder,
-			&i.ShareKey,
-			&i.AllWorkspaces,
 			&i.PoolID,
 		); err != nil {
 			return nil, err
@@ -1059,7 +1020,7 @@ SET display_name = $1,
     updated_at = now()
 WHERE pool_id = $3
   AND (display_name <> $1 OR description IS DISTINCT FROM $2)
-RETURNING id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, subscriptions, spend_order, share_key, all_workspaces, pool_id
+RETURNING id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, pool_id
 `
 
 type SyncPoolRuntimeProfilesParams struct {
@@ -1092,10 +1053,6 @@ func (q *Queries) SyncPoolRuntimeProfiles(ctx context.Context, arg SyncPoolRunti
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.RuntimeType,
-			&i.Subscriptions,
-			&i.SpendOrder,
-			&i.ShareKey,
-			&i.AllWorkspaces,
 			&i.PoolID,
 		); err != nil {
 			return nil, err
@@ -1117,7 +1074,7 @@ SET name = $1,
     revision = revision + $5::int,
     updated_at = now()
 WHERE id = $6
-RETURNING id, name, runtime_type, description, spend_order, all_workspaces, revision, legacy_share_key, created_by, created_at, updated_at
+RETURNING id, name, runtime_type, description, spend_order, all_workspaces, revision, created_by, created_at, updated_at
 `
 
 type UpdateSubscriptionPoolParams struct {
@@ -1149,7 +1106,6 @@ func (q *Queries) UpdateSubscriptionPool(ctx context.Context, arg UpdateSubscrip
 		&i.SpendOrder,
 		&i.AllWorkspaces,
 		&i.Revision,
-		&i.LegacyShareKey,
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,

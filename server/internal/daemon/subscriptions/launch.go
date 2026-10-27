@@ -11,6 +11,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -46,6 +47,40 @@ type Launch struct {
 	DropModel bool
 	// NeedsVLESS: Claude and Codex accounts are reached only through the VLESS exit.
 	NeedsVLESS bool
+}
+
+// FilterArgs is what a CLI run behind this launch may be given: for an
+// API-key provider the model comes from settings.env, so --model and
+// Claude-foreign flags are dropped.
+func (l Launch) FilterArgs(args []string) []string {
+	if l.DropModel {
+		return ClaudeProviderArgs(args)
+	}
+	return args
+}
+
+// Environ layers the launch over base ("NAME=value" entries). An empty value
+// removes the variable, so a key exported in the caller's shell cannot route
+// the run onto another account.
+func (l Launch) Environ(base []string) []string {
+	out := make([]string, 0, len(base)+len(l.Env))
+	for _, kv := range base {
+		name, _, _ := strings.Cut(kv, "=")
+		if _, set := l.Env[name]; !set {
+			out = append(out, kv)
+		}
+	}
+	names := make([]string, 0, len(l.Env))
+	for name, v := range l.Env {
+		if v != "" {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		out = append(out, name+"="+l.Env[name])
+	}
+	return out
 }
 
 // Prepare builds the launch for sub. codexHome is the task's CODEX_HOME, whose

@@ -12,6 +12,7 @@ import (
 	"github.com/multica-ai/multica/server/internal/testutil"
 	"github.com/multica-ai/multica/server/internal/util"
 	db "github.com/multica-ai/multica/server/pkg/db/generated"
+	"github.com/multica-ai/multica/server/pkg/taskfailure"
 )
 
 // modelClaimRig is a workspace with an owner, four public online runtimes
@@ -48,9 +49,9 @@ func newModelClaimRig(t *testing.T) *modelClaimRig {
 		if name == "glm" || name == "spare" {
 			provider = "claude"
 		}
-		r.rt[name] = fx.Runtime(t, "models-"+name, testutil.Cols{"provider": provider, "visibility": "public"})
+		r.rt[name] = fx.EnvironmentRuntime(t, "models-"+name, testutil.Cols{"provider": provider, "visibility": "public"})
 	}
-	for _, table := range []string{"runtime_unavailable", "model_profile_option", "model_profile", "agent_model_option", "model_idle_episode", "inbox_item"} {
+	for _, table := range []string{"runtime_unavailable", "model_profile_option", "model_profile", "model_idle_episode", "inbox_item"} {
 		fx.Cleanup(t, "DELETE FROM "+table+" WHERE workspace_id=$1", ws)
 	}
 	fx.Cleanup(t, "DELETE FROM agent_task_queue WHERE agent_id IN (SELECT id FROM agent WHERE workspace_id=$1)", ws)
@@ -461,6 +462,9 @@ func TestModelOptionPlainAgentAndKillSwitchUnchanged(t *testing.T) {
 	}
 }
 
+// The daemon's reported reset parks the runtime, not a time read back from
+// the refusal text; without one, a reset that has just passed holds the
+// runtime minutes, not until the same clock tomorrow (TOON-274).
 func TestQuotaRefusalParksUntilReportedReset(t *testing.T) {
 	r := newModelClaimRig(t)
 	agent := r.agent("models reported reset", r.strong)
@@ -535,7 +539,7 @@ func (r *modelClaimRig) poolOn(runtime, spend string, accts ...acct) (string, []
 		r.fx.Exec(r.t, `INSERT INTO subscription_usage (subscription_id, window_key, used_percent, resets_at, limit_reached, observed_at) VALUES ($1, 'week', $2, $3, $4, $5)`,
 			id, a.used, resets, a.limit, observed)
 	}
-	r.fx.QueryRow(r.t, `INSERT INTO runtime_profile (workspace_id, display_name, protocol_family, command_name, pool_id) VALUES ($1, $2, 'codex', 'codex', $3) RETURNING id::text`,
+	r.fx.QueryRow(r.t, `INSERT INTO runtime_profile (workspace_id, display_name, protocol_family, command_name, runtime_type, pool_id) VALUES ($1, $2, 'codex', 'codex', 'codex', $3) RETURNING id::text`,
 		r.ws, "env "+suffix, pool).Scan(&profile)
 	r.fx.Exec(r.t, `UPDATE agent_runtime SET profile_id = $2 WHERE id = $1`, r.rt[runtime], profile)
 	r.t.Cleanup(func() {
@@ -613,68 +617,6 @@ func TestStaleLocalRefusalIsLiftedByAUsableAccount(t *testing.T) {
 	}
 }
 
-// acceptCarrier is the server's hidden accept agent on a runtime of the
-// daemon's model-free accept provider.
-func (r *modelClaimRig) acceptCarrier() db.Agent {
-	r.t.Helper()
-	if _, ok := r.rt["accept"]; !ok {
-		r.rt["accept"] = r.fx.Runtime(r.t, "models-accept", testutil.Cols{"provider": "accept", "visibility": "public"})
-	}
-	id := r.fx.Agent(r.t, "Приёмка", r.rt["accept"], testutil.Cols{"runtime_mode": "local", "kind": "system", "system_key": "accept"})
-	agent, err := r.q.GetAgent(r.ctx, util.MustParseUUID(id))
-	if err != nil {
-		r.t.Fatal(err)
-	}
-	return agent
-}
-
-// Acceptance runs no model (STT-358): the issue's profile must not route an
-// accept run onto a model runtime, where it would run as a prompt and fail on
-// the provider's capacity.
-func TestModelChoiceLeavesAcceptOnItsRuntime(t *testing.T) {
-	r := newModelClaimRig(t)
-	carrier := r.acceptCarrier()
-
-	task := r.enqueue(carrier, r.strong)
-	if r.runtimeOf(task) != "accept" || task.ModelChoice != nil {
-		t.Fatalf("accept run routed to %s with choice %s", r.runtimeOf(task), task.ModelChoice)
-	}
-	if n, err := r.svc.SweepModelRouting(r.ctx); err != nil || n != 0 {
-		t.Fatalf("sweep moved %d accept runs: %v", n, err)
-	}
-	if got := r.claim("codex"); got != nil {
-		t.Fatalf("codex took the accept run: %v", got.ID)
-	}
-	claimed := r.claim("accept")
-	if claimed == nil || claimed.ID != task.ID || claimed.ModelChoice != nil || claimed.ModelPosition.Valid {
-		t.Fatalf("accept claim: %+v", claimed)
-	}
-	choice, err := PreviewChoice(r.ctx, r.q, carrier, nil, time.Now())
-	if err != nil || choice.Source != ModelSourceAgentFields || choice.RuntimeID() != r.rt["accept"] {
-		t.Fatalf("preview of the accept agent: %+v, %v", choice, err)
-	}
-}
-
-// An accept run routed onto a model runtime before the fix goes back to the
-// accept runtime instead of starting there.
-func TestModelChoiceReturnsAStrayAcceptRun(t *testing.T) {
-	r := newModelClaimRig(t)
-	carrier := r.acceptCarrier()
-	task := r.enqueue(carrier, r.strong)
-	r.fx.Exec(t, `UPDATE agent_task_queue SET runtime_id = $2, model_choice = '{"source":"issue_profile"}'::jsonb WHERE id = $1`, task.ID, r.rt["codex"])
-
-	if got := r.claim("codex"); got != nil {
-		t.Fatalf("codex ran the stray accept run: %v", got.ID)
-	}
-	task = r.task(task.ID)
-	if r.runtimeOf(task) != "accept" || task.ModelChoice != nil || task.Status != "queued" {
-		t.Fatalf("stray accept run: on %s, choice %s, status %s", r.runtimeOf(task), task.ModelChoice, task.Status)
-	}
-	if claimed := r.claim("accept"); claimed == nil || claimed.ID != task.ID {
-		t.Fatalf("accept claim after the return: %+v", claimed)
-	}
-}
-
 func TestStructuredQuotaRefusalStoresCodeAndRetriesWithoutText(t *testing.T) {
 	for _, code := range []string{UnavailableAgentCapRefusal, UnavailableDisabledRefusal, UnavailableProviderLimit} {
 		t.Run(code, func(t *testing.T) {
@@ -699,5 +641,60 @@ func TestStructuredQuotaRefusalStoresCodeAndRetriesWithoutText(t *testing.T) {
 				t.Fatalf("retries %d", n)
 			}
 		})
+	}
+}
+
+// A refusal of sign-in or access is not a quota: the run is not moved to the
+// next row, no runtime is parked, and the reason stays on the failed run.
+func TestAuthFailureDoesNotMoveTheRunToAnotherRow(t *testing.T) {
+	r := newModelClaimRig(t)
+	agent := r.agent("models auth", r.strong)
+	task := r.enqueue(agent, pgtype.UUID{})
+	if r.claim("codex") == nil {
+		t.Fatal("no claim")
+	}
+	failed, err := r.svc.FailTask(r.ctx, task.ID, "401 Unauthorized: invalid api key", "", "", "", "", false, "", "")
+	if err != nil || failed.Status != "failed" {
+		t.Fatalf("fail: %v %+v", err, failed)
+	}
+	if n := r.count("SELECT count(*) FROM agent_task_queue WHERE retry_of_task_id=$1", task.ID); n != 0 {
+		t.Fatalf("an auth failure moved the run to another row: %d retries", n)
+	}
+	if n := r.count("SELECT count(*) FROM runtime_unavailable WHERE runtime_id=$1", r.rt["codex"]); n != 0 {
+		t.Fatalf("an auth failure parked the runtime as if it were a quota: %d", n)
+	}
+	if got := r.task(task.ID).FailureReason.String; got != string(taskfailure.ReasonAgentProviderAuthOrAccess) {
+		t.Fatalf("the reason is on the run: %q", got)
+	}
+}
+
+// Every attempt keeps which row was consulted, which one was rejected and why:
+// the first run chose the first row, the retry shows that row as limited.
+func TestEveryAttemptRecordsTheRejectedRowAndWhy(t *testing.T) {
+	r := newModelClaimRig(t)
+	agent := r.agent("models evidence", r.strong)
+	task := r.enqueue(agent, pgtype.UUID{})
+	if r.claim("codex") == nil {
+		t.Fatal("no claim")
+	}
+	first := choiceOf(t, r.task(task.ID))
+	if first.Chosen == nil || len(first.Rows) < 3 || !first.Rows[0].Chosen {
+		t.Fatalf("first attempt: %+v", first)
+	}
+	if _, err := r.svc.FailTask(r.ctx, task.ID, "You've hit your usage limit. Try again in 2h 5m.", "", "", "", "", false, "", ""); err != nil {
+		t.Fatal(err)
+	}
+	var childID pgtype.UUID
+	r.fx.QueryRow(t, "SELECT id FROM agent_task_queue WHERE retry_of_task_id=$1", task.ID).Scan(&childID)
+	retry := choiceOf(t, r.task(childID))
+	if retry.Chosen == nil || len(retry.Rows) < 3 {
+		t.Fatalf("retry choice: %+v", retry)
+	}
+	rejected := retry.Rows[0]
+	if rejected.Chosen || rejected.State == ModelRowAvailable || rejected.ReasonCode == "" || rejected.Until == nil {
+		t.Fatalf("the rejected row says why and until when: %+v", rejected)
+	}
+	if !retry.Rows[1].Chosen {
+		t.Fatalf("the retry took the next row: %+v", retry.Rows)
 	}
 }

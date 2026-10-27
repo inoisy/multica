@@ -1,13 +1,24 @@
 import type { ModelOption, ModelOptionInput, ModelRowState } from "../types";
 
-/** "codex·sol·high": runtime, model and thinking level of a row, empty parts left out. */
-export function modelRowLabel(row: Pick<ModelRowState, "runtime_name" | "model" | "thinking_level">): string {
-  return [row.runtime_name, row.model, row.thinking_level].filter(Boolean).join("·");
+type LabelRow = Pick<ModelRowState, "runtime_name" | "model" | "thinking_level"> & {
+  effective_model?: string;
+  model_at_run?: boolean;
+};
+
+/**
+ * "codex·sol·high": runtime, model and thinking level of a row, empty parts
+ * left out. The model is the one the row runs with (an API-key environment
+ * takes the account's); when it depends on the account of the run, `atRun`
+ * stands in for it instead of the first account's model.
+ */
+export function modelRowLabel(row: LabelRow, atRun = ""): string {
+  const model = row.model_at_run ? atRun : row.effective_model || row.model;
+  return [row.runtime_name, model, row.thinking_level].filter(Boolean).join("·");
 }
 
 /** A profile's rows in order: "codex·sol·high → claude·opus → glm". */
-export function compactModelRows(rows: ModelRowState[]): string {
-  return [...rows].sort((a, b) => a.position - b.position).map(modelRowLabel).join(" → ");
+export function compactModelRows(rows: ModelRowState[], atRun = ""): string {
+  return [...rows].sort((a, b) => a.position - b.position).map((row) => modelRowLabel(row, atRun)).join(" → ");
 }
 
 /** Rows as the API takes them back, in their order; explicit args are kept. */

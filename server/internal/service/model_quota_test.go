@@ -19,20 +19,39 @@ func TestQuotaResetParsing(t *testing.T) {
 		{"epoch", `{"error":"usage_limit_reached","resets_at":1792422000}`, "codex", time.Date(2026, 10, 19, 15, 0, 0, 0, time.UTC)},
 		{"clock with zone", "You've hit your limit · resets 3pm (Europe/Moscow)", "claude", time.Date(2026, 10, 19, 12, 0, 0, 0, time.UTC).Add(0)},
 		{"clock utc tomorrow", "Your limit resets at 11:30", "claude", time.Date(2026, 10, 20, 11, 30, 0, 0, time.UTC)},
-		{"zai date in utc+8", "Usage limit reached for 5 hour. Your limit will reset at 2026-10-19 23:53:00", "glm", time.Date(2026, 10, 19, 15, 53, 0, 0, time.UTC)},
+		{"zai date in utc+8", "Usage limit reached for 5 hour. Your limit will reset at 2026-10-19 23:53:00", "glm", time.Date(2026, 10, 19, 23, 53, 0, 0, time.UTC)},
 		{"explicit zone wins", "limit; available again 2026-10-19T18:00:00Z", "glm", time.Date(2026, 10, 19, 18, 0, 0, 0, time.UTC)},
 		{"nothing to read", "You have hit your usage limit", "codex", now.Add(time.Hour)},
 		{"past reset", "Try again in 0m", "codex", now.Add(time.Hour)},
-		{"far future clamped", "Try again in 40 days", "codex", now.Add(8 * 24 * time.Hour)},
+		{"far future clamped", "Try again in 40 days", "codex", now.Add(unknownResetWait)},
 	}
 	for _, c := range cases {
 		got := ParseQuotaReset(c.text, c.runtime, "", now)
 		if c.name == "clock with zone" {
 			// 3pm in Moscow (UTC+3) is 12:00 UTC: already passed at 12:00, so tomorrow.
-			c.want = time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC)
+			c.want = now.Add(unknownResetWait)
 		}
 		if !got.Equal(c.want) {
 			t.Errorf("%s: got %v, want %v", c.name, got.UTC(), c.want.UTC())
+		}
+	}
+}
+
+func TestQuotaResetRejectsAmbiguousAndInvalidTimes(t *testing.T) {
+	now := time.Date(2026, 10, 26, 12, 0, 0, 0, time.UTC)
+	for _, text := range []string{
+		"resets 3pm (Europe/Moscow)", "resets 3pm (PST)", "resets 3pm UTC+3",
+		"resets 13pm", "resets 0am", "resets 24:00", "resets 12:75",
+		"reset at 2026-02-30 15:00 UTC", "reset at 2026-10-27 15:00 +03:00",
+		"Try again in 8 days", "reset at 2026-11-20 15:00 UTC",
+	} {
+		if got := ParseQuotaReset(text, "glm", "zai", now); !got.Equal(now.Add(unknownResetWait)) {
+			t.Errorf("%q: got %v, want unknown reset wait", text, got)
+		}
+	}
+	for _, text := range []string{"resets 3pm (UTC)", "resets 15:00 GMT", "resets 15:00", "reset at 2026-10-26 15:00 UTC"} {
+		if got := ParseQuotaReset(text, "glm", "zai", now); !got.Equal(now.Add(3 * time.Hour)) {
+			t.Errorf("%q: got %v, want UTC clock", text, got)
 		}
 	}
 }
@@ -79,7 +98,7 @@ func TestQuotaUnavailableUntilPrefersReported(t *testing.T) {
 	if got := QuotaUnavailableUntil(now.Add(-time.Minute), text, "claude", "claude", now); !got.Equal(time.Date(2026, 10, 21, 20, 0, 0, 0, time.UTC)) {
 		t.Fatalf("past report: the text, got %v", got)
 	}
-	if got := QuotaUnavailableUntil(now.Add(30*24*time.Hour), text, "claude", "claude", now); !got.Equal(now.Add(quotaMaxWait)) {
+	if got := QuotaUnavailableUntil(now.Add(30*24*time.Hour), text, "claude", "claude", now); !got.Equal(now.Add(unknownResetWait)) {
 		t.Fatalf("far report clamped: %v", got)
 	}
 }

@@ -5,6 +5,7 @@ import { compactModelRows, modelRowLabel, moveModelOption, rowDifferences, toMod
 const row = (position: number, runtime_name: string, model: string, thinking_level = "") => ({
   position, runtime_id: `rt-${position}`, runtime_name, provider: "", model, thinking_level,
   custom_args: null, state: "available", until: null, reason_code: null, until_estimated: false, chosen: false,
+  effective_model: model, model_at_run: false,
 });
 
 it("labels rows compactly in position order", () => {

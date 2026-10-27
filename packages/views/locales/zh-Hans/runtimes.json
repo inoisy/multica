@@ -35,13 +35,17 @@
       "other_machine_hint": "在那台机器上运行两条命令",
       "cloud_services": "云服务",
       "qoder_manage_hint": "已连接 · 管理连接",
-      "cloud_runtime_hint": "创建一台 Multica 托管的云节点"
+      "cloud_runtime_hint": "创建一台 Multica 托管的云节点",
+      "accounts": "Through accounts",
+      "accounts_environment": "Add an environment through accounts",
+      "accounts_environment_hint": "A pool of accounts granted to workspaces. Accounts are connected on the Accounts tab"
     },
     "columns": {
       "name": "名称",
       "harness": "Harness",
       "agents": "智能体",
       "workload": "负载",
+      "runs_24h": "Runs, 24 h",
       "status": "状态"
     },
     "groups": {
@@ -61,6 +65,8 @@
       "add_machine_hint": "在那台机器上运行两条命令，智能体就能用它上面装好的 CLI 执行任务",
       "view_commands": "查看命令",
       "owner_you": "你",
+      "runs_24h": "Runs in 24 h: {{count}}",
+      "runs_unavailable": "Run counts unavailable",
       "connect": "连接",
       "not_connected": "未连接",
       "provided_by": "由 {{vendor}} 提供",
@@ -70,6 +76,10 @@
       "all": "全部",
       "online": "在线",
       "offline": "离线"
+    },
+    "tabs": {
+      "environments": "Environments",
+      "accounts": "Accounts"
     }
   },
   "mika_setup": {
@@ -655,5 +665,51 @@
       "cancel": "取消",
       "done": "已断开 Qoder"
     }
+  },
+  "accounts": {
+    "pool_no_environments": "No environment spends this pool yet",
+    "pool_environments": "Environments of the pool",
+    "open_environment": "Open environment “{{name}}”"
+  },
+  "facts": {
+    "title": "Use and facts",
+    "kind": "Kind",
+    "kinds": {
+      "via_accounts": "Through accounts",
+      "own_login": "Own login",
+      "builtin": "Built-in"
+    },
+    "kind_hint": {
+      "via_accounts": "The standard claude/codex under an account of the pool; the daemon prepares the login.",
+      "own_login": "Signed in on the machine itself: the account is unknown and its quota is not counted.",
+      "builtin": "The machine's built-in CLI; model agents cannot select it."
+    },
+    "selection": "Selection",
+    "states": {
+      "active": "Used in the last 24 h",
+      "reserve": "In reserve",
+      "unused": "Not used",
+      "closed": "Closed for selection"
+    },
+    "machine": "Machine: {{status}}",
+    "runs_24h": "Runs in 24 h",
+    "runs": "Runs: {{count}}",
+    "unknown_account_runs": "Without a confirmed account: {{count}}",
+    "accounts_24h": "Accounts in 24 h",
+    "own_login_accounts": "Own login: the account is unknown and the quota is not counted.",
+    "selected_in": "Where it is selected",
+    "personal_profile": "personal profile",
+    "shared_profile": "shared profile",
+    "rows": "rows: {{rows}}",
+    "fallback": "Fallback of profile",
+    "based_on": "Base of personal profiles",
+    "hidden_profiles": "Profiles you cannot see: {{count}}",
+    "serves": "Serves agents",
+    "hidden_agents": "Agents you cannot see: {{count}}",
+    "open_issues": "Open issues: {{count}}",
+    "removal": "Removal",
+    "deletable": "Can be deleted: nothing refers to it",
+    "not_deletable": "Cannot be deleted: agents or open issues refer to it",
+    "load_failed": "Could not load"
   }
 }

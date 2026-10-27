@@ -18,7 +18,7 @@ import (
 // project workflow. A step's handler pins it with the status change that
 // hands the issue on (`multica issue status <id> <next> --commit … --repo …`);
 // every run queued afterwards carries a snapshot of it in its context, and
-// the acceptance step merges exactly that commit. There is no second
+// the reviewer merges exactly that commit. There is no second
 // step-result protocol: the status change is the handoff.
 
 // workflowArtifactWrite rides the context of a status write whose project
@@ -147,8 +147,8 @@ func writeWorkflowArtifactError(w http.ResponseWriter, err error) bool {
 
 // GetIssueWorkflowArtifact handles GET /api/issues/{id}/workflow-artifact:
 // the commit pinned for the issue's current workflow and where the current
-// step leads (next on success, back on a return). The acceptance step reads
-// it to know what to merge. A run of the issue gets the snapshot it was
+// step leads (next on success, back on a return). The reviewer reads it to
+// know what to merge. A run of the issue gets the snapshot it was
 // queued with, and 409 when the pin has moved since: it must not merge a
 // commit nobody handed to it.
 func (h *Handler) GetIssueWorkflowArtifact(w http.ResponseWriter, r *http.Request) {
