@@ -14,7 +14,7 @@ func TestCreateAgent_CustomArgs(t *testing.T) {
 	if testHandler == nil {
 		t.Skip("database not available")
 	}
-	claudeID := dbfx.Runtime(t, "custom-args-claude", testutil.Cols{"provider": "claude"})
+	claudeID := dbfx.EnvironmentRuntime(t, "custom-args-claude", testutil.Cols{"provider": "claude"})
 	ompID := dbfx.Runtime(t, "custom-args-omp", testutil.Cols{"provider": "omp"})
 	piID := dbfx.Runtime(t, "custom-args-pi", testutil.Cols{"provider": "pi"})
 	for _, tc := range []struct {

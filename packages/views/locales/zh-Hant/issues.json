@@ -1539,6 +1539,7 @@
       "preview_brief": "預覽智慧體收到的說明",
       "preview_title": "「{{status}}」這一步的說明",
       "preview_description": "任務進入這一步時，處理人的執行會收到這段說明。預覽不需要先儲存。",
+      "preview_error": "無法載入說明。請檢查這一步的處理人後重試。",
       "description_placeholder": "新增描述",
       "select_step": "選擇一列，設定任務進入時交給誰。",
       "unsaved": "有未儲存的修改",
@@ -1705,5 +1706,13 @@
   },
   "hover_card": {
     "created_updated": "建立於 {{created}} · 更新於 {{updated}}"
+  },
+  "model_profile": {
+    "label": "Model profile",
+    "assignee": "Assignee's profile"
+  },
+  "stage_dispatch": {
+    "label": "階段",
+    "off": "不分派"
   }
 }
