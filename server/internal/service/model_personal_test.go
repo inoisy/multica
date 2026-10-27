@@ -154,10 +154,13 @@ func TestDeletingTheBaseKeepsThePersonalProfile(t *testing.T) {
 	if n := r.count("SELECT count(*) FROM model_profile_option WHERE profile_id=$1", p.ID); n != 1 {
 		t.Fatalf("rows of the personal profile: %d", n)
 	}
-	// Without a base there is nothing to return to.
-	back, err := r.profiles.ResetPersonalProfile(r.ctx, r.refetch(agent))
-	if err != nil || back.ModelProfileID.Valid {
-		t.Fatalf("reset without a base: %v %v", back.ModelProfileID, err)
+	// Without a base there is nothing to return to, and an agent never runs
+	// without a profile: the reset is refused and the personal profile stays.
+	if _, err := r.profiles.ResetPersonalProfile(r.ctx, r.refetch(agent)); !errors.Is(err, ErrModelProfileInvalid) {
+		t.Fatalf("reset without a base: %v", err)
+	}
+	if got := r.refetch(agent); got.ModelProfileID != p.ID {
+		t.Fatalf("agent left its personal profile: %v", got.ModelProfileID)
 	}
 }
 

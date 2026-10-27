@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/multica-ai/multica/server/internal/service"
 	db "github.com/multica-ai/multica/server/pkg/db/generated"
 	"github.com/multica-ai/multica/server/pkg/dbid"
 )
@@ -130,6 +131,10 @@ func (h *Handler) CreateAgentBuilderSession(w http.ResponseWriter, r *http.Reque
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to prepare agent builder")
+		return
+	}
+	if builder, err = service.ProfileFromAgentFields(r.Context(), qtx, builder); err != nil {
+		writeModelProfileError(w, err)
 		return
 	}
 
@@ -526,6 +531,10 @@ func (h *Handler) SwitchAgentBuilderRuntime(w http.ResponseWriter, r *http.Reque
 			return
 		}
 		writeError(w, http.StatusInternalServerError, "failed to switch agent builder runtime")
+		return
+	}
+	if updated, err = service.ProfileFromAgentFields(r.Context(), qtx, updated); err != nil {
+		writeModelProfileError(w, err)
 		return
 	}
 	if err := tx.Commit(r.Context()); err != nil {

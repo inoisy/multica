@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/multica-ai/multica/server/internal/util"
+	"github.com/multica-ai/multica/server/pkg/agent"
 	db "github.com/multica-ai/multica/server/pkg/db/generated"
 	"github.com/multica-ai/multica/server/pkg/dbid"
 )
@@ -86,6 +87,14 @@ func normalizeOptions(ctx context.Context, q *db.Queries, workspaceID pgtype.UUI
 	for _, rt := range runtimes {
 		byID[util.UUIDToString(rt.ID)] = rt
 	}
+	environments, err := q.ListRuntimeProfiles(ctx, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	profileOf := map[string]db.RuntimeProfile{}
+	for _, p := range environments {
+		profileOf[util.UUIDToString(p.ID)] = p
+	}
 	out := make([]ModelOption, 0, len(in))
 	for i, o := range in {
 		id, err := util.ParseUUID(strings.TrimSpace(o.RuntimeID))
@@ -96,8 +105,11 @@ func normalizeOptions(ctx context.Context, q *db.Queries, workspaceID pgtype.UUI
 		if !ok {
 			return nil, invalid("row %d: runtime is not in this workspace", i+1)
 		}
-		if owner != nil && rt.Visibility == "private" && rt.OwnerID.Valid && rt.OwnerID != *owner {
+		if owner != nil && rt.Visibility == "private" && rt.OwnerID.Valid && !RuntimeAllowsUser(rt, *owner) {
 			return nil, invalid("row %d: runtime %q is private to another member", i+1, runtimeDisplayName(rt))
+		}
+		if err := checkRowEnvironment(rt, profileOf); err != nil {
+			return nil, invalid("row %d: %s", i+1, err.Error())
 		}
 		model, thinking := strings.TrimSpace(o.Model), strings.TrimSpace(o.ThinkingLevel)
 		if utf8.RuneCountInString(model) > maxModelFieldLength || utf8.RuneCountInString(thinking) > maxModelFieldLength {
@@ -113,6 +125,40 @@ func normalizeOptions(ctx context.Context, q *db.Queries, workspaceID pgtype.UUI
 		out = append(out, opt)
 	}
 	return out, nil
+}
+
+// isBuiltinAccountRuntime is a Claude or Codex runtime that no environment
+// backs: the daemon's own CLI login, whose account Multica neither knows nor
+// meters. The type and the link decide, never the name.
+func isBuiltinAccountRuntime(rt db.AgentRuntime) bool {
+	return !rt.ProfileID.Valid && (rt.Provider == "claude" || rt.Provider == "codex")
+}
+
+// checkRowEnvironment refuses the environments a model row must not name: a
+// built-in Claude/Codex runtime, and an environment of an account pool whose
+// command is not the CLI family of the pool (a wrapper would spend an account
+// of its own outside the pool). A login of one's own, such as a Qwen
+// environment, has no pool and passes.
+func checkRowEnvironment(rt db.AgentRuntime, environments map[string]db.RuntimeProfile) error {
+	if isBuiltinAccountRuntime(rt) {
+		return fmt.Errorf("runtime %q is the built-in %s environment; choose an environment with accounts or with its own login", runtimeDisplayName(rt), rt.Provider)
+	}
+	if env, ok := environments[util.UUIDToString(rt.ProfileID)]; ok && !PoolCommandMatches(env) {
+		return fmt.Errorf("runtime %q of an account pool runs %q instead of %q, so it would spend an account outside the pool", runtimeDisplayName(rt), env.CommandName, poolEnvironmentType(env))
+	}
+	return nil
+}
+
+func poolEnvironmentType(env db.RuntimeProfile) string {
+	return agent.ProfileRuntimeType(env.RuntimeType, env.ProtocolFamily)
+}
+
+// PoolCommandMatches is false for an environment of an account pool whose
+// command is not the CLI of its type: a wrapper there signs in on its own and
+// spends an account the pool does not meter. Environments without a pool have
+// no such rule.
+func PoolCommandMatches(env db.RuntimeProfile) bool {
+	return !env.PoolID.Valid || env.CommandName == poolEnvironmentType(env)
 }
 
 func runtimeDisplayName(rt db.AgentRuntime) string {
@@ -225,7 +271,10 @@ func (s *ModelProfileService) SaveProfile(ctx context.Context, workspaceID, id, 
 		if err != nil {
 			return err
 		}
-		return replaceProfileOptions(ctx, q, workspaceID, id, options)
+		if err := replaceProfileOptions(ctx, q, workspaceID, id, options); err != nil {
+			return err
+		}
+		return projectProfileOnAgents(ctx, q, workspaceID, id)
 	})
 	return saved, err
 }
@@ -298,8 +347,9 @@ func (s *ModelProfileService) DeleteProfile(ctx context.Context, workspaceID, id
 
 // AgentModelsInput changes an agent's model settings; nil fields are kept.
 //
-//   - ModelProfileID / ClearProfile select a shared profile (or none). A
-//     personal profile the agent has is kept, unused, until it is reset.
+//   - ModelProfileID selects a profile; ClearProfile is refused for an agent
+//     that has one. A personal profile the agent has is kept, unused, until
+//     it is reset.
 //   - Options writes the rows of the agent's personal profile, creating it
 //     from the profile the agent is on; an empty list returns the agent to the
 //     profile its personal one was based on (this is what older clients send
@@ -318,25 +368,24 @@ func (s *ModelProfileService) SaveAgentModels(ctx context.Context, agent db.Agen
 		if _, err := q.LockModelProfilesInWorkspace(ctx, agent.WorkspaceID); err != nil {
 			return err
 		}
-		if in.ModelProfileID != nil || in.ClearProfile {
-			var profileID pgtype.UUID
-			if in.ModelProfileID != nil && strings.TrimSpace(*in.ModelProfileID) != "" {
-				id, err := util.ParseUUID(strings.TrimSpace(*in.ModelProfileID))
-				if err != nil {
-					return invalid("model_profile_id is not a UUID")
-				}
-				p, err := q.GetModelProfileInWorkspace(ctx, db.GetModelProfileInWorkspaceParams{ID: id, WorkspaceID: agent.WorkspaceID})
-				if errors.Is(err, pgx.ErrNoRows) {
-					return invalid("model_profile_id is not a profile of this workspace")
-				} else if err != nil {
-					return err
-				}
-				if p.OwnerAgentID.Valid && p.OwnerAgentID != agent.ID {
-					return invalid("model_profile_id is the personal profile of another agent")
-				}
-				profileID = id
+		if in.ClearProfile && agent.ModelProfileID.Valid {
+			return invalid("an agent runs on a profile; choose a shared profile or give it a personal one")
+		}
+		if in.ModelProfileID != nil && strings.TrimSpace(*in.ModelProfileID) != "" {
+			id, err := util.ParseUUID(strings.TrimSpace(*in.ModelProfileID))
+			if err != nil {
+				return invalid("model_profile_id is not a UUID")
 			}
-			a, err := q.SetAgentModelProfile(ctx, db.SetAgentModelProfileParams{ID: agent.ID, WorkspaceID: agent.WorkspaceID, ModelProfileID: profileID})
+			p, err := q.GetModelProfileInWorkspace(ctx, db.GetModelProfileInWorkspaceParams{ID: id, WorkspaceID: agent.WorkspaceID})
+			if errors.Is(err, pgx.ErrNoRows) {
+				return invalid("model_profile_id is not a profile of this workspace")
+			} else if err != nil {
+				return err
+			}
+			if p.OwnerAgentID.Valid && p.OwnerAgentID != agent.ID {
+				return invalid("model_profile_id is the personal profile of another agent")
+			}
+			a, err := setAgentProfile(ctx, q, agent, id)
 			if err != nil {
 				return err
 			}
@@ -531,10 +580,7 @@ func savePersonalProfile(ctx context.Context, q *db.Queries, agent db.Agent, in 
 	if err := replaceProfileOptions(ctx, q, agent.WorkspaceID, id, options); err != nil {
 		return agent, err
 	}
-	if agent.ModelProfileID == id {
-		return agent, nil
-	}
-	return q.SetAgentModelProfile(ctx, db.SetAgentModelProfileParams{ID: agent.ID, WorkspaceID: agent.WorkspaceID, ModelProfileID: id})
+	return setAgentProfile(ctx, q, agent, id)
 }
 
 func resetPersonalProfile(ctx context.Context, q *db.Queries, agent db.Agent) (db.Agent, error) {
@@ -549,7 +595,10 @@ func resetPersonalProfile(ctx context.Context, q *db.Queries, agent db.Agent) (d
 	// The agent goes back to the profile the personal one was made from. When
 	// it already points at something else it stays there.
 	if agent.ModelProfileID == existing.ID {
-		updated, err = q.SetAgentModelProfile(ctx, db.SetAgentModelProfileParams{ID: agent.ID, WorkspaceID: agent.WorkspaceID, ModelProfileID: existing.BasedOnProfileID})
+		if !existing.BasedOnProfileID.Valid {
+			return agent, invalid("the personal profile was not made from a shared one; choose a shared profile first")
+		}
+		updated, err = setAgentProfile(ctx, q, agent, existing.BasedOnProfileID)
 		if err != nil {
 			return agent, err
 		}
