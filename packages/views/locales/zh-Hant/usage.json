@@ -1,5 +1,6 @@
 {
   "title": "統計",
+  "tab_subscriptions": "訂閱",
   "tab_usage": "用量",
   "header": {
     "timezone_and_updated": "{{tz}} · 更新於 {{time}}",
