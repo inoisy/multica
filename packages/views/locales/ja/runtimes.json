@@ -45,6 +45,7 @@
       "harness": "Harness",
       "agents": "エージェント",
       "workload": "負荷",
+      "runs_24h": "Runs, 24 h",
       "status": "ステータス"
     },
     "groups": {
@@ -64,6 +65,8 @@
       "add_machine_hint": "そのマシンで 2 つのコマンドを実行すると、エージェントがそこにインストールされた CLI を使えます",
       "view_commands": "コマンドを表示",
       "owner_you": "あなた",
+      "runs_24h": "Runs in 24 h: {{count}}",
+      "runs_unavailable": "Run counts unavailable",
       "connect": "接続",
       "not_connected": "未接続",
       "provided_by": "{{vendor}} 提供",

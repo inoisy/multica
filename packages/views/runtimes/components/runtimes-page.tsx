@@ -97,6 +97,7 @@ import { AccountsOverview, NewPoolDialog } from "../accounts";
 import { pendingRuntimeFromProfile } from "./pending-runtime";
 import { buildRuntimeMachines, type RuntimeMachine } from "./runtime-machines";
 import { HealthDot, HealthIcon, useHealthLabel } from "./shared";
+import { useMachineRunFacts, type MachineRunFacts } from "./machine-run-facts";
 import { useT, useTimeAgo } from "../../i18n";
 import { daemonRuntimesDocsHref } from "./runtime-docs";
 
@@ -124,14 +125,14 @@ const COMING_SOON_SERVICES = [
   { provider: "claude", name: "Claude Managed Agents", vendor: "Anthropic" },
 ];
 
-// Track order: edge, name, harness, agents, workload, status, actions, edge.
+// Track order: edge, name, harness, agents, workload, runs, status, actions, edge.
 // Below @2xl only name, status and actions keep a track; the other cells are
 // `hidden @2xl:flex` and drop out of subgrid placement. MUST stay a literal
 // string so Tailwind sees the arbitrary template.
 const GRID_COLS =
   "grid-cols-[0.5rem_minmax(0,1fr)_96px_2rem_0.5rem] " +
   "@sm:grid-cols-[0.5rem_minmax(160px,1fr)_112px_2rem_0.5rem] " +
-  "@2xl:grid-cols-[0.5rem_minmax(120px,1fr)_128px_64px_112px_136px_5.5rem_0.5rem]";
+  "@2xl:grid-cols-[0.5rem_minmax(120px,1fr)_128px_64px_112px_104px_136px_5.5rem_0.5rem]";
 
 const OPTIONAL_CELL = "hidden @2xl:flex";
 
@@ -391,6 +392,9 @@ export function RuntimesPage({
                 </ListGridHeaderCell>
                 <ListGridHeaderCell className={OPTIONAL_CELL}>
                   {t(($) => $.page.columns.workload)}
+                </ListGridHeaderCell>
+                <ListGridHeaderCell className={OPTIONAL_CELL}>
+                  {t(($) => $.page.columns.runs_24h)}
                 </ListGridHeaderCell>
                 <ListGridHeaderCell>{t(($) => $.page.columns.status)}</ListGridHeaderCell>
                 <ListGridHeaderCell aria-hidden="true" />
@@ -801,6 +805,7 @@ function NameCell({
   href,
   badge,
   subtitle,
+  extra,
   muted,
 }: {
   tile: ReactNode;
@@ -808,6 +813,8 @@ function NameCell({
   href?: string;
   badge?: ReactNode;
   subtitle: string;
+  /** A line under the subtitle, for facts that get their own column on wide screens. */
+  extra?: ReactNode;
   muted?: boolean;
 }) {
   return (
@@ -838,6 +845,7 @@ function NameCell({
         <span className="block truncate text-caption text-muted-foreground">
           {subtitle}
         </span>
+        {extra}
       </span>
     </ListGridCell>
   );
@@ -884,6 +892,23 @@ function WorkloadText({
   );
 }
 
+function MachineRuns({ facts }: { facts: MachineRunFacts }) {
+  const { t } = useT("runtimes");
+  if (facts.status === "loading") return <Skeleton className="h-4 w-8" />;
+  if (facts.status === "error") {
+    return (
+      <span
+        className="text-caption text-destructive"
+        title={t(($) => $.page.rows.runs_unavailable)}
+        aria-label={t(($) => $.page.rows.runs_unavailable)}
+      >
+        —
+      </span>
+    );
+  }
+  return <>{facts.runs}</>;
+}
+
 function MachineRow({
   machine,
   bootstrapping,
@@ -921,6 +946,7 @@ function MachineRow({
   const starting =
     machine.isCurrent && bootstrapping && machine.runtimes.length === 0;
   const online = machine.health === "online";
+  const runFacts = useMachineRunFacts(machine.runtimes);
 
   return (
     <ListGridRow
@@ -950,6 +976,18 @@ function MachineRow({
           ) : undefined
         }
         subtitle={subtitle}
+        extra={
+          <span
+            className="block truncate text-caption tabular-nums text-muted-foreground @2xl:hidden"
+            data-testid="machine-runs-24h-compact"
+          >
+            {runFacts.status === "ready"
+              ? t(($) => $.page.rows.runs_24h, { count: runFacts.runs })
+              : runFacts.status === "error"
+                ? t(($) => $.page.rows.runs_unavailable)
+                : null}
+          </span>
+        }
       />
       <ListGridCell className={OPTIONAL_CELL}>
         <ProviderIconStack providers={machine.providerNames} />
@@ -967,6 +1005,9 @@ function MachineRow({
       ) : (
         <EmptyCell />
       )}
+      <ListGridCell className={cn(OPTIONAL_CELL, "text-body tabular-nums")} data-testid="machine-runs-24h">
+        <MachineRuns facts={runFacts} />
+      </ListGridCell>
       <ListGridCell className="gap-1.5 text-caption">
         {starting ? (
           <>
@@ -1025,6 +1066,7 @@ function QoderRow({
           title={title}
           subtitle={byQoder}
         />
+        <EmptyCell />
         <EmptyCell />
         <EmptyCell />
         <EmptyCell />
@@ -1100,6 +1142,7 @@ function QoderRow({
       ) : (
         <EmptyCell />
       )}
+      <EmptyCell />
       <ListGridCell className="gap-1.5 text-caption">
         <span aria-hidden="true" className={cn("size-1.5 rounded-full", dotTone)} />
         <span
@@ -1141,6 +1184,7 @@ function ComingSoonRow({
         subtitle={t(($) => $.page.rows.provided_by, { vendor })}
         muted
       />
+      <EmptyCell />
       <EmptyCell />
       <EmptyCell />
       <EmptyCell />
