@@ -64,18 +64,12 @@ workspace; `runtime_profile` — настройка CLI workspace; `agent_runtim
 
 ## Граница с прежним конвейером
 
-Уточнение 26.10 по `main@82448ded6`: старый маршрут удалён в PR #77,
-приёмка Workflow и stage-dispatch сохранены. Основная команда —
-`multica workflow accept`, прежнее имя `issue conveyor accept` оставлено
-временным алиасом. PR #98 добавил режим `ci`: приёмка подтверждает наличие
-закреплённого коммита в базе, локальное слияние и acceptance-команды не запускает.
-Для локальных репозиториев без CI сохранён прежний путь. Реальный сквозной
-цикл CI-режима ещё проверяется в зависимости от перехода РП;
-код и merge сами по себе его не доказывают. Источники:
+Уточнение 26.10 по `main@82448ded6`: старый маршрут удалён в PR #77.
+27.10 (STT-429) удалён и шаг `accept` целиком — обработчик Workflow, провайдер
+демона, `multica workflow accept`, алиас `issue conveyor accept` и режим `ci` из
+PR #98. Слияние и доставку завершает ревьюер; stage-dispatch сохранён. Источники:
 [STT-429](https://multica.yakutov.com/stt/issues/STT-429),
 [issueworkflow.go](../../../server/internal/issueworkflow/issueworkflow.go),
-[workflow_accept.go](../../../server/cmd/multica/workflow_accept.go),
-[cmd_issue_conveyor_accept.go](../../../server/cmd/multica/cmd_issue_conveyor_accept.go),
 [stage_dispatch.go](../../../server/internal/service/stage_dispatch.go).
 
 ## Машинная часть

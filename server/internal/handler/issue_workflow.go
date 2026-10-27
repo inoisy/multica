@@ -449,16 +449,6 @@ func (h *Handler) validateHandoffHandlers(ctx context.Context, r *http.Request, 
 // validateHandoffHandlers.
 func (h *Handler) validateHandoffHandler(ctx context.Context, r *http.Request, workspaceID string, s issueworkflow.Step) (int, string) {
 	switch s.Handler.Type {
-	case issueworkflow.HandlerAccept:
-		member, err := h.Queries.GetMemberByUserAndWorkspace(ctx, db.GetMemberByUserAndWorkspaceParams{UserID: parseUUID(requestUserID(r)), WorkspaceID: parseUUID(workspaceID)})
-		if err != nil || !isWorkspaceAdmin(member) {
-			return http.StatusForbidden, "only workspace admins can configure automatic acceptance"
-		}
-		a, err := service.WorkflowAcceptanceAgent(ctx, h.Queries, parseUUID(workspaceID))
-		if err != nil || a == nil {
-			return http.StatusBadRequest, "an online acceptance runtime is required"
-		}
-		return 0, ""
 	case issueworkflow.HandlerAgent, issueworkflow.HandlerSquad, issueworkflow.HandlerMember:
 		id, err := parseUUIDString(s.Handler.ID)
 		if err != nil {

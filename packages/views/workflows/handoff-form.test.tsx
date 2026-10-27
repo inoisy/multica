@@ -72,19 +72,12 @@ describe("HandoffFields", () => {
     expect(onPatch).toHaveBeenCalledWith({ handler: { type: "agent", id: "agent-1" } });
   });
 
-  it("offers automatic acceptance among agents, with next and back but no instructions", async () => {
-    const onPatch = renderFields({ status_key: "in_review", handler: { type: "agent" }, instructions: "" });
+  it("no longer offers automatic acceptance among agents", async () => {
+    renderFields({ status_key: "in_review", handler: { type: "agent" }, instructions: "" });
 
     fireEvent.click(screen.getByRole("button", { name: "Choose an agent" }));
-    fireEvent.click(await screen.findByText("Automatic acceptance"));
-    expect(screen.queryByText("No results")).toBeNull();
-    expect(onPatch).toHaveBeenCalledWith({ handler: { type: "accept" } });
-
-    cleanup();
-    renderFields({ status_key: "in_review", handler: { type: "accept" }, instructions: "" });
-    expect(screen.getByText(/Merges the commit the previous step pinned/)).toBeTruthy();
-    expect(screen.queryByRole("textbox")).toBeNull();
-    expect(screen.getAllByRole("combobox").length).toBeGreaterThan(0);
+    await screen.findByText("Builder");
+    expect(screen.queryByText("Automatic acceptance")).toBeNull();
   });
 
   it("lists the project lead and members for a member handoff, without instructions", async () => {
@@ -191,7 +184,7 @@ describe("WorkflowHandoffForm", () => {
 
 describe("BriefPreviewDialog", () => {
   it("says the brief could not load instead of showing an empty block", async () => {
-    previewWorkflowBrief.mockRejectedValueOnce(new Error("an online acceptance runtime is required"));
+    previewWorkflowBrief.mockRejectedValueOnce(new Error("brief unavailable"));
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     renderWithI18n(
       <QueryClientProvider client={qc}>
@@ -199,7 +192,7 @@ describe("BriefPreviewDialog", () => {
           open
           onOpenChange={() => {}}
           workflowId="wf-1"
-          step={{ status_key: "in_review", handler: { type: "accept" }, instructions: "" }}
+          step={{ status_key: "in_review", handler: { type: "agent", id: "agent-1" }, instructions: "" }}
         />
       </QueryClientProvider>,
     );
