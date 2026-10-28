@@ -869,7 +869,7 @@ func init() {
 			return cli.PrintJSON(os.Stdout, plan)
 		},
 	}
-	imp.Flags().String("file", "", "Import document (see docs/stt/models-import.md)")
+	imp.Flags().String("file", "", "Import document (JSON with models and profiles)")
 	imp.Flags().Bool("apply", false, "Write the plan instead of only showing it")
 	for _, c := range []*cobra.Command{list, show, create, edit, del, imp} {
 		c.Flags().String("output", "table", "Output format: table or json")
