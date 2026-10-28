@@ -8,7 +8,8 @@ to the previous images if it does not. When mcp_service is set, the multica-task
 MCP image pinned in the same commit (mcp_pin_path) is deployed, health-checked and
 rolled back together with them. The daemon binary is swapped only while
 the daemon is idle. Destructive migrations stop the run until an operator
-passes --allow-destructive.
+passes --allow-destructive, unless the PR that added each of them was merged
+with the approval label (approve_label).
 
 Runs as root from systemd (timer, webhook trigger). Stdlib only.
 """
@@ -23,6 +24,7 @@ import subprocess
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -57,6 +59,9 @@ DEFAULTS = {
     "daemon_binary": "/usr/local/bin/multica",
     "daemon_idle_wait_s": 600,
     "notify_issue": "",
+    # A destructive migration deploys on its own when the PR that added it was
+    # merged into the branch with this label; empty turns that off.
+    "approve_label": "allow-destructive",
     "dry_run": True,
 }
 
@@ -109,6 +114,21 @@ def classify_migrations(files):
             kinds = sorted({" ".join(h.split()[:2]).upper() for h in hits})
             problems.append(f"{name}: {', '.join(kinds)}")
     return problems, added
+
+
+def destructive_path(problem):
+    """Migration path of a destructive-statement problem, or None for the
+    problems a label cannot approve: edited migrations and unverifiable changes."""
+    name, sep, text = problem.partition(": ")
+    if not sep or not name.startswith("server/migrations/") or text.startswith("existing migration"):
+        return None
+    return name
+
+
+def pr_approves(pr, branch, label):
+    """Whether a PR merged into branch carries the approval label."""
+    return bool(pr.get("merged_at")) and pr.get("base", {}).get("ref") == branch and \
+        label in {lab.get("name") for lab in pr.get("labels", [])}
 
 
 def pick_target(commits, runs_by_sha, required):
@@ -334,6 +354,35 @@ class Deployer:
                 files.append(entry)
         return classify_migrations(files)
 
+    def approving_pr(self, path, target, label):
+        """Number of the PR merged with the label that last touched path up to target, or None."""
+        commits = self.gh(f"/commits?sha={target}&path={urllib.parse.quote(path)}&per_page=1")
+        if not commits:
+            return None
+        for pr in self.gh(f"/commits/{commits[0]['sha']}/pulls"):
+            if pr_approves(pr, self.cfg["branch"], label):
+                return pr["number"]
+        return None
+
+    def label_approved(self, problems, target):
+        """Splits off the destructive migrations a labelled PR approved; the rest still block."""
+        label = self.cfg.get("approve_label")
+        if not label:
+            return problems, []
+        left, approved = [], []
+        for problem in problems:
+            path = destructive_path(problem)
+            try:
+                number = self.approving_pr(path, target, label) if path else None
+            except (urllib.error.URLError, ValueError, KeyError) as exc:
+                self.log("label_check_failed", path=path, error=str(exc))
+                number = None
+            if number:
+                approved.append({"migration": path, "pr": number})
+            else:
+                left.append(problem)
+        return left, approved
+
     def backup(self, ctx, label):
         out_dir = Path(self.cfg["backup_dir"])
         stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -444,16 +493,21 @@ class Deployer:
                 self.save_state(state)
             self.log("noop", reason="already running", commit=current)
             return 0
-        if state.get("blocked") == target and self.allow_destructive != target:
-            self.log("noop", reason="waiting for operator", commit=target)
-            return 0
         problems, added = self.migration_check(current, target)
         if problems and self.allow_destructive != target:
+            problems, approved = self.label_approved(problems, target)
+            if approved:
+                self.log("approved_by_label", commit=target, label=self.cfg["approve_label"], migrations=approved)
+        if problems and self.allow_destructive != target:
+            if state.get("blocked") == target:
+                self.log("noop", reason="waiting for operator", commit=target)
+                return 0
             self.log("blocked", commit=target, problems=problems)
             state["blocked"] = target
             self.save_state(state)
             self.notify(f"Автовыкатка остановлена на `{target[:9]}`: {'; '.join(problems)}.\n\n"
-                        f"Выкатить вручную после проверки: `sudo multica-autodeploy run --allow-destructive {target}`.")
+                        f"Выкатить: метка `{self.cfg.get('approve_label')}` на слитом PR с миграцией (подхватит следующий прогон) "
+                        f"или вручную после проверки: `sudo multica-autodeploy run --allow-destructive {target}`.")
             return 3
         ctx = self.compose_context()
         previous = self.current_images(ctx)
