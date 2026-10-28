@@ -1,28 +1,34 @@
 # Add instructions to a running turn
 
-There are two paths. **Agents** use `multica issue comment add --steer`: the
-comment goes into the running turn of each agent it triggers on the issue
-(mention it or reply in its thread). **People** use `multica issue steer`, which
+There are two paths. **Agents** use `multica issue comment add --steer-active`
+(or `--steer <run-id>`): the comment goes into the running turn of the agents it
+names or triggers on the issue. **People** use `multica issue steer`, which
 targets one exact run and accepts only human credentials; agent task tokens
 cannot use it, and must never fall back to another person's credential.
 
-## Agents: `comment add --steer`
+## Agents: `comment add --steer-active` / `--steer <run-id>`
 
 ```bash
-multica issue comment add MUL-123 --steer --content-file ./correction.md
+multica issue comment add MUL-123 --steer-active --content-file ./correction.md
+multica issue comment add MUL-123 --steer RUN_ID --content-file ./correction.md
 ```
 
 Steer only to correct the work in progress on the same issue: a wrong
 requirement, a new constraint, a fact the running agent needs now. New work is a
-normal comment or a new issue. The server resolves each triggered agent's
-running turn itself; no run ID is needed. Permissions do not change: you can
-steer only an agent your comment could already trigger.
+normal comment or a new issue. `--steer-active` steers every running turn on the
+issue you may steer, plus any other running recipient of the comment;
+`--steer` takes run IDs from `multica issue runs <issue> --active` (repeatable,
+short prefixes resolve on this issue). The CLI mentions each steered agent in
+the comment. Permissions do not change: you can steer only an agent your comment
+could already trigger, and never your own turn.
 
-stderr reports each recipient: `delivered into the running turn of <agent>`, or
-`had no turn to take it; handled as queued|coalesced|deferred`. A recipient
-without a running turn, a runtime that cannot take input, a comment with
-attachments, or a turn that already absorbed 10 steered comments falls back to
-the normal trigger; the comment is never dropped or sent to another turn.
+stderr reports which recipients took the comment into their running turn and
+which fell back to the normal trigger. A recipient without a running turn, a
+runtime that cannot take input, or a turn that already took 10 agent comments
+(3 from the same agent) falls back to the normal trigger; `--steer` /
+`--steer-active` cannot be combined with `--attachment`. The comment is never
+dropped or sent to another turn. Details: `references/mentions.md`, "Steering
+another agent's running turn".
 
 ## People: `issue steer`
 
