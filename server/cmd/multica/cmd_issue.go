@@ -464,11 +464,12 @@ var issueUsageCmd = &cobra.Command{
 }
 
 var issueRerunCmd = &cobra.Command{
-	Use:   "rerun <id>",
-	Short: "Re-enqueue an issue's current agent assignment as a fresh run",
-	Long:  "Re-enqueue the issue's current assignment, or the run named with --task, as a fresh run. To repeat one run even after the issue was reassigned, or with --fresh, use `multica issue rerun-task <run-id>`.",
-	Args:  exactArgs(1),
-	RunE:  runIssueRerun,
+	Use:        "rerun <id>",
+	Short:      "Re-enqueue an issue's current agent assignment as a fresh run",
+	Deprecated: "use `multica issue rerun-task <run-id>` instead; find run IDs with `multica issue runs <issue-id> --full-id`",
+	Hidden:     true,
+	Args:       exactArgs(1),
+	RunE:       runIssueRerun,
 }
 
 var issueRerunTaskCmd = &cobra.Command{
@@ -744,8 +745,6 @@ func init() {
 
 	// issue rerun
 	issueRerunCmd.Flags().String("output", "json", "Output format: table or json")
-	issueRerunCmd.Flags().String("task", "", "Repeat this run (full id or the short prefix from `issue runs`) instead of the issue's current assignee; on a routed issue it names the step run to retry")
-
 	// issue rerun-task
 	issueRerunTaskCmd.Flags().String("output", "json", "Output format: table or json")
 	issueRerunTaskCmd.Flags().String("issue", "", "Issue ID/key to scope short run ID prefix resolution")
@@ -3088,17 +3087,8 @@ func runIssueRerun(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("resolve issue: %w", err)
 	}
 
-	body := map[string]any{}
-	if input, _ := cmd.Flags().GetString("task"); input != "" {
-		taskRef, err := resolveTaskRunID(ctx, client, issueRef.ID, input)
-		if err != nil {
-			return fmt.Errorf("resolve run: %w", err)
-		}
-		body["task_id"] = taskRef.ID
-	}
-
 	var task map[string]any
-	if err := client.PostJSON(ctx, "/api/issues/"+issueRef.ID+"/rerun", body, &task); err != nil {
+	if err := client.PostJSON(ctx, "/api/issues/"+issueRef.ID+"/rerun", map[string]any{}, &task); err != nil {
 		return fmt.Errorf("rerun issue: %w", err)
 	}
 
