@@ -2384,6 +2384,7 @@ SELECT
     $11,
     NULLIF(jsonb_strip_nulls(jsonb_build_object(
         'head_sha', NULLIF(COALESCE($12::text, ''), ''),
+        'fresh_rerun', CASE WHEN COALESCE($13::boolean, FALSE) THEN TRUE END,
         -- The commit pinned for the issue's current workflow (a project on
         -- Default has no workflow_id; its workflow is the stored Default).
         'workflow_artifact', (SELECT a.artifact FROM issue_workflow_artifact a
@@ -2393,7 +2394,6 @@ SELECT
               AND a.workflow_id = COALESCE(p.workflow_id, (SELECT w.id FROM issue_workflow w
                   WHERE w.workspace_id = i.workspace_id AND w.is_default)))
     )), '{}'::jsonb),
-    $13,
     $14,
     $15,
     $16,
@@ -2403,9 +2403,10 @@ SELECT
     $20,
     $21,
     $22,
+    $23,
     -- The issue's status as this task is queued: the workflow step it works on (MUL-7420).
     (SELECT i.status FROM issue i WHERE i.id = $3),
-    COALESCE($23::uuid, gen_random_uuid())
+    COALESCE($24::uuid, gen_random_uuid())
 WHERE lock_task_owner_rows($1, $3, $2)
 RETURNING id, agent_id, issue_id, status, priority, dispatched_at, started_at, completed_at, result, error, created_at, context, runtime_id, session_id, work_dir, trigger_comment_id, chat_session_id, autopilot_run_id, attempt, max_attempts, parent_task_id, failure_reason, trigger_summary, force_fresh_session, is_leader_task, wait_reason, initiator_user_id, handoff_note, prepare_lease_expires_at, squad_id, runtime_mcp_overlay, escalation_for_task_id, fire_at, originator_user_id, runtime_connected_apps, coalesced_comment_ids, delivered_comment_ids, chat_input_task_id, chat_finalize_deferred_at, originator_source, delegated_from_task_id, retry_of_task_id, rerun_of_task_id, rule_version_id, trigger_evidence_kind, trigger_evidence_ref_id, accountable_user_id, session_rollout_missing, retired_session_id, quick_actions_disabled, regenerate_quick_actions_for, branch_name, durable_work_dir, channel_context_revision, comment_thread_id, cancelled_by_type, cancelled_by_id, cancelled_by_name, issue_snapshot, conveyor_action_id, model_position, model_choice, workflow_step, account_fact, account_offer
 `
@@ -2423,6 +2424,7 @@ type CreateAgentTaskParams struct {
 	HandoffNote          pgtype.Text   `json:"handoff_note"`
 	SquadID              pgtype.UUID   `json:"squad_id"`
 	HeadSha              pgtype.Text   `json:"head_sha"`
+	FreshRerun           pgtype.Bool   `json:"fresh_rerun"`
 	OriginatorUserID     pgtype.UUID   `json:"originator_user_id"`
 	AccountableUserID    pgtype.UUID   `json:"accountable_user_id"`
 	RuntimeMcpOverlay    []byte        `json:"runtime_mcp_overlay"`
@@ -2443,8 +2445,9 @@ type CreateAgentTaskParams struct {
 // head_sha stamps the commit under review into the task's context JSONB so the
 // reviewer-loop dedup (HasPendingTaskForIssueAndAgent) can tell a pending run
 // against an OLD head apart from a fresh request against a NEW head (TEN-356).
-// Empty/absent head_sha leaves context NULL, preserving pre-TEN-356 behavior for
-// issues with no linked PR. Issue-linked tasks never hit quick-create context
+// Empty/absent head_sha leaves context NULL unless fresh_rerun is requested.
+// fresh_rerun disables source session/workdir reuse without losing rerun lineage.
+// Issue-linked tasks never hit quick-create context
 // parsing (parseQuickCreateContext short-circuits on IssueID.Valid), so this
 // key rides harmlessly alongside.
 // id is minted by the application as a UUIDv7 (pkg/dbid) so consecutive
@@ -2468,6 +2471,7 @@ func (q *Queries) CreateAgentTask(ctx context.Context, arg CreateAgentTaskParams
 		arg.HandoffNote,
 		arg.SquadID,
 		arg.HeadSha,
+		arg.FreshRerun,
 		arg.OriginatorUserID,
 		arg.AccountableUserID,
 		arg.RuntimeMcpOverlay,
