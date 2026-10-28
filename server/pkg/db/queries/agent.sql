@@ -531,7 +531,7 @@ INSERT INTO agent_task_queue (
     originator_source, delegated_from_task_id, rule_version_id,
     trigger_evidence_kind, trigger_evidence_ref_id, retry_of_task_id,
     chat_input_task_id, fire_at,
-    channel_context_revision, handoff_note, conveyor_action_id, workflow_step, id
+    channel_context_revision, handoff_note, workflow_step, id
 )
 SELECT
     p.agent_id, p.runtime_id, p.issue_id, p.chat_session_id, p.autopilot_run_id,
@@ -552,12 +552,9 @@ SELECT
     p.trigger_evidence_kind, p.trigger_evidence_ref_id, p.id,
     p.chat_input_task_id, sqlc.narg(fire_at),
     p.channel_context_revision,
-    -- Carried for a wakeup's prompt, a workflow handoff's brief (MUL-7420) and a
-    -- route step; rows from before workflow_step existed may hold a retired
-    -- assignment note.
-    CASE WHEN p.context->>'wakeup_id' IS NOT NULL OR p.workflow_step IS NOT NULL OR p.conveyor_action_id IS NOT NULL THEN p.handoff_note END,
-    -- A route run stays the route's run: the attempt answers to the same action.
-    p.conveyor_action_id,
+    -- Carried for a wakeup's prompt and a workflow handoff's brief (MUL-7420);
+    -- rows from before workflow_step existed may hold a retired assignment note.
+    CASE WHEN p.context->>'wakeup_id' IS NOT NULL OR p.workflow_step IS NOT NULL THEN p.handoff_note END,
     -- A retry continues its parent's work, so it keeps the parent's step (MUL-7420).
     p.workflow_step,
     -- Named new_task_id, not id: $1 above is the PARENT task's id.

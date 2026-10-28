@@ -170,21 +170,6 @@ func (s *Selector) Record(sub Subscription, st State, err error) Report {
 	return Report{Key: sub.Key, State: st, Err: err, Credential: st.Credential}
 }
 
-// ProbeDue measures every subscription whose interval has passed. Subscriptions
-// of one account are measured once per key; the caller deduplicates keys.
-func (s *Selector) ProbeDue(ctx context.Context, subs []Subscription) []Report {
-	var out []Report
-	seen := map[string]bool{}
-	for _, sub := range subs {
-		if seen[sub.Key] || !s.Due(sub) {
-			continue
-		}
-		seen[sub.Key] = true
-		out = append(out, s.ProbeNow(ctx, sub))
-	}
-	return out
-}
-
 // disabledUntil is the earliest end of the subscriptions' disabling; zero
 // when none names one.
 func disabledUntil(subs []Subscription) time.Time {

@@ -282,18 +282,6 @@ func (h *Handler) afterAccountChange(ctx context.Context) []db.RuntimeUnavailabl
 	return lifted
 }
 
-func toDaemonSubscription(s SubscriptionResponse) subscriptions.Subscription {
-	out := subscriptions.Subscription{
-		Key: s.Key, Provider: s.Provider, Family: s.Family, Auth: s.Auth, CredentialPath: s.CredentialPath,
-		Windows: s.Windows, EffectiveCaps: s.EffectiveCaps, AccountGroup: s.AccountGroup,
-		Disabled: s.Disabled, DisabledUntil: s.DisabledUntil,
-	}
-	for _, u := range s.Usage {
-		out.Usage = append(out.Usage, subscriptions.Usage{Window: u.Window, UsedPercent: u.UsedPercent, ResetsAt: u.ResetsAt, LimitReached: u.LimitReached, ObservedAt: u.ObservedAt})
-	}
-	return out
-}
-
 // ---------------------------------------------------------------------------
 // Sign-in
 // ---------------------------------------------------------------------------
