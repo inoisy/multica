@@ -331,8 +331,9 @@ LIMIT @page_limit;
 -- head_sha stamps the commit under review into the task's context JSONB so the
 -- reviewer-loop dedup (HasPendingTaskForIssueAndAgent) can tell a pending run
 -- against an OLD head apart from a fresh request against a NEW head (TEN-356).
--- Empty/absent head_sha leaves context NULL, preserving pre-TEN-356 behavior for
--- issues with no linked PR. Issue-linked tasks never hit quick-create context
+-- Empty/absent head_sha leaves context NULL unless fresh_rerun is requested.
+-- fresh_rerun disables source session/workdir reuse without losing rerun lineage.
+-- Issue-linked tasks never hit quick-create context
 -- parsing (parseQuickCreateContext short-circuits on IssueID.Valid), so this
 -- key rides harmlessly alongside.
 -- id is minted by the application as a UUIDv7 (pkg/dbid) so consecutive
@@ -359,6 +360,7 @@ SELECT
     sqlc.narg(squad_id),
     NULLIF(jsonb_strip_nulls(jsonb_build_object(
         'head_sha', NULLIF(COALESCE(sqlc.narg('head_sha')::text, ''), ''),
+        'fresh_rerun', CASE WHEN COALESCE(sqlc.narg('fresh_rerun')::boolean, FALSE) THEN TRUE END,
         -- The commit pinned for the issue's current workflow (a project on
         -- Default has no workflow_id; its workflow is the stored Default).
         'workflow_artifact', (SELECT a.artifact FROM issue_workflow_artifact a
@@ -2171,22 +2173,6 @@ WHERE issue_id = $1 AND agent_id = $2
     OR (status = 'deferred' AND context->>'channel_issue_media_pending' = 'true')
   )
   AND comment_thread_id IS NOT DISTINCT FROM comment_thread_root_id(sqlc.narg('thread_comment_id')::uuid);
-
--- name: GetLatestRerunSourceTask :one
--- The run an issue-level rerun (no task named) continues from: the agent's
--- newest run on this issue that recorded a work_dir. Runs that ended before
--- claiming a directory (a queued comment run refused at the quota gate) are
--- skipped so they cannot hide the run that actually did the work. A run still
--- executing qualifies: the rerun queues behind it, and the claim handler reads
--- the source's session and directory only when the rerun is claimed, after it
--- has finished. Triage runs are not execution runs and never a source
--- (MUL-7189 §5.6).
-SELECT * FROM agent_task_queue
-WHERE issue_id = $1 AND agent_id = $2
-  AND work_dir IS NOT NULL AND work_dir <> ''
-  AND (context IS NULL OR context->>'type' IS DISTINCT FROM 'triage')
-ORDER BY created_at DESC
-LIMIT 1;
 
 -- name: GetLatestTaskRoleForIssueAndAgent :one
 -- Returns the role markers from the agent's most recent task on this issue.

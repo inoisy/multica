@@ -2,53 +2,102 @@ package main
 
 import (
 	"encoding/json"
-	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+
+	"github.com/spf13/cobra"
 )
 
-const rerunTestIssue = "a57c0511-1ebc-471d-a314-438ca16cc75d"
-
-type apiCall struct {
-	method, path string
-	body         map[string]any
+func TestRunIssueRerunTask(t *testing.T) {
+	t.Chdir(t.TempDir())
+	const issueID = "1881a167-4bb6-4602-944b-f40ce4192fe6"
+	const runID = "aaaaaaaa-1111-4222-8333-444444444444"
+	for _, tc := range []struct {
+		name, input, scope, wantErr string
+		fresh, ambiguous            bool
+	}{
+		{name: "full UUID needs no issue", input: runID},
+		{name: "fresh", input: runID, fresh: true},
+		{name: "short prefix", input: "aaaaaaaa", scope: issueID},
+		{name: "short prefix needs issue", input: "aaaaaaaa", wantErr: "require --issue"},
+		{name: "ambiguous prefix", input: "aaaa", scope: issueID, ambiguous: true, wantErr: "ambiguous"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			posts := 0
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch r.URL.Path {
+				case "/api/issues/" + issueID + "/task-runs":
+					runs := []map[string]any{{"id": runID}}
+					if tc.ambiguous {
+						runs = append(runs, map[string]any{"id": "aaaaabcd-1111-4222-8333-444444444444"})
+					}
+					_ = json.NewEncoder(w).Encode(runs)
+				case "/api/tasks/" + runID + "/rerun":
+					posts++
+					if r.Method != http.MethodPost {
+						t.Errorf("method = %s, want POST", r.Method)
+					}
+					var body map[string]any
+					if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+						t.Errorf("decode body: %v", err)
+					}
+					if len(body) != 1 || body["fresh"] != tc.fresh {
+						t.Errorf("body = %v, want fresh=%v", body, tc.fresh)
+					}
+					w.WriteHeader(http.StatusAccepted)
+					_ = json.NewEncoder(w).Encode(map[string]any{"id": "new-run", "agent_id": "original-agent"})
+				default:
+					t.Errorf("unexpected request: %s", r.URL.Path)
+					http.NotFound(w, r)
+				}
+			}))
+			defer srv.Close()
+			t.Setenv("MULTICA_SERVER_URL", srv.URL)
+			t.Setenv("MULTICA_WORKSPACE_ID", "ws-1")
+			t.Setenv("MULTICA_TOKEN", "test-token")
+			cmd := &cobra.Command{Use: "rerun-task"}
+			cmd.Flags().String("output", "json", "")
+			cmd.Flags().String("issue", tc.scope, "")
+			cmd.Flags().Bool("fresh", tc.fresh, "")
+			out, err := captureStdout(t, func() error { return runIssueRerunTask(cmd, []string{tc.input}) })
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) || posts != 0 {
+					t.Fatalf("err=%v posts=%d, want %q and no mutation", err, posts, tc.wantErr)
+				}
+				return
+			}
+			if err != nil || posts != 1 || !strings.Contains(out, "new-run") {
+				t.Fatalf("err=%v posts=%d output=%s", err, posts, out)
+			}
+		})
+	}
 }
 
-// recordingServer answers any API call and records what the CLI sent.
-func recordingServer(t *testing.T, calls *[]apiCall) *httptest.Server {
-	t.Helper()
+func TestRunIssueRerunLegacyBody(t *testing.T) {
+	t.Chdir(t.TempDir())
+	const issueID = "1881a167-4bb6-4602-944b-f40ce4192fe6"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		call := apiCall{method: r.Method, path: r.URL.RequestURI()}
-		if raw, _ := io.ReadAll(r.Body); len(raw) > 0 {
-			if err := json.Unmarshal(raw, &call.body); err != nil {
-				t.Errorf("body is not JSON: %v", err)
-			}
+		if r.Method != http.MethodPost || r.URL.Path != "/api/issues/"+issueID+"/rerun" {
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
 		}
-		*calls = append(*calls, call)
-		_ = json.NewEncoder(w).Encode(map[string]any{"status": "active", "revision": 4, "id": "x"})
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || len(body) != 0 {
+			t.Errorf("legacy body = %v, err=%v; want empty object", body, err)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"id": "new-run"})
 	}))
-	t.Cleanup(srv.Close)
+	defer srv.Close()
 	t.Setenv("MULTICA_SERVER_URL", srv.URL)
 	t.Setenv("MULTICA_WORKSPACE_ID", "ws-1")
 	t.Setenv("MULTICA_TOKEN", "test-token")
-	return srv
-}
-
-func TestIssueRerunTaskFlagNamesTheRun(t *testing.T) {
-	t.Chdir(t.TempDir())
-	var calls []apiCall
-	recordingServer(t, &calls)
-	const run = "0f1c7f3e-2b1a-4c3d-8e5f-6a7b8c9d0e1f"
-	cmd := issueRerunCmd
-	if err := cmd.Flags().Set("task", run); err != nil {
+	cmd := &cobra.Command{Use: "rerun"}
+	cmd.Flags().String("output", "json", "")
+	if _, err := captureStdout(t, func() error { return runIssueRerun(cmd, []string{issueID}) }); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = cmd.Flags().Set("task", "") })
-	if err := runIssueRerun(cmd, []string{rerunTestIssue}); err != nil {
-		t.Fatal(err)
-	}
-	if len(calls) != 1 || calls[0].path != "/api/issues/"+rerunTestIssue+"/rerun" || calls[0].body["task_id"] != run {
-		t.Fatalf("rerun call: %+v", calls)
+	if issueRerunCmd.Deprecated == "" || !issueRerunCmd.Hidden {
+		t.Fatal("legacy command must be hidden and deprecated")
 	}
 }
