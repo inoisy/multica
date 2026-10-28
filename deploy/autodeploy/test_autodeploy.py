@@ -58,6 +58,21 @@ class MigrationTests(unittest.TestCase):
         self.assertEqual(ad.destructive_statements("/* DROP TABLE x */ SELECT 1; -- TRUNCATE y"), [])
 
 
+class LabelApprovalTests(unittest.TestCase):
+    def test_only_destructive_statements_are_label_approvable(self):
+        self.assertEqual(ad.destructive_path("server/migrations/618_x.up.sql: DROP TABLE"), "server/migrations/618_x.up.sql")
+        self.assertIsNone(ad.destructive_path("server/migrations/612_old.up.sql: existing migration modified"))
+        self.assertIsNone(ad.destructive_path("change too large to verify migrations (300+ files)"))
+        self.assertIsNone(ad.destructive_path("target is diverged relative to the running commit"))
+
+    def test_pr_must_be_merged_into_the_branch_with_the_label(self):
+        pr = {"merged_at": "2026-10-28T14:00:00Z", "base": {"ref": "main"}, "labels": [{"name": "allow-destructive"}]}
+        self.assertTrue(ad.pr_approves(pr, "main", "allow-destructive"))
+        self.assertFalse(ad.pr_approves(dict(pr, merged_at=None), "main", "allow-destructive"))
+        self.assertFalse(ad.pr_approves(dict(pr, base={"ref": "sync"}), "main", "allow-destructive"))
+        self.assertFalse(ad.pr_approves(dict(pr, labels=[{"name": "other"}]), "main", "allow-destructive"))
+
+
 class TargetTests(unittest.TestCase):
     def test_newest_green_commit_wins(self):
         commits = ["c3", "c2", "c1"]
@@ -157,6 +172,7 @@ class FakeDeployer(ad.Deployer):
         self.pin, self.previous = pin, previous
         self.health_script, self.mcp_script = health_script, mcp_script
         self.compose_calls, self.overrides, self.running = [], [], dict(previous)
+        self.problems, self.pulls, self.notes = [], [], []
 
     def health(self, url=None):
         if url:
@@ -197,7 +213,14 @@ class FakeDeployer(ad.Deployer):
         return SHA_NEW
 
     def migration_check(self, current, target):
-        return [], []
+        return list(self.problems), []
+
+    def gh(self, path):
+        if path.startswith("/commits?"):
+            return [{"sha": "c" * 40}]
+        if path.endswith("/pulls"):
+            return self.pulls
+        raise AssertionError(path)
 
     def backup(self, ctx, label):
         return "/backup.dump"
@@ -206,13 +229,13 @@ class FakeDeployer(ad.Deployer):
         return "current"
 
     def notify(self, text):
-        pass
+        self.notes.append(text)
 
     def save_state(self, state):
         self.saved = state
 
 
-class McpDeployTests(unittest.TestCase):
+class DeployCase(unittest.TestCase):
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
@@ -232,6 +255,9 @@ class McpDeployTests(unittest.TestCase):
     def deployer(self, pin=MCP_NEW, previous=None, mcp_health=lambda d: "healthy", platform=None):
         previous = self.old if previous is None else previous
         return FakeDeployer(self.cfg, pin, previous, platform or self.platform, mcp_health)
+
+
+class McpDeployTests(DeployCase):
 
     def test_release_switches_three_services_and_records_previous(self):
         d = self.deployer()
@@ -369,6 +395,49 @@ class McpDeployTests(unittest.TestCase):
                      "multica-tasks-mcp": MCP_NEW}
         self.assertEqual(d.rollback(), 0)
         self.assertEqual(d.running, self.old)
+
+
+class LabelDeployTests(DeployCase):
+    DROP = "server/migrations/618_drop.up.sql: DROP TABLE"
+
+    def labelled_pr(self, *labels):
+        return [{"number": 115, "merged_at": "2026-10-28T14:00:00Z", "base": {"ref": "main"},
+                 "labels": [{"name": n} for n in labels]}]
+
+    def test_labelled_pr_deploys_destructive_migration(self):
+        d = self.deployer()
+        d.problems, d.pulls = [self.DROP], self.labelled_pr("allow-destructive")
+        self.assertEqual(d.deploy(), 0)
+        self.assertTrue(d.running["backend"].endswith(SHA_NEW))
+        approved = [e for e in d.events if e["event"] == "approved_by_label"]
+        self.assertEqual(approved[0]["migrations"], [{"migration": "server/migrations/618_drop.up.sql", "pr": 115}])
+
+    def test_unlabelled_pr_blocks_and_notifies_once(self):
+        d = self.deployer()
+        d.problems, d.pulls = [self.DROP], self.labelled_pr("other")
+        self.assertEqual(d.deploy(), 3)
+        self.assertEqual(d.saved["blocked"], SHA_NEW)
+        self.assertIn("allow-destructive", d.notes[0])
+        Path(self.cfg["state_path"]).write_text(json.dumps(d.saved))
+        again = self.deployer()
+        again.problems, again.pulls = [self.DROP], self.labelled_pr("other")
+        self.assertEqual(again.deploy(), 0)
+        self.assertEqual(again.notes, [])
+        self.assertTrue(again.running["backend"].endswith(SHA_OLD))
+
+    def test_label_added_after_block_deploys_on_next_run(self):
+        Path(self.cfg["state_path"]).write_text(json.dumps({"blocked": SHA_NEW}))
+        d = self.deployer()
+        d.problems, d.pulls = [self.DROP], self.labelled_pr("allow-destructive")
+        self.assertEqual(d.deploy(), 0)
+        self.assertTrue(d.running["backend"].endswith(SHA_NEW))
+
+    def test_label_does_not_approve_edited_migration(self):
+        d = self.deployer()
+        d.problems, d.pulls = [self.DROP, "server/migrations/612_old.up.sql: existing migration modified"], \
+            self.labelled_pr("allow-destructive")
+        self.assertEqual(d.deploy(), 3)
+        self.assertTrue(d.running["backend"].endswith(SHA_OLD))
 
 
 class HookTests(unittest.TestCase):
