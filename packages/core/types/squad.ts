@@ -14,9 +14,6 @@ export interface Squad {
   name: string;
   description: string;
   instructions: string;
-  // Default route an issue assigned to the squad runs along
-  // ("dev:Agent,qa:Agent,review:Agent,close:Agent"); "" = none. Older backends omit it.
-  route_template: string;
   avatar_url: string | null;
   leader_id: string;
   creator_id: string;
@@ -59,7 +56,6 @@ export interface UpdateSquadRequest {
   name?: string;
   description?: string;
   instructions?: string;
-  route_template?: string;
   leader_id?: string;
   avatar_url?: string;
 }

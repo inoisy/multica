@@ -181,7 +181,6 @@ type AgentTaskQueue struct {
 	CancelledByID             pgtype.UUID `json:"cancelled_by_id"`
 	CancelledByName           pgtype.Text `json:"cancelled_by_name"`
 	IssueSnapshot             []byte      `json:"issue_snapshot"`
-	ConveyorActionID          pgtype.UUID `json:"conveyor_action_id"`
 	ModelPosition             pgtype.Int4 `json:"model_position"`
 	ModelChoice               []byte      `json:"model_choice"`
 	WorkflowStep              pgtype.Text `json:"workflow_step"`
@@ -888,44 +887,6 @@ type IssueChildEvent struct {
 	ProcessedAt  pgtype.Timestamptz `json:"processed_at"`
 }
 
-type IssueConveyor struct {
-	ID                 pgtype.UUID        `json:"id"`
-	WorkspaceID        pgtype.UUID        `json:"workspace_id"`
-	IssueID            pgtype.UUID        `json:"issue_id"`
-	Route              []byte             `json:"route"`
-	Revision           int64              `json:"revision"`
-	CurIdx             int32              `json:"cur_idx"`
-	Round              int32              `json:"round"`
-	CurTaskID          pgtype.UUID        `json:"cur_task_id"`
-	Status             string             `json:"status"`
-	CoordinatorAgentID pgtype.UUID        `json:"coordinator_agent_id"`
-	EnabledBy          pgtype.UUID        `json:"enabled_by"`
-	AcceptedCommit     pgtype.Text        `json:"accepted_commit"`
-	WaitingReason      pgtype.Text        `json:"waiting_reason"`
-	CreatedAt          pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
-}
-
-type IssueConveyorEvent struct {
-	ID           pgtype.UUID        `json:"id"`
-	Seq          pgtype.Int8        `json:"seq"`
-	ConveyorID   pgtype.UUID        `json:"conveyor_id"`
-	WorkspaceID  pgtype.UUID        `json:"workspace_id"`
-	IssueID      pgtype.UUID        `json:"issue_id"`
-	Kind         string             `json:"kind"`
-	SourceTaskID pgtype.UUID        `json:"source_task_id"`
-	Revision     pgtype.Int8        `json:"revision"`
-	Idx          pgtype.Int4        `json:"idx"`
-	Round        pgtype.Int4        `json:"round"`
-	Action       pgtype.Text        `json:"action"`
-	State        pgtype.Text        `json:"state"`
-	TaskID       pgtype.UUID        `json:"task_id"`
-	CoveredBy    pgtype.Text        `json:"covered_by"`
-	Reason       pgtype.Text        `json:"reason"`
-	Details      []byte             `json:"details"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
-}
-
 type IssueDependency struct {
 	ID               pgtype.UUID `json:"id"`
 	IssueID          pgtype.UUID `json:"issue_id"`
@@ -1584,19 +1545,18 @@ type SkillToLabel struct {
 }
 
 type Squad struct {
-	ID            pgtype.UUID        `json:"id"`
-	WorkspaceID   pgtype.UUID        `json:"workspace_id"`
-	Name          string             `json:"name"`
-	Description   string             `json:"description"`
-	LeaderID      pgtype.UUID        `json:"leader_id"`
-	CreatorID     pgtype.UUID        `json:"creator_id"`
-	CreatedAt     pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
-	ArchivedAt    pgtype.Timestamptz `json:"archived_at"`
-	ArchivedBy    pgtype.UUID        `json:"archived_by"`
-	AvatarUrl     pgtype.Text        `json:"avatar_url"`
-	Instructions  string             `json:"instructions"`
-	RouteTemplate string             `json:"route_template"`
+	ID           pgtype.UUID        `json:"id"`
+	WorkspaceID  pgtype.UUID        `json:"workspace_id"`
+	Name         string             `json:"name"`
+	Description  string             `json:"description"`
+	LeaderID     pgtype.UUID        `json:"leader_id"`
+	CreatorID    pgtype.UUID        `json:"creator_id"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	ArchivedAt   pgtype.Timestamptz `json:"archived_at"`
+	ArchivedBy   pgtype.UUID        `json:"archived_by"`
+	AvatarUrl    pgtype.Text        `json:"avatar_url"`
+	Instructions string             `json:"instructions"`
 }
 
 type SquadMember struct {

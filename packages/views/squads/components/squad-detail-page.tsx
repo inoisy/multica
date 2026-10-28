@@ -119,7 +119,7 @@ export function SquadDetailPage() {
   const [confirmArchive, setConfirmArchive] = useState(false);
 
   const updateSquadMut = useMutation({
-    mutationFn: (data: { name?: string; description?: string; instructions?: string; avatar_url?: string; leader_id?: string; route_template?: string }) => api.updateSquad(squadId, data),
+    mutationFn: (data: { name?: string; description?: string; instructions?: string; avatar_url?: string; leader_id?: string }) => api.updateSquad(squadId, data),
     onSuccess: () => {
       refetchSquad();
       refetchMembers();
@@ -932,7 +932,6 @@ function SquadDescriptionEditorBody({
 // SquadOverviewPane — right column with two tabs (Members | Instructions).
 // Mirrors AgentOverviewPane: dirty-guard via AlertDialog when switching tabs
 // with unsaved Instructions.
-// ---------------------------------------------------------------------------
 type SquadDetailTab = "members" | "instructions";
 
 const squadDetailTabs: { id: SquadDetailTab; icon: typeof FileText }[] = [
