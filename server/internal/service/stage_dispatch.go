@@ -25,7 +25,9 @@ var ErrStageDispatchInvalid = errors.New("stage dispatch: invalid request")
 // StageDispatchService assigns an epic's stages to a squad on the server: the
 // unassigned sub-issues of the first open stage go to the squad once every
 // earlier stage is closed. Assignment starts the squad's default route (or
-// wakes its leader) exactly as a person assigning would.
+// wakes its leader) exactly as a person assigning would. A stage that closed
+// with cancelled work halts dispatch: the next stage would build on work that
+// was never done, so the epic's assignee is woken to decide instead.
 type StageDispatchService struct {
 	Issues *IssueService
 }
@@ -79,9 +81,10 @@ func ensureWaitingStatus(ctx context.Context, q *db.Queries, workspaceID pgtype.
 
 // stagedChild is a sub-issue as dispatch reads it.
 type stagedChild struct {
-	issue  db.Issue
-	closed bool
-	held   bool
+	issue     db.Issue
+	closed    bool
+	cancelled bool
+	held      bool
 }
 
 // Dispatch assigns the open stage's unassigned sub-issues of one epic and
@@ -140,7 +143,7 @@ func (s *StageDispatchService) loadStagedChildren(ctx context.Context, parent db
 		if err != nil {
 			return nil, err
 		}
-		ch := stagedChild{issue: issue, closed: category == "done" || category == "closed", held: issue.Status == IssueStatusWaiting}
+		ch := stagedChild{issue: issue, closed: category == "done" || category == "closed", cancelled: category == "closed", held: issue.Status == IssueStatusWaiting}
 		children = append(children, ch)
 	}
 	return children, nil
@@ -148,6 +151,8 @@ func (s *StageDispatchService) loadStagedChildren(ctx context.Context, parent db
 
 // openStage is the first stage with work left that is not waiting for the
 // customer; a stage open only by waiting sub-issues does not hold later ones.
+// A stage that closed with a cancelled sub-issue halts dispatch: nothing past
+// it opens until that sub-issue is reopened, deleted or moved out of the stage.
 func openStage(children []stagedChild) *int32 {
 	var stages []int32
 	for _, ch := range children {
@@ -157,13 +162,36 @@ func openStage(children []stagedChild) *int32 {
 	}
 	slices.Sort(stages)
 	for _, stage := range stages {
+		open, cancelled := false, false
 		for _, ch := range children {
-			if ch.issue.Stage.Valid && ch.issue.Stage.Int32 == stage && !ch.closed && !ch.held {
-				return &stage
+			if !ch.issue.Stage.Valid || ch.issue.Stage.Int32 != stage {
+				continue
 			}
+			open = open || (!ch.closed && !ch.held)
+			cancelled = cancelled || ch.cancelled
+		}
+		if open {
+			return &stage
+		}
+		if cancelled {
+			return nil
 		}
 	}
 	return nil
+}
+
+// stageCancelled reports whether the stages the child_done reading counts as
+// closed (stage:N and every one before it) hold a cancelled sub-issue. Stage
+// dispatch halts there, so that wake still reaches the epic's assignee.
+func stageCancelled(observed map[string]any) bool {
+	closed, _ := observed["stage"].(int32)
+	stages, _ := observed["stages"].([]stageCount)
+	for _, sc := range stages {
+		if sc.Stage <= closed && sc.Cancelled > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // assign gives one sub-issue to the parent's squad on the revision it was

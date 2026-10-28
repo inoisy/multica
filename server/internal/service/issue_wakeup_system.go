@@ -555,8 +555,8 @@ func (s *IssueWakeupService) dispatchSystem(ctx context.Context, prev db.IssueWa
 	}
 	// A closed stage of an epic whose stages the server dispatches is already
 	// answered: the next stage went to the squad. Only the end of all work
-	// still reaches the assignee.
-	if issue.StageSquadID.Valid && strings.HasPrefix(state, "stage:") {
+	// and a stage that closed with cancelled work still reach the assignee.
+	if issue.StageSquadID.Valid && strings.HasPrefix(state, "stage:") && !stageCancelled(observed) {
 		facts["outcome"] = "stage_dispatch"
 		if err = q.ConsumeWakeupReceipts(ctx, db.ConsumeWakeupReceiptsParams{Ids: ids}); err != nil {
 			return err
