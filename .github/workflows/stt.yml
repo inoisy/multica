@@ -65,6 +65,8 @@ jobs:
             dockerfile: Dockerfile.web
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
@@ -73,7 +75,16 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Commit date
         id: meta
-        run: echo "date=$(git log -1 --format=%cI)" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "date=$(git log -1 --format=%cI)" >> "$GITHUB_OUTPUT"
+          # Release tags live upstream; the fork shares their commits. The
+          # git-describe shape (v0.7.1-239-g8c9066840) is what the server and
+          # the web treat as a dev build, so quick create and other CLI version
+          # gates accept our daemons. "main-<sha>" parsed as no version at all.
+          # --long keeps the -N-g<sha> suffix on a tagged commit too: a bare
+          # vX.Y.Z would make the daemon auto-update itself from upstream releases.
+          git fetch --quiet --tags https://github.com/multica-ai/multica.git
+          echo "version=$(git describe --tags --long --match 'v[0-9]*' --abbrev=9)" >> "$GITHUB_OUTPUT"
       - uses: docker/build-push-action@v6
         with:
           context: .
@@ -83,9 +94,9 @@ jobs:
             ghcr.io/${{ github.repository_owner }}/multica-${{ matrix.name }}:${{ github.sha }}
             ghcr.io/${{ github.repository_owner }}/multica-${{ matrix.name }}:main
           build-args: |
-            VERSION=main-${{ github.sha }}
+            VERSION=${{ steps.meta.outputs.version }}
             COMMIT=${{ github.sha }}
             DATE=${{ steps.meta.outputs.date }}
-            NEXT_PUBLIC_APP_VERSION=main-${{ github.sha }}
+            NEXT_PUBLIC_APP_VERSION=${{ steps.meta.outputs.version }}
           cache-from: type=gha,scope=${{ matrix.name }}
           cache-to: type=gha,mode=max,scope=${{ matrix.name }}
