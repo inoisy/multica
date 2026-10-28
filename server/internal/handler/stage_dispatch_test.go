@@ -174,6 +174,30 @@ func TestClosedStageStillWakesTheEpicOwnerWithoutDispatch(t *testing.T) {
 	}
 }
 
+// A stage that closes with cancelled work does not open the next one: the
+// epic's assignee is woken to decide, and dispatch resumes once the cancelled
+// sub-issue leaves the stage.
+func TestCancelledStageHaltsDispatchAndWakesTheEpicOwner(t *testing.T) {
+	r := newStageRig(t)
+	r.set(map[string]any{"squad_id": r.squad}).Want(http.StatusOK)
+	updateChildStatus(t, r.kids["s1"], "cancelled")
+	if r.onSquad("s2") {
+		t.Fatal("stage 2 was dispatched after stage 1 was cancelled")
+	}
+	if n := r.runs(r.owner, r.epic); n != 1 {
+		t.Fatalf("epic owner runs = %d, want 1", n)
+	}
+
+	dbfx.Exec(t, "UPDATE issue SET stage=NULL WHERE id=$1", r.kids["s1"])
+	sweep := &service.StageDispatchService{Issues: testHandler.IssueService}
+	if err := sweep.Sweep(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if !r.onSquad("s2") {
+		t.Fatal("dispatch did not resume once the cancelled sub-issue left the stage")
+	}
+}
+
 func TestListStageDispatchShowsTheWorkspaceEpics(t *testing.T) {
 	r := newStageRig(t)
 	var out struct {
