@@ -331,8 +331,9 @@ LIMIT @page_limit;
 -- head_sha stamps the commit under review into the task's context JSONB so the
 -- reviewer-loop dedup (HasPendingTaskForIssueAndAgent) can tell a pending run
 -- against an OLD head apart from a fresh request against a NEW head (TEN-356).
--- Empty/absent head_sha leaves context NULL, preserving pre-TEN-356 behavior for
--- issues with no linked PR. Issue-linked tasks never hit quick-create context
+-- Empty/absent head_sha leaves context NULL unless fresh_rerun is requested.
+-- fresh_rerun disables source session/workdir reuse without losing rerun lineage.
+-- Issue-linked tasks never hit quick-create context
 -- parsing (parseQuickCreateContext short-circuits on IssueID.Valid), so this
 -- key rides harmlessly alongside.
 -- id is minted by the application as a UUIDv7 (pkg/dbid) so consecutive
@@ -359,6 +360,7 @@ SELECT
     sqlc.narg(squad_id),
     NULLIF(jsonb_strip_nulls(jsonb_build_object(
         'head_sha', NULLIF(COALESCE(sqlc.narg('head_sha')::text, ''), ''),
+        'fresh_rerun', CASE WHEN COALESCE(sqlc.narg('fresh_rerun')::boolean, FALSE) THEN TRUE END,
         -- The commit pinned for the issue's current workflow (a project on
         -- Default has no workflow_id; its workflow is the stored Default).
         'workflow_artifact', (SELECT a.artifact FROM issue_workflow_artifact a

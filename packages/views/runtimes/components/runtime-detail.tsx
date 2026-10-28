@@ -31,11 +31,6 @@ import {
 import { useWorkspacePaths } from "@multica/core/paths";
 import { runtimeModelUsageOptions } from "@multica/core/runtimes/queries";
 import { Button } from "@multica/ui/components/ui/button";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@multica/ui/components/ui/tooltip";
 import { ActorAvatar } from "../../common/actor-avatar";
 import { BreadcrumbHeader } from "../../layout/breadcrumb-header";
 import { AppLink, useNavigation } from "../../navigation";
@@ -50,6 +45,7 @@ import { runtimeRowLabel } from "./runtime-machines";
 import { useT, useTimeAgo } from "../../i18n";
 import { PoolAccountsSection } from "../accounts";
 import { RuntimeModelFacts } from "./runtime-model-facts";
+import { TruncatedTooltip } from "@multica/ui/components/common/truncated-tooltip";
 
 function getCliVersion(metadata: Record<string, unknown>): string | null {
   if (
@@ -321,16 +317,11 @@ function HeroCard({
         </Fact>
         <Fact label={t(($) => $.detail.fact_device)}>
           {device?.hostname ? (
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <span className="block truncate font-mono text-caption">
-                    {device.hostname}
-                  </span>
-                }
-              />
-              <TooltipContent>{device.hostname}</TooltipContent>
-            </Tooltip>
+            <TruncatedTooltip content={device.hostname}>
+              <span className="block truncate font-mono text-caption">
+                {device.hostname}
+              </span>
+            </TruncatedTooltip>
           ) : (
             <span className="text-body text-muted-foreground">—</span>
           )}

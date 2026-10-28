@@ -60,7 +60,7 @@ func TestRerunIssuePinsForceFreshSessionForRollbackSafety(t *testing.T) {
 			}
 			t.Cleanup(func() { pool.Exec(context.Background(), `DELETE FROM agent_task_queue WHERE id = $1`, sourceID) })
 
-			task, err := svc.RerunIssue(ctx, util.MustParseUUID(issueID), sourceID, pgtype.UUID{}, util.MustParseUUID(creatorID), nil)
+			task, err := svc.RerunIssue(ctx, util.MustParseUUID(issueID), sourceID, pgtype.UUID{}, util.MustParseUUID(creatorID), false, nil)
 			if err != nil {
 				t.Fatalf("RerunIssue: %v", err)
 			}
@@ -129,7 +129,7 @@ func TestRerunIssueWithoutTaskContinuesLastRun(t *testing.T) {
 	}
 	rerun := func() pgtype.UUID {
 		t.Helper()
-		task, err := svc.RerunIssue(ctx, util.MustParseUUID(issueID), pgtype.UUID{}, pgtype.UUID{}, util.MustParseUUID(creatorID), nil)
+		task, err := svc.RerunIssue(ctx, util.MustParseUUID(issueID), pgtype.UUID{}, pgtype.UUID{}, util.MustParseUUID(creatorID), false, nil)
 		if err != nil {
 			t.Fatalf("RerunIssue: %v", err)
 		}

@@ -345,8 +345,19 @@ var issueCommentListCmd = &cobra.Command{
 var issueCommentAddCmd = &cobra.Command{
 	Use:   "add <issue-id>",
 	Short: "Add a comment to an issue",
-	Args:  exactArgs(1),
-	RunE:  runIssueCommentAdd,
+	Long: "Add a comment to an issue.\n\n" +
+		"A plain comment reaches a busy agent only after its current run ends. To add the message to a run " +
+		"that is in progress instead, pass --steer <run-id> (repeatable; from `multica issue runs <issue-id> --active`) " +
+		"or --steer-active for every running agent on the issue you may steer. You may steer an agent's run " +
+		"exactly when your comment could start that agent; an agent never steers its own run, and one agent can " +
+		"add at most 3 messages to a run (10 from all agents). The steered agents are mentioned in the comment. " +
+		"Only a run that accepts additional messages can be steered (`can_supplement: true` in " +
+		"`multica issue runs <issue-id> --active --output json`). A run that cannot take the message gets the " +
+		"normal trigger; the command reports per run whether it was steered or queued, coalesced, deferred or " +
+		"blocked. If a steered run ends before reading an agent's message, the message is handled in a follow-up " +
+		"run. Steering cannot carry attachments.",
+	Args: exactArgs(1),
+	RunE: runIssueCommentAdd,
 }
 
 var issueCommentUpdateCmd = &cobra.Command{
@@ -455,9 +466,20 @@ var issueUsageCmd = &cobra.Command{
 var issueRerunCmd = &cobra.Command{
 	Use:   "rerun <id>",
 	Short: "Re-enqueue an issue's current agent assignment as a fresh run",
-	Long:  "Re-enqueue the issue's current assignment, or the run named with --task, as a fresh run.",
+	Long:  "Re-enqueue the issue's current assignment, or the run named with --task, as a fresh run. To repeat one run even after the issue was reassigned, or with --fresh, use `multica issue rerun-task <run-id>`.",
 	Args:  exactArgs(1),
 	RunE:  runIssueRerun,
+}
+
+var issueRerunTaskCmd = &cobra.Command{
+	Use:   "rerun-task <run-id>",
+	Short: "Repeat a specific run using its original agent and trigger context",
+	Long: "Repeat a specific run, even if the issue has since been reassigned. " +
+		"Pass a full run UUID, or a short prefix with --issue <issue-id>. " +
+		"By default, reuse the source working directory and resume its session when safe. " +
+		"Use --fresh to start with a new session and working directory.",
+	Args: exactArgs(1),
+	RunE: runIssueRerunTask,
 }
 
 var issueCancelTaskCmd = &cobra.Command{
@@ -596,6 +618,7 @@ func init() {
 	issueCmd.AddCommand(issueRunMessagesCmd)
 	issueCmd.AddCommand(issueUsageCmd)
 	issueCmd.AddCommand(issueRerunCmd)
+	issueCmd.AddCommand(issueRerunTaskCmd)
 	issueCmd.AddCommand(issueCancelTaskCmd)
 	issueCmd.AddCommand(issueSearchCmd)
 
@@ -722,6 +745,11 @@ func init() {
 	// issue rerun
 	issueRerunCmd.Flags().String("output", "json", "Output format: table or json")
 	issueRerunCmd.Flags().String("task", "", "Repeat this run (full id or the short prefix from `issue runs`) instead of the issue's current assignee; on a routed issue it names the step run to retry")
+
+	// issue rerun-task
+	issueRerunTaskCmd.Flags().String("output", "json", "Output format: table or json")
+	issueRerunTaskCmd.Flags().String("issue", "", "Issue ID/key to scope short run ID prefix resolution")
+	issueRerunTaskCmd.Flags().Bool("fresh", false, "Start with a new session and working directory")
 	// issue cancel-task
 	issueCancelTaskCmd.Flags().String("output", "json", "Output format: table or json")
 	issueCancelTaskCmd.Flags().String("issue", "", "Issue ID/key to scope short run ID prefix resolution")
@@ -736,8 +764,9 @@ func init() {
 	issueCommentAddCmd.Flags().String("content-file", "", "Read comment content from a UTF-8 file (preserves multi-line content verbatim; use this on Windows when stdin piping mangles non-ASCII bytes). The path must be inside the current working directory unless --allow-external-file is set.")
 	issueCommentAddCmd.Flags().Bool("allow-external-file", false, "Allow --content-file / --attachment to read a path outside the current working directory. Off by default so a stale file from another run/environment can't be picked up (MUL-4252).")
 	issueCommentAddCmd.Flags().String("parent", "", "Parent comment ID to reply under. A comment-triggered agent run must reply under its trigger comment; omitting --parent to post a top-level comment is rejected")
-	issueCommentAddCmd.Flags().Bool("steer", false, "Deliver the comment into the running turn of each agent it triggers on this issue instead of queueing a follow-up run. Use only for a correction to the work in progress (a wrong requirement, a new constraint), not for new work. A recipient with no running turn, or a comment with attachments, falls back to the normal trigger")
 	issueCommentAddCmd.Flags().StringSlice("attachment", nil, "File path(s) to attach (can be specified multiple times). Non-image files, HTML included, show as file cards that open in the viewer; to render a chart inside the comment, put a ```html or ```mermaid block in the content instead")
+	issueCommentAddCmd.Flags().StringSlice("steer", nil, "Run ID (full UUID or short prefix) whose in-progress turn should receive this comment instead of a follow-up run (repeatable)")
+	issueCommentAddCmd.Flags().Bool("steer-active", false, "Add this comment to the running turn of every agent on this issue you may steer, and of any other recipient that is running")
 	issueCommentAddCmd.Flags().String("output", "json", "Output format: table or json")
 
 	// issue comment update
@@ -2579,6 +2608,11 @@ func runIssueCommentAdd(cmd *cobra.Command, args []string) error {
 	// Use a longer timeout when attachments are present (file uploads can be slow).
 	timeout := cli.APITimeout()
 	attachments, _ := cmd.Flags().GetStringSlice("attachment")
+	steerInputs, _ := cmd.Flags().GetStringSlice("steer")
+	steerActive, _ := cmd.Flags().GetBool("steer-active")
+	if (len(steerInputs) > 0 || steerActive) && len(attachments) > 0 {
+		return fmt.Errorf("--steer / --steer-active cannot be combined with --attachment: a running turn takes text only; post the files in a separate comment")
+	}
 	if len(attachments) > 0 {
 		timeout = cli.AtLeastAPITimeout(60 * time.Second)
 	}
@@ -2590,6 +2624,11 @@ func runIssueCommentAdd(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("resolve issue: %w", err)
 	}
 	issueID := issueRef.ID
+
+	steerTargets, err := resolveSteerTargets(ctx, client, issueID, steerInputs, steerActive)
+	if err != nil {
+		return err
+	}
 
 	// Validate and read ALL attachments before uploading any. URLs are skipped
 	// with a warning — `--attachment` only accepts local file paths. Reading
@@ -2612,15 +2651,24 @@ func runIssueCommentAdd(cmd *cobra.Command, args []string) error {
 	}
 
 	body := map[string]any{"content": content}
+	if len(steerTargets) > 0 {
+		steerTaskIDs := make([]string, len(steerTargets))
+		for i, target := range steerTargets {
+			steerTaskIDs[i] = target.TaskID
+		}
+		body["content"] = withSteerMentions(content, steerTargets)
+		body["steer_task_ids"] = steerTaskIDs
+	}
+	if steerActive {
+		// The server also steers a recipient whose run started after the
+		// listing above.
+		body["steer"] = true
+	}
 	if parentID, _ := cmd.Flags().GetString("parent"); parentID != "" {
 		body["parent_id"] = parentID
 	}
 	if len(attachmentIDs) > 0 {
 		body["attachment_ids"] = attachmentIDs
-	}
-	steer, _ := cmd.Flags().GetBool("steer")
-	if steer {
-		body["steer"] = true
 	}
 	var result map[string]any
 	if err := client.PostJSON(ctx, "/api/issues/"+issueID+"/comments", body, &result); err != nil {
@@ -2628,9 +2676,7 @@ func runIssueCommentAdd(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Fprintf(os.Stderr, "Comment added to issue %s.\n", issueRef.Display)
-	if steer {
-		reportSteerOutcomes(os.Stderr, result)
-	}
+	reportSteerOutcomes(os.Stderr, steerTargets, result)
 
 	output, _ := cmd.Flags().GetString("output")
 	if output == "table" {
@@ -2993,6 +3039,40 @@ func runIssueRunMessages(cmd *cobra.Command, args []string) error {
 }
 
 // Search command
+
+func runIssueRerunTask(cmd *cobra.Command, args []string) error {
+	client, err := newAPIClient(cmd)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := cli.APIContext(context.Background())
+	defer cancel()
+
+	issueScope := ""
+	if issueInput, _ := cmd.Flags().GetString("issue"); issueInput != "" {
+		issueRef, err := resolveIssueRef(ctx, client, issueInput)
+		if err != nil {
+			return fmt.Errorf("resolve issue: %w", err)
+		}
+		issueScope = issueRef.ID
+	}
+	taskRef, err := resolveTaskRunID(ctx, client, issueScope, args[0])
+	if err != nil {
+		return fmt.Errorf("resolve run: %w", err)
+	}
+	fresh, _ := cmd.Flags().GetBool("fresh")
+	var task map[string]any
+	if err := client.PostJSON(ctx, "/api/tasks/"+url.PathEscape(taskRef.ID)+"/rerun", map[string]any{"fresh": fresh}, &task); err != nil {
+		return fmt.Errorf("rerun run: %w", err)
+	}
+	output, _ := cmd.Flags().GetString("output")
+	if output == "json" {
+		return cli.PrintJSON(os.Stdout, task)
+	}
+	agent := loadActorDisplayLookup(ctx, client).agent(strVal(task, "agent_id"))
+	fmt.Fprintf(os.Stdout, "Re-enqueued run %s on agent %s\n", strVal(task, "id"), agent)
+	return nil
+}
 
 func runIssueRerun(cmd *cobra.Command, args []string) error {
 	client, err := newAPIClient(cmd)
@@ -3657,26 +3737,5 @@ func compactComments(comments []map[string]any) {
 				}
 			}
 		}
-	}
-}
-
-// reportSteerOutcomes tells a --steer author which recipients took the comment
-// into their running turn and which fell back to the normal trigger, so the
-// author never assumes a correction reached a turn that had already ended.
-func reportSteerOutcomes(w io.Writer, result map[string]any) {
-	outcomes, _ := result["trigger_outcomes"].([]any)
-	if len(outcomes) == 0 {
-		fmt.Fprintln(w, "Steer: no agent was triggered by this comment.")
-		return
-	}
-	for _, o := range outcomes {
-		m, _ := o.(map[string]any)
-		target, _ := m["target_id"].(string)
-		status, _ := m["status"].(string)
-		if status == "steered" {
-			fmt.Fprintf(w, "Steer: delivered into the running turn of %s.\n", target)
-			continue
-		}
-		fmt.Fprintf(w, "Steer: %s had no turn to take it; handled as %s.\n", target, status)
 	}
 }
