@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 
@@ -390,16 +389,6 @@ func RefusalCodeForFailure(errMsg string, refusalCodes ...string) string {
 		return UnavailableDisabledRefusal
 	}
 	return UnavailableProviderLimit
-}
-
-// sortedKeys is a stable order for maps in logs and tests.
-func sortedKeys[V any](m map[string]V) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
 }
 
 // PoolVerdicts is the verdict on each of the given pools at now, as a reader of

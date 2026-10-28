@@ -2,8 +2,9 @@ package service
 
 import (
 	"encoding/json"
-	db "github.com/multica-ai/multica/server/pkg/db/generated"
 	"strings"
+
+	db "github.com/multica-ai/multica/server/pkg/db/generated"
 )
 
 // AccountModel is a display value; it never replaces the saved row or a run's
@@ -39,12 +40,4 @@ func modelForAccounts(saved string, accounts []Account) AccountModel {
 		model = value
 	}
 	return AccountModel{Model: model}
-}
-
-func ModelForAccountCandidates(saved string, subs []db.Subscription) AccountModel {
-	accounts := make([]Account, len(subs))
-	for i, sub := range subs {
-		accounts[i] = Account{Auth: sub.Auth, Model: SubscriptionModel(sub)}
-	}
-	return modelForAccounts(saved, accounts)
 }
