@@ -231,16 +231,6 @@ type modelList struct {
 	options []ModelOption
 }
 
-// ResolveModelList picks the list of a run: issue profile, else the agent's
-// profile (shared or personal). The agent's plain fields stand in only for an
-// agent that has no profile at all (the accept carrier); an agent whose
-// profile is gone or empty has no list and waits, it never falls back to the
-// projection in its fields. An issue profile that no longer exists is skipped.
-func ResolveModelList(in ModelChoiceInput) (source string, profile *ModelProfileData, options []ModelOption) {
-	l := resolveModelList(in)
-	return l.source, l.profile, l.options
-}
-
 func resolveModelList(in ModelChoiceInput) modelList {
 	if p, ok := in.Profiles[in.IssueProfileID]; ok && in.IssueProfileID != "" {
 		return modelList{source: ModelSourceIssueProfile, profile: &p, options: p.Options}
