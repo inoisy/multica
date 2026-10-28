@@ -517,7 +517,8 @@
     "pull_request_card_files_count_many": "{{count}} файлов"
   },
   "timeline": {
-    "loading": "Загрузка..."
+    "loading": "Загрузка...",
+    "jump_to_latest": "К последним"
   },
   "activity": {
     "created": "создал(а) эту задачу",
