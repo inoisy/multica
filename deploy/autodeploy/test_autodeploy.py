@@ -47,7 +47,7 @@ class MigrationTests(unittest.TestCase):
 
     def test_legacy_cleanup_migration_stops_the_autodeploy(self):
         name = "617_drop_legacy_model_schema.up.sql"
-        content = (HERE.parent.parent / "server" / "migrations" / name).read_text()
+        content = "DROP TABLE old_model; ALTER TABLE account DROP COLUMN legacy; DELETE FROM setting;"
         problems, added = ad.classify_migrations([{"filename": f"server/migrations/{name}", "status": "added", "content": content}])
         self.assertEqual(added, [f"server/migrations/{name}"])
         self.assertEqual(len(problems), 1)
@@ -133,6 +133,32 @@ class McpPinTests(unittest.TestCase):
                     "ghcr.io/other/multica-tasks-mcp:" + "1" * 40, MCP_NEW + "\nextra: 1"):
             with self.assertRaises(ValueError):
                 ad.parse_mcp_pin(cfg, bad)
+
+    def test_green_main_image_selected_in_commit_order(self):
+        cfg = dict(ad.DEFAULTS, mcp_service="multica-tasks-mcp",
+                   mcp_source_repo="inoisy/monorepo-for-multica")
+        deployer = ad.Deployer(cfg, dry_run=True)
+        def run(sha, event="push", conclusion="success", branch="main"):
+            return dict(head_sha=sha, event=event, conclusion=conclusion,
+                        head_branch=branch, status="completed")
+        # A rerun of an older commit must not replace a newer published image.
+        with mock.patch.object(deployer, "http_json", side_effect=[
+            [{"sha": SHA_NEW}, {"sha": SHA_OLD}],
+            {"workflow_runs": [run(SHA_OLD), run(SHA_NEW, event="pull_request"),
+                               run(SHA_NEW, conclusion="failure"), run(SHA_NEW)]},
+        ]):
+            self.assertEqual(deployer.mcp_pin("platform-sha"),
+                             cfg["mcp_image_repo"] + ":" + SHA_NEW)
+
+    def test_no_successful_main_image_aborts(self):
+        cfg = dict(ad.DEFAULTS, mcp_service="multica-tasks-mcp",
+                   mcp_source_repo="inoisy/monorepo-for-multica")
+        deployer = ad.Deployer(cfg, dry_run=True)
+        with mock.patch.object(deployer, "http_json", side_effect=[
+            [{"sha": SHA_NEW}], {"workflow_runs": [dict(head_sha=SHA_NEW,
+             event="pull_request", conclusion="success", head_branch="main", status="completed")]}]):
+            with self.assertRaises(ValueError):
+                deployer.mcp_pin("platform-sha")
 
     def test_override_carries_mcp_only_when_given(self):
         cfg = dict(ad.DEFAULTS, mcp_service="multica-tasks-mcp")
