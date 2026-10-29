@@ -1,1 +1,0 @@
-DROP INDEX CONCURRENTLY IF EXISTS model_profile_id_uidx;

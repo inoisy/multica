@@ -1,0 +1,12 @@
+DROP TABLE IF EXISTS model_idle_episode;
+DROP TABLE IF EXISTS model_profile_option;
+DROP TABLE IF EXISTS model_profile;
+DROP INDEX IF EXISTS idx_agent_task_queue_model_routed_queued;
+DROP INDEX IF EXISTS idx_agent_task_queue_model_choice;
+DROP INDEX IF EXISTS idx_issue_model_profile;
+ALTER TABLE agent_task_queue DROP COLUMN IF EXISTS model_choice;
+ALTER TABLE agent_task_queue DROP COLUMN IF EXISTS model_position;
+ALTER TABLE issue DROP COLUMN IF EXISTS model_profile_id;
+ALTER TABLE agent DROP CONSTRAINT IF EXISTS agent_disallowed_tools_check;
+ALTER TABLE agent DROP COLUMN IF EXISTS disallowed_tools;
+ALTER TABLE agent DROP COLUMN IF EXISTS model_profile_id;

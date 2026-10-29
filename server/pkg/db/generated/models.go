@@ -181,9 +181,9 @@ type AgentTaskQueue struct {
 	CancelledByID             pgtype.UUID `json:"cancelled_by_id"`
 	CancelledByName           pgtype.Text `json:"cancelled_by_name"`
 	IssueSnapshot             []byte      `json:"issue_snapshot"`
+	WorkflowStep              pgtype.Text `json:"workflow_step"`
 	ModelPosition             pgtype.Int4 `json:"model_position"`
 	ModelChoice               []byte      `json:"model_choice"`
-	WorkflowStep              pgtype.Text `json:"workflow_step"`
 	AccountFact               []byte      `json:"account_fact"`
 	AccountOffer              []byte      `json:"account_offer"`
 }
