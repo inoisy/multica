@@ -32,6 +32,14 @@ run the existing image workflow (`gh workflow run stt.yml --repo inoisy/multica 
 equals the accepted pin release SHA, and require green CI and STT before enabling MCP. If main moved,
 review the new SHA before switching. Subsequent releases retain the pin file.
 
+To deploy MCP builds automatically, set `"mcp_source_repo": "inoisy/monorepo-for-multica"`.
+Each existing timer/webhook check selects the newest commit on source `main` with a successful
+`multica-tasks-image.yml` push or manual build. PR builds are excluded. Commit order prevents an
+older rerun from replacing a newer image. The selected image is pinned by SHA in the compose override
+and participates in the existing health check and rollback, even when the platform SHA is unchanged.
+In this mode the static `mcp-image` file is not used. Leave `mcp_source_repo` empty to use static pins.
+The source workflow only publishes images; the server polls within 30 minutes plus timer jitter.
+
 - Switch: pull and `up --no-deps` of backend, frontend and MCP.
 - Health: `/health` reports the sha, and the MCP container runs the pinned image, is healthy and answers
   `mcp_health_url`. A failing MCP rolls back all images, the same as a failing platform.

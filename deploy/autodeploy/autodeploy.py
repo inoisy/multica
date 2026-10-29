@@ -44,6 +44,8 @@ DEFAULTS = {
     # Empty mcp_service keeps the MCP out of the release. Set it only after the
     # old multica-tasks-mcp.service is stopped: both bind 127.0.0.1:8101.
     "mcp_service": "",
+    "mcp_source_repo": "",
+    "mcp_source_workflow": "multica-tasks-image.yml",
     "mcp_pin_path": "deploy/autodeploy/mcp-image",
     "mcp_image_repo": "ghcr.io/inoisy/multica-tasks-mcp",
     "mcp_health_url": "http://127.0.0.1:8101/healthz",
@@ -334,6 +336,20 @@ class Deployer:
         """MCP image pinned in the target commit; mandatory when MCP is enabled."""
         if not self.cfg["mcp_service"]:
             return None
+        source = self.cfg["mcp_source_repo"]
+        if source:
+            base = f"https://api.github.com/repos/{source}"
+            commits = self.http_json(base + "/commits?sha=main&per_page=100")
+            workflow = urllib.parse.quote(self.cfg["mcp_source_workflow"], safe="")
+            runs = self.http_json(base + f"/actions/workflows/{workflow}/runs?branch=main&per_page=100")["workflow_runs"]
+            published = {r["head_sha"] for r in runs
+                         if r.get("event") in ("push", "workflow_dispatch")
+                         and r.get("head_branch") == "main"
+                         and r.get("status") == "completed" and r.get("conclusion") == "success"}
+            for commit in commits:
+                if commit["sha"] in published:
+                    return parse_mcp_pin(self.cfg, self.cfg["mcp_image_repo"] + ":" + commit["sha"])
+            raise ValueError("no successful MCP image build on source main")
         text = self.raw_file(self.cfg["mcp_pin_path"], target)
         return parse_mcp_pin(self.cfg, text)
 
