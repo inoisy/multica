@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/multica-ai/multica/server/internal/events"
+	"github.com/multica-ai/multica/server/internal/featureflags"
 	inboxwriter "github.com/multica-ai/multica/server/internal/inbox"
 	"github.com/multica-ai/multica/server/internal/issuestatus"
 	"github.com/multica-ai/multica/server/internal/util"
@@ -553,6 +554,19 @@ func (s *IssueWakeupService) dispatchSystem(ctx context.Context, prev db.IssueWa
 	if current.Type != "none" {
 		facts["target_type"], facts["target_id"] = current.Type, util.UUIDToString(current.ID)
 	}
+	// A closed stage of a parent whose stages the server dispatches is already
+	// answered: the next stage went to the squad. The end of all work and a
+	// stage that closed with cancelled work still reach the assignee.
+	if strings.HasPrefix(state, "stage:") && !stageCancelled(observed) && s.stageDispatchOn(ctx, q, issue.ID) {
+		facts["outcome"] = "stage_dispatch"
+		if err = q.ConsumeWakeupReceipts(ctx, db.ConsumeWakeupReceiptsParams{Ids: ids}); err != nil {
+			return err
+		}
+		if err = note(wakeupActivityTriggered, facts); err != nil {
+			return err
+		}
+		return commit()
+	}
 	// Recorded without a run: nobody to wake, a member to notify, or an
 	// assignee whose agent cannot run.
 	if current.Type == "member" || !current.Agent.ID.Valid {
@@ -818,4 +832,14 @@ func (s *IssueWakeupService) SetChildDoneDefault(ctx context.Context, workspaceI
 		}
 	}
 	return int64(len(changed)), tx.Commit(ctx)
+}
+
+// stageDispatchOn reports whether the server dispatches this parent's stages.
+// A failed read counts as off, so the wake still goes out.
+func (s *IssueWakeupService) stageDispatchOn(ctx context.Context, q *db.Queries, issueID pgtype.UUID) bool {
+	if s.Tasks == nil || !featureflags.StageDispatchV1Enabled(ctx, s.Tasks.FeatureFlags) {
+		return false
+	}
+	_, err := q.GetIssueStageDispatch(ctx, issueID)
+	return err == nil
 }
