@@ -1,0 +1,13 @@
+DROP TABLE IF EXISTS runtime_unavailable;
+DROP TABLE IF EXISTS subscription_usage;
+DROP TABLE IF EXISTS subscription_pool_member;
+DROP TABLE IF EXISTS subscription_pool_grant;
+DROP TABLE IF EXISTS subscription_pool;
+DROP TABLE IF EXISTS subscription_manual_run;
+DROP TABLE IF EXISTS subscription_host_state;
+DROP TABLE IF EXISTS subscription;
+DROP INDEX IF EXISTS runtime_profile_workspace_pool_uidx;
+ALTER TABLE runtime_profile DROP CONSTRAINT IF EXISTS runtime_profile_pool_command_check;
+ALTER TABLE runtime_profile DROP COLUMN IF EXISTS pool_id;
+ALTER TABLE agent_task_queue DROP COLUMN IF EXISTS account_offer;
+ALTER TABLE agent_task_queue DROP COLUMN IF EXISTS account_fact;

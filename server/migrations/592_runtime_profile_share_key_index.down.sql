@@ -1,1 +1,0 @@
-DROP INDEX CONCURRENTLY IF EXISTS runtime_profile_workspace_share_key_uidx;
