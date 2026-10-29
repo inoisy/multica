@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, ChevronUp } from "lucide-react";
+import { ChevronDown, ChevronUp } from "@multica/ui/icons";
 import type { SubscriptionAccount } from "@multica/core/subscriptions";
 import type { AvailabilityVerdict, Pool, Subscription } from "@multica/core/types";
 import { Badge } from "@multica/ui/components/ui/badge";

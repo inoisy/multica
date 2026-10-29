@@ -10,7 +10,15 @@
     "issues": "Задачи",
     "cancelled": "Отменено",
     "recent": "Недавние",
-    "workspaces": "Рабочие пространства"
+    "workspaces": "Рабочие пространства",
+    "agents": "Агенты",
+    "squads": "Сквады",
+    "autopilots": "Автопилоты",
+    "chats": "Чаты",
+    "skills": "Скиллы",
+    "new": "Создать",
+    "best_match": "Лучшее совпадение",
+    "actions": "Действия"
   },
   "commands": {
     "current_theme_aria": "Текущая тема",
@@ -20,19 +28,153 @@
     "copy_identifier": "Скопировать идентификатор ({{identifier}})",
     "fold_all_comments": "Свернуть все комментарии",
     "unfold_all_comments": "Развернуть все комментарии",
-    "switch_to_light": "Переключиться на светлую тему",
-    "switch_to_dark": "Переключиться на тёмную тему",
-    "use_system_theme": "Использовать системную тему"
+    "new_autopilot": "Новый автопилот",
+    "chat_with_agent": "Чат с агентом",
+    "change_theme": "Сменить тему...",
+    "send_feedback": "Отправить отзыв"
   },
   "toast": {
     "link_copied": "Ссылка скопирована",
-    "copied_identifier": "Скопировано {{identifier}}"
+    "copied_identifier": "Скопировано {{identifier}}",
+    "run_retried": "Запуск перезапущен",
+    "run_cancelled": "Запуск отменён",
+    "subscribed": "Подписка оформлена",
+    "unsubscribed": "Подписка снята",
+    "label_added": "Метка {{name}} добавлена",
+    "label_removed": "Метка {{name}} снята",
+    "label_failed": "Не удалось добавить метку {{name}} ко всем задачам",
+    "update_failed": "Не удалось обновить",
+    "assigned": "{{identifier}} назначена на {{name}}"
   },
   "empty": {
     "no_results": "Ничего не найдено.",
-    "type_to_search": "Введите запрос для поиска задач и проектов"
+    "no_labels": "Нет меток",
+    "type_to_find_issue": "Введите запрос, чтобы найти задачу",
+    "type_to_find_people": "Введите запрос, чтобы найти людей и агентов"
   },
   "trigger": {
     "label": "Поиск..."
+  },
+  "page_placeholder": "Фильтр...",
+  "breadcrumb_aria": "Текущее меню",
+  "context": {
+    "current_issue": "Текущая задача",
+    "selected_issues_one": "{{count}} выбранная задача",
+    "selected_issues_few": "{{count}} выбранные задачи",
+    "selected_issues_many": "{{count}} выбранных задач",
+    "selected_issues_other": "{{count}} выбранной задачи",
+    "current_project": "Текущий проект",
+    "current_agent": "Текущий агент",
+    "current_autopilot": "Текущий автопилот",
+    "inbox": "Входящие",
+    "current_chat": "Текущий чат"
+  },
+  "issue": {
+    "change_status": "Сменить статус...",
+    "assign_to": "Назначить...",
+    "set_priority": "Задать приоритет...",
+    "run_quick_action": "Быстрое действие...",
+    "quick_actions_available_one": "{{count}} доступно",
+    "quick_actions_available_few": "{{count}} доступно",
+    "quick_actions_available_many": "{{count}} доступно",
+    "quick_actions_available_other": "{{count}} доступно",
+    "add_label": "Добавить метку...",
+    "set_due_date": "Задать срок...",
+    "move_to_project": "Перенести в проект...",
+    "set_parent": "Задать родительскую задачу...",
+    "cancel_run": "Отменить текущий запуск",
+    "retry_run": "Повторить последний запуск",
+    "create_sub_issue": "Новая подзадача",
+    "subscribe": "Подписаться",
+    "unsubscribe": "Отписаться",
+    "delete": "Удалить задачу",
+    "delete_selected_one": "Удалить {{count}} задачу",
+    "delete_selected_few": "Удалить {{count}} задачи",
+    "delete_selected_many": "Удалить {{count}} задач",
+    "delete_selected_other": "Удалить {{count}} задачи"
+  },
+  "project": {
+    "change_status": "Сменить статус проекта...",
+    "new_issue": "Новая задача в этом проекте",
+    "pin": "Закрепить в боковой панели",
+    "unpin": "Открепить от боковой панели",
+    "copy_link": "Скопировать ссылку на проект"
+  },
+  "agent": {
+    "chat": "Чат с {{name}}",
+    "assign_issue": "Назначить задачу {{name}}...",
+    "new_issue": "Новая задача для {{name}}",
+    "pin_in_chat": "Закрепить в чате",
+    "unpin_in_chat": "Открепить из чата"
+  },
+  "autopilot": {
+    "run_now": "Запустить сейчас",
+    "pause": "Приостановить",
+    "resume": "Возобновить"
+  },
+  "inbox": {
+    "archive": "В архив",
+    "mark_unread": "Отметить непрочитанным",
+    "mark_all_read": "Отметить все входящие прочитанными",
+    "archive_all_read": "Архивировать все прочитанные входящие"
+  },
+  "chat": {
+    "link_project": "Привязать к проекту...",
+    "pin": "Закрепить чат",
+    "unpin": "Открепить чат",
+    "archive": "Архивировать чат"
+  },
+  "pages": {
+    "status": "Статус",
+    "priority": "Приоритет",
+    "assignee": "Исполнитель",
+    "labels": "Метки",
+    "due_date": "Срок",
+    "project": "Проект",
+    "parent": "Родительская задача",
+    "quick_actions": "Быстрые действия",
+    "theme": "Тема",
+    "project_status": "Статус проекта",
+    "no_project": "Без проекта",
+    "current": "Текущее"
+  },
+  "theme": {
+    "light": "Светлая",
+    "dark": "Тёмная",
+    "system": "Системная"
+  },
+  "delegate": {
+    "heading": "Передать агенту",
+    "create_and_assign": "Новая задача с назначением на {{name}}",
+    "squad": "Сквад",
+    "context_aria": "Создаётся с",
+    "parent": "Внутри {{identifier}}",
+    "pick_crumb": "Выбор",
+    "pick_another": "Передать другому агенту или скваду...",
+    "detected": "Поручение"
+  },
+  "best": {
+    "assign": "Назначить {{subject}} на {{name}}",
+    "chat": "Чат с {{name}}",
+    "new_issue_in": "Новая задача в {{name}}"
+  },
+  "types": {
+    "issue": "Задача",
+    "project": "Проект",
+    "agent": "Агент",
+    "autopilot": "Автопилот",
+    "squad": "Сквад",
+    "member": "Участник"
+  },
+  "footer": {
+    "navigate": "Перейти",
+    "select": "Выбрать",
+    "open_in_new_tab": "Открыть в новой вкладке",
+    "delegate": "Создать и передать {{name}}",
+    "search_instead": "Искать по словам",
+    "back": "Назад",
+    "prefix_commands": "Команды",
+    "prefix_issues": "Задачи",
+    "prefix_people": "Люди и агенты"
   }
 }

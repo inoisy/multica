@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { AppWindow, ArrowDown, ArrowUp, ExternalLink, Plus, Trash2 } from "lucide-react";
+import { AppWindow, ArrowDown, ArrowUp, ExternalLink, Plus, Trash2 } from "@multica/ui/icons";
 import { toast } from "sonner";
 import { useWorkspacePaths, useWorkspaceSlug } from "@multica/core/paths";
 import { Button } from "@multica/ui/components/ui/button";

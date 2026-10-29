@@ -514,7 +514,8 @@
     "workdir_path_unavailable": "Пока нет локальной рабочей директории — задача ещё не выполнялась локальным агентом",
     "pull_requests_empty_title": "Нет связанных pull request'ов.",
     "pull_request_card_files_count_few": "{{count}} файла",
-    "pull_request_card_files_count_many": "{{count}} файлов"
+    "pull_request_card_files_count_many": "{{count}} файлов",
+    "restore_to_inbox_tooltip": "Вернуть во входящие"
   },
   "timeline": {
     "loading": "Загрузка...",
@@ -833,19 +834,21 @@
     "trigger_image": "[Изображение]",
     "summary_runs_one": "{{count}} запуск",
     "summary_runs_other": "{{count}} запуска",
-    "latest": "Последний",
     "open_timeline": "Открыть хронологию",
     "more_runs_one": "ещё {{count}}",
     "more_runs_other": "ещё {{count}}",
     "strip_aria": "Накопленная стоимость во времени — открыть хронологию запусков",
     "strip_no_usage": "Расход не записан",
-    "sparkline_now": "Сейчас",
     "included_comments_few": "Включает {{count}} комментария",
     "included_comments_many": "Включает {{count}} комментариев",
     "summary_runs_few": "{{count}} запуска",
     "summary_runs_many": "{{count}} запусков",
     "more_runs_few": "ещё {{count}}",
-    "more_runs_many": "ещё {{count}}"
+    "more_runs_many": "ещё {{count}}",
+    "queued_count_one": "{{count}} в очереди",
+    "queued_count_few": "{{count}} в очереди",
+    "queued_count_many": "{{count}} в очереди",
+    "queued_count_other": "{{count}} в очереди"
   },
   "runs_timeline": {
     "title": "Запуски",

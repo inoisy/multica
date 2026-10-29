@@ -26,7 +26,7 @@ import { Layers,
   Check,
   SquarePen,
   X,
-} from "lucide-react";
+} from "@multica/ui/icons";
 import { WorkspaceAvatar } from "../workspace/workspace-avatar";
 import { ActorAvatar } from "@multica/ui/components/common/actor-avatar";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@multica/ui/components/ui/tooltip";
@@ -83,6 +83,7 @@ import type { PinnedItem } from "@multica/core/types";
 import { useLogout } from "../auth";
 import { ProjectIcon } from "../projects/components/project-icon";
 import { routeIconForPath } from "./route-icon-components";
+import { RouteDataPrefetch } from "./route-data-prefetch";
 import { useT } from "../i18n";
 import { customPagesOptions } from "../custom-pages";
 import {
@@ -659,6 +660,7 @@ export function AppSidebar({ topSlot, searchSlot, headerClassName, headerStyle }
   const createIssueShortcut = useShortcut("createIssue");
 
   return (
+    <RouteDataPrefetch wsId={wsId} userId={userId ?? null}>
       <Sidebar variant="inset">
         {topSlot}
         {/* Workspace Switcher */}
@@ -987,5 +989,6 @@ export function AppSidebar({ topSlot, searchSlot, headerClassName, headerStyle }
         </SidebarFooter>
         <SidebarRail />
       </Sidebar>
+    </RouteDataPrefetch>
   );
 }

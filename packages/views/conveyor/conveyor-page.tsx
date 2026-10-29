@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
-import { MoreHorizontal, Plus, RefreshCw, Workflow } from "lucide-react";
+import { MoreHorizontal, Plus, RefreshCw, Workflow } from "@multica/ui/icons";
 import { toast } from "sonner";
 import { api } from "@multica/core/api";
 import { stageDispatchKeys, stageDispatchListOptions, useSetIssueStageDispatch } from "@multica/core/conveyor";

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Plus, Trash2 } from "@multica/ui/icons";
 import type { AgentRuntime, MemberWithUser, ModelOptionInput, ModelRowState } from "@multica/core/types";
 import { isRuntimeUsableForUser } from "@multica/core/runtimes";
 import { moveModelOption } from "@multica/core/model-profiles";

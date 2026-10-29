@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDown, ArrowUp, X } from "lucide-react";
+import { ArrowDown, ArrowUp, X } from "@multica/ui/icons";
 import { moveItem } from "@multica/core/subscriptions";
 import type { AvailabilityVerdict, Subscription } from "@multica/core/types";
 import { SimpleSelect } from "@multica/ui/components/common/simple-select";

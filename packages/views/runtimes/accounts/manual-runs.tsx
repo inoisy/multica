@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { Check, Copy, Terminal } from "lucide-react";
+import { Check, Copy, Terminal } from "@multica/ui/icons";
 import { manualRunsOptions } from "@multica/core/subscriptions";
 import type { ManualRun } from "@multica/core/types";
 import { Badge } from "@multica/ui/components/ui/badge";

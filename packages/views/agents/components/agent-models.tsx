@@ -2,7 +2,7 @@
 
 import { type ReactNode, useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { X } from "lucide-react";
+import { X } from "@multica/ui/icons";
 import { toast } from "sonner";
 import type {
   Agent,
