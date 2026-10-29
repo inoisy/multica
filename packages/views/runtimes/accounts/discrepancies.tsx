@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle } from "@multica/ui/icons";
 import type { Subscription, SubscriptionDiscrepancy } from "@multica/core/types";
 import { AppLink } from "../../navigation";
 import { useT } from "../../i18n";

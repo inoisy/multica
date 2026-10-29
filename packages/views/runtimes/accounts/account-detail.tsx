@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { MoreHorizontal } from "lucide-react";
+import { MoreHorizontal } from "@multica/ui/icons";
 import { toast } from "sonner";
 import {
   agentLimit,

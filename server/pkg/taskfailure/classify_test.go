@@ -77,6 +77,7 @@ func TestClassifyRules(t *testing.T) {
 		{"hit your limit curly", "you\u2019ve hit your limit", ReasonAgentProviderQuotaLimit},
 		{"session limit ascii", "You've hit your session limit \u00b7 resets 2pm (UTC)", ReasonAgentProviderQuotaLimit},
 		{"session limit curly", "You\u2019ve hit your session limit \u00b7 resets 2pm (UTC)", ReasonAgentProviderQuotaLimit},
+		{"weekly limit", "You've hit your weekly limit \u00b7 resets Nov 3, 9am (UTC)", ReasonAgentProviderQuotaLimit},
 		{"credits", "Your account has 0 credits remaining", ReasonAgentProviderQuotaLimit},
 		{"quota", "quota exceeded for project foo", ReasonAgentProviderQuotaLimit},
 

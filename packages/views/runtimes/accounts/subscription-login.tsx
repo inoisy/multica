@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { KeyRound } from "lucide-react";
+import { KeyRound } from "@multica/ui/icons";
 import { toast } from "sonner";
 import {
   subscriptionLoginOptions,

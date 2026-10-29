@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { AppWindow, ExternalLink, Settings2 } from "lucide-react";
+import { AppWindow, ExternalLink, Settings2 } from "@multica/ui/icons";
 import { useAuthStore } from "@multica/core/auth";
 import { useCurrentWorkspace, useWorkspacePaths, useWorkspaceSlug } from "@multica/core/paths";
 import { useTheme } from "@multica/ui/components/common/theme-provider";
