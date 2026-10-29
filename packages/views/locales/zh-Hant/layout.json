@@ -12,7 +12,6 @@
     "runtimes": "執行時",
     "skills": "Skills",
     "settings": "設定",
-    "conveyor": "史詩",
     "subscriptions": "Subscriptions",
     "pages": "Pages",
     "model_profiles": "模型配置"
@@ -106,7 +105,6 @@
   },
   "section_tabs": {
     "issues": "任務",
-    "conveyor": "史詩",
     "agents": "智慧體",
     "modelProfiles": "模型配置",
     "runtimes": "執行時",

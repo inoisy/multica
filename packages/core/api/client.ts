@@ -4,7 +4,7 @@ import type { IssueWakeup, IssueWakeupInput, IssueWakeupSummaryRow, PausedWakeup
 import type { WorkspaceWakeupPage, WorkspaceWakeupFilters } from "../types/issue-wakeup";
 import type { AgentModels, CreateModelProfileInput, CreatePersonalProfileInput, IssueModelProfile, ModelProfile, ModelProfileChange, ModelProfileInput, ModelProfileKind, RuntimeUnavailable, SetPersonalProfileInput, SingleModelInput, UpdateAgentModelsInput } from "../types/model-profile";
 import { AgentModelsSchema, IssueModelProfileSchema, ModelProfilePreviewSchema, ModelProfileSchema, RuntimeUnavailableSchema } from "./schemas";
-import { IssueStageDispatchSchema, StageDispatchListSchema } from "./schemas";
+import { IssueStageDispatchSchema } from "./schemas";
 import {
   DeleteSubscriptionResultSchema,
   PoolListSchema,
@@ -35,7 +35,7 @@ import type {
   UpdateSubscriptionInput,
 } from "../types/subscription";
 import type { ManualRunList, RuntimeModelUsage, RuntimeRunFacts } from "../types/runtime-model";
-import type { IssueStageDispatch, StageDispatchEpic } from "../types/stage-dispatch";
+import type { IssueStageDispatch } from "../types/stage-dispatch";
 import { WorkspaceWakeupPageSchema, IssueWakeupSchema, IssueWakeupSummaryRowSchema, PausedWakeupSchema, SystemWakeupSchema, WakeupRunSchema, WorkspaceSystemWakeupSchema } from "./schemas";
 import type { ArchivedInboxFilters } from "../inbox/filter-store";
 import type { ArchivedInboxPage, ArchivedInboxFacets } from "../types/inbox";
@@ -1471,17 +1471,6 @@ export class ApiClient {
     return parseWithFallback<IssueStageDispatch>(raw, IssueStageDispatchSchema, { issue_id: issueId, squad_id: squadId, dispatch_by: null }, {
       endpoint: "PUT /api/issues/:id/stage-dispatch",
     });
-  }
-
-  /** The workspace's epics whose stages the server dispatches; empty on a backend without it. */
-  async listStageDispatch(): Promise<StageDispatchEpic[]> {
-    try {
-      const raw = await this.fetch<unknown>("/api/stage-dispatch");
-      return parseWithFallback(raw, StageDispatchListSchema, { epics: [] }, { endpoint: "GET /api/stage-dispatch" }).epics as StageDispatchEpic[];
-    } catch (error) {
-      if (error instanceof ApiError && error.status === 404) return [];
-      throw error;
-    }
   }
 
   async getIssueModelProfile(issueId: string): Promise<IssueModelProfile> {

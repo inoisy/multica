@@ -4,19 +4,8 @@ import { issueKeys } from "../issues/queries";
 
 export const stageDispatchKeys = {
   all: (wsId: string) => ["stage-dispatch", wsId] as const,
-  list: (wsId: string) => [...stageDispatchKeys.all(wsId), "list"] as const,
   issue: (wsId: string, issueId: string) => [...stageDispatchKeys.all(wsId), "issue", issueId] as const,
 };
-
-/** The workspace's dispatched epics for the conveyor board. */
-export function stageDispatchListOptions(wsId: string) {
-  return queryOptions({
-    queryKey: stageDispatchKeys.list(wsId),
-    queryFn: () => api.listStageDispatch(),
-    enabled: wsId.length > 0,
-    refetchInterval: 30_000,
-  });
-}
 
 export function issueStageDispatchOptions(wsId: string, issueId: string) {
   return queryOptions({

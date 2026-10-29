@@ -12,7 +12,6 @@
     "runtimes": "Runtimes",
     "skills": "Skills",
     "settings": "Paramètres",
-    "conveyor": "Épopées",
     "subscriptions": "Subscriptions",
     "pages": "Pages",
     "model_profiles": "Profils de modèles"
@@ -106,7 +105,6 @@
   },
   "section_tabs": {
     "issues": "Tâches",
-    "conveyor": "Épopées",
     "agents": "Agents",
     "modelProfiles": "Profils de modèles",
     "runtimes": "Runtimes",

@@ -38,7 +38,6 @@
     "./runtimes": "./runtimes/index.ts",
     "./billing": "./billing/index.ts",
     "./dashboard": "./dashboard/index.ts",
-    "./conveyor": "./conveyor/index.ts",
     "./subscriptions": "./subscriptions/index.ts",
     "./custom-pages": "./custom-pages/index.ts",
     "./model-profiles": "./model-profiles/index.ts",
