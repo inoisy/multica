@@ -37,7 +37,7 @@ describe("sectionHrefsFor", () => {
   const p = paths.workspace("acme");
 
   it("adds a section's fork pages to its sidebar entry", () => {
-    expect(sectionHrefsFor(p, "/acme/issues")).toEqual(["/acme/issues", "/acme/conveyor"]);
+    expect(sectionHrefsFor(p, "/acme/issues")).toEqual(["/acme/issues"]);
     expect(sectionHrefsFor(p, "/acme/agents")).toEqual(["/acme/agents", "/acme/profiles"]);
     expect(sectionHrefsFor(p, "/acme/runtimes")).toEqual(["/acme/runtimes"]);
     expect(sectionHrefsFor(p, "/acme/usage")).toEqual(["/acme/usage"]);

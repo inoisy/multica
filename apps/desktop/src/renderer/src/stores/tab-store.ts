@@ -378,7 +378,9 @@ export function sanitizeTabPath(path: string, savedGroupSlug?: string): string |
     }
     return null;
   }
-  if (segments.length === 1) {
+  // A bare `/{slug}` and the removed epics board (`/{slug}/conveyor`, STT-455)
+  // both open Issues.
+  if (segments.length === 1 || (segments.length === 2 && segments[1] === "conveyor")) {
     return `/${firstSegment}/issues${suffix}`;
   }
   return path;

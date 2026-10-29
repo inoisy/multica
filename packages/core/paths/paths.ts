@@ -27,7 +27,6 @@ function workspaceScoped(slug: string) {
   return {
     root: () => `${ws}/issues`,
     usage: () => `${ws}/usage`,
-    conveyor: () => `${ws}/conveyor`,
     subscriptions: () => `${ws}/subscriptions`,
     pages: () => `${ws}/pages`,
     customPage: (id: string) => `${ws}/pages/${encode(id)}`,

@@ -373,7 +373,7 @@ export type {
   RuntimeServingAgent, SelectionState,
 } from "./runtime-model";
 export { SELECTION_STATES } from "./runtime-model";
-export type { IssueStageDispatch, StageDispatchEpic } from "./stage-dispatch";
+export type { IssueStageDispatch } from "./stage-dispatch";
 export type {
   AvailabilityVerdict, CreatePoolInput, CreateSubscriptionInput, DeleteSubscriptionResult, Pool, PoolAccount,
   PoolEnvironment, PoolList, PoolRevisionConflict, RuntimeProfileSubscriptions, SetPoolGrantsInput, UpdatePoolInput, SpendOrder, StartSubscriptionLoginInput, Subscription, SubscriptionAuth,

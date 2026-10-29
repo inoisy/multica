@@ -145,7 +145,6 @@ vi.mock("@multica/core/paths", async (importOriginal) => ({
     agents: () => "/acme/agents",
     squads: () => "/acme/squads",
     usage: () => "/acme/usage",
-    conveyor: () => "/acme/conveyor",
     subscriptions: () => "/acme/subscriptions",
     modelProfiles: () => "/acme/profiles",
     runtimes: () => "/acme/runtimes",
@@ -447,7 +446,7 @@ describe("personal nav — Chat", () => {
   it("hosts the fork pages under their sections instead of listing them", () => {
     navigation.current = { pathname: "/acme/profiles" };
     const agents = render(<AppSidebar />);
-    for (const href of ["/acme/conveyor", "/acme/subscriptions", "/acme/profiles"]) {
+    for (const href of ["/acme/subscriptions", "/acme/profiles"]) {
       expect(agents.container.querySelector(`[data-href="${href}"]`)).toBeNull();
     }
     expect(agents.container.querySelector('button[data-href="/acme/agents"]')).toHaveAttribute("data-active", "true");

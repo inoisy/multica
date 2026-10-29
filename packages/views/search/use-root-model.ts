@@ -42,7 +42,6 @@ const PAGE_KEYWORDS: Record<WorkspacePageKey, string[]> = {
   agents: ["agents", "bots", "ai", "智能体"],
   squads: ["squads", "teams", "小队", "团队"],
   usage: ["usage", "analytics", "stats", "metrics", "统计", "分析", "用量"],
-  conveyor: ["conveyor", "pipeline", "stages", "конвейер", "этапы", "эпики"],
   subscriptions: ["subscriptions", "limits", "quota", "usage", "подписки", "лимиты", "квоты", "расход"],
   pages: ["pages", "links", "custom", "страницы", "ссылки", "архив"],
   modelProfiles: ["profiles", "models", "fallback", "профили", "модели", "фоллбеки"],

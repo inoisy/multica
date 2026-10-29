@@ -54,6 +54,10 @@ describe("sanitizeTabPath", () => {
     expect(sanitizeTabPath("/acme")).toBe("/acme/issues");
     expect(sanitizeTabPath("/acme?welcome=1")).toBe("/acme/issues?welcome=1");
   });
+
+  it("opens Issues for a saved tab of the removed epics board", () => {
+    expect(sanitizeTabPath("/acme/conveyor")).toBe("/acme/issues");
+  });
 });
 
 describe("resourceKeyForUrl", () => {

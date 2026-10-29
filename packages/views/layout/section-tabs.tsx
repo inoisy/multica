@@ -7,22 +7,20 @@ import { AppLink } from "../navigation";
 
 /**
  * Pages the fork adds sit under an upstream section instead of the sidebar:
- * model profiles under Agents, the epic stage
- * board under Issues. Each page of a section shows the same switcher in its
+ * model profiles under Agents. Each page of a section shows the same switcher in its
  * header, and the sidebar keeps the section's own entry active.
  */
-export type Section = "issues" | "agents";
+export type Section = "agents";
 
-type SectionPage = "issues" | "conveyor" | "agents" | "modelProfiles";
+type SectionPage = "agents" | "modelProfiles";
 
 const SECTION_PAGES: Record<Section, readonly SectionPage[]> = {
-  issues: ["issues", "conveyor"],
   agents: ["agents", "modelProfiles"],
 };
 
 /**
  * The sidebar entry a fork page belongs to: `/profiles` keeps Agents
- * active and `/conveyor` Issues.
+ * active.
  */
 export function sectionHrefsFor(p: WorkspacePaths, href: string): string[] {
   for (const pages of Object.values(SECTION_PAGES)) {

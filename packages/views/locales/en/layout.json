@@ -12,7 +12,6 @@
     "runtimes": "Runtimes",
     "skills": "Skills",
     "settings": "Settings",
-    "conveyor": "Epics",
     "subscriptions": "Subscriptions",
     "pages": "Pages",
     "model_profiles": "Model profiles"
@@ -106,7 +105,6 @@
   },
   "section_tabs": {
     "issues": "Issues",
-    "conveyor": "Epics",
     "agents": "Agents",
     "modelProfiles": "Model profiles",
     "runtimes": "Runtimes",

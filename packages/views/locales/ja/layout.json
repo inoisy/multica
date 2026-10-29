@@ -12,7 +12,6 @@
     "runtimes": "ランタイム",
     "skills": "スキル",
     "settings": "設定",
-    "conveyor": "エピック",
     "subscriptions": "Subscriptions",
     "pages": "Pages",
     "model_profiles": "モデルプロファイル"
@@ -106,7 +105,6 @@
   },
   "section_tabs": {
     "issues": "タスク",
-    "conveyor": "エピック",
     "agents": "エージェント",
     "modelProfiles": "モデルプロファイル",
     "runtimes": "ランタイム",
