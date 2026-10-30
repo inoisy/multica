@@ -43,10 +43,10 @@ class _Pipe(threading.Thread):
 
 
 class Runner:
-    def __init__(self, config, clock=time.monotonic):
+    def __init__(self, config, clock=time.monotonic, redactor=None):
         self.config, self.clock = config, clock
         self._slots = threading.BoundedSemaphore(config.max_parallel)
-        self._redact = Redactor(config.secrets)
+        self._redact = redactor or Redactor(config.secrets)
 
     def run(self, token, argv, stdin='', workspace_id=''):
         with self._slots:
@@ -70,7 +70,7 @@ class Runner:
     def _spawn(self, argv, stdin, env, cwd, started):
         cfg = self.config
         # Read a little past the cap so a secret on the cut boundary is masked whole before truncation
-        margin = max((len(s) for s in cfg.secrets), default=0)
+        margin = self._redact.longest
         limit = cfg.max_output + margin
         proc = subprocess.Popen([cfg.multica_bin, *argv], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                 stderr=subprocess.PIPE, cwd=cwd, env=env, start_new_session=True, close_fds=True)

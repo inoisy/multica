@@ -1,4 +1,4 @@
-"""Transport, the only public entry point. Rejection order: path, Host, Origin, rate limit, key, size, JSON."""
+"""Transport, the only public entry point. Rejection order: path, Host, Origin, rate limit, key or OAuth token, size, JSON."""
 import hmac
 import json
 import logging
@@ -6,8 +6,10 @@ import threading
 import time
 from collections import defaultdict, deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import urlsplit
 
 from . import rpc
+from .oauth_service import Unavailable
 
 log = logging.getLogger('multica_mcp.http')
 LOOPBACK = ('127.0.0.1', '::1')
@@ -40,7 +42,8 @@ def _host_name(header):
     return host.rsplit(':', 1)[0] if host.count(':') == 1 else host
 
 
-def make_handler(config, service, limiter):
+def make_handler(config, service, limiter, oauth=None):
+    """oauth is an OAuthHttp or None; without it only the bearer keys from the configuration are accepted."""
     keys = [(c, c.key.encode()) for c in config.clients]
 
     class Handler(BaseHTTPRequestHandler):
@@ -78,40 +81,101 @@ def make_handler(config, service, limiter):
             log.info('request', extra={'ctx': {'method': self.command, 'path': self.path.split('?')[0],
                                                'status': status, 'ip': self.client_ip()}})
 
+        def send_html(self, status, html, headers=()):
+            data = html.encode()
+            self.send_response(status)
+            self.send_header('Content-Type', 'text/html; charset=utf-8')
+            self.send_header('Content-Length', str(len(data)))
+            self.send_header('Cache-Control', 'no-store')
+            self.send_header('X-Content-Type-Options', 'nosniff')
+            self.send_header('X-Frame-Options', 'DENY')
+            # Not no-referrer: with it browsers send `Origin: null` on the consent form POST, and consent would fail
+            self.send_header('Referrer-Policy', 'same-origin')
+            self.send_header('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'")
+            for name, value in headers:
+                self.send_header(name, value)
+            self.end_headers()
+            if self.command != 'HEAD':
+                self.wfile.write(data)
+            log.info('request', extra={'ctx': {'method': self.command, 'path': self.path.split('?')[0],
+                                               'status': status, 'ip': self.client_ip()}})
+
+        def redirect(self, location):
+            self.send_response(302)
+            self.send_header('Location', location)
+            self.send_header('Content-Length', '0')
+            self.send_header('Cache-Control', 'no-store')
+            self.send_header('Referrer-Policy', 'no-referrer')
+            self.end_headers()
+            log.info('request', extra={'ctx': {'method': self.command, 'path': self.path.split('?')[0],
+                                               'status': 302, 'ip': self.client_ip()}})
+
+        def origin_allowed(self):
+            origin = self.headers.get('Origin')
+            return origin is None or origin in config.allowed_origins
+
+        def read_body(self, limit):
+            """The request body, or None when a rejection was already sent (missing Content-Length or over the limit)."""
+            length = self.headers.get('Content-Length')
+            if length is None or not length.isdigit():
+                self.reject(411, 'Content-Length required')
+            elif int(length) > limit:
+                self.reject(413, 'request body too large')
+            else:
+                return self.rfile.read(int(length))
+            return None
+
         def reject(self, status, message, headers=()):
             # The body was not read: close the connection, or its bytes would be parsed as the next request
             self.send_json(status, {'error': message}, headers, close=True)
 
         def authenticate(self, ip):
-            """Client for the bearer key, or None. Compares against every key without an early exit, so timing does not tell which matched."""
+            """Client for the bearer key or OAuth access token; None means a 401/503 was already sent.
+
+            A request without Authorization is the normal OAuth challenge, not guessing, so it does not count as a failure.
+            """
             header = self.headers.get('Authorization', '')
             scheme, _, token = header.partition(' ')
             candidate = token.strip().encode()
+            challenge = oauth.service.challenge_header if oauth else 'Bearer'
+            if not header:
+                self.reject(401, 'unauthorized', [('WWW-Authenticate', challenge)])
+                return None
+            # Compare against every key without an early exit, so timing does not tell which matched.
             found = None
             for client, key in keys:
                 if hmac.compare_digest(candidate, key) and scheme.lower() == 'bearer':
                     found = client
+            if found is None and oauth and scheme.lower() == 'bearer':
+                try:
+                    found = oauth.service.authenticate(token.strip())
+                except Unavailable:
+                    self.reject(503, 'authorization service unavailable', [('Retry-After', '30')])
+                    return None
             if found is None:
                 limiter.fail(ip)
+                self.reject(401, 'unauthorized', [('WWW-Authenticate', challenge + ', error="invalid_token"' if oauth else challenge)])
             return found
 
         def route(self):
-            path = self.path.split('?')[0]
+            path = urlsplit(self.path).path
             if path == '/healthz' and self.command == 'GET' and self.client_address[0] in LOOPBACK:
                 return self.send_json(200, {'status': 'ok'})
-            if path != '/mcp':
+            oauth_route = bool(oauth) and oauth.owns(path)
+            if path != '/mcp' and not oauth_route:
                 return self.reject(404, 'not found')
             if _host_name(self.headers.get('Host')) not in config.allowed_hosts:
                 return self.reject(403, 'host not allowed')
-            origin = self.headers.get('Origin')
-            if origin is not None and origin not in config.allowed_origins:
+            if oauth_route:
+                return oauth.handle(self, path)
+            if not self.origin_allowed():
                 return self.reject(403, 'origin not allowed')
             ip = self.client_ip()
             if limiter.blocked(ip):
                 return self.reject(429, 'too many failed attempts', [('Retry-After', str(int(config.auth_fail_window)))])
             client = self.authenticate(ip)
             if client is None:
-                return self.reject(401, 'unauthorized', [('WWW-Authenticate', 'Bearer')])
+                return
             if self.command != 'POST':
                 return self.reject(405, 'use POST', [('Allow', 'POST')])
             version = self.headers.get('MCP-Protocol-Version')
@@ -120,13 +184,11 @@ def make_handler(config, service, limiter):
             self.post_mcp(ip, client)
 
         def post_mcp(self, ip, client):
-            length = self.headers.get('Content-Length')
-            if length is None or not length.isdigit():
-                return self.reject(411, 'Content-Length required')
-            if int(length) > config.max_body:
-                return self.reject(413, 'request body too large')
+            raw = self.read_body(config.max_body)
+            if raw is None:
+                return
             try:
-                message = json.loads(self.rfile.read(int(length)))
+                message = json.loads(raw)
             except ValueError:
                 return self.send_json(400, {'jsonrpc': '2.0', 'id': None, 'error': {'code': -32700, 'message': 'parse error'}})
             if isinstance(message, list):
@@ -142,8 +204,8 @@ def make_handler(config, service, limiter):
     return Handler
 
 
-def make_server(config, service, limiter=None):
+def make_server(config, service, limiter=None, oauth=None):
     limiter = limiter or AuthLimiter(config.auth_fail_limit, config.auth_fail_window)
-    server = ThreadingHTTPServer((config.host, config.port), make_handler(config, service, limiter))
+    server = ThreadingHTTPServer((config.host, config.port), make_handler(config, service, limiter, oauth))
     server.daemon_threads = True
     return server

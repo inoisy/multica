@@ -10,6 +10,7 @@ DEFAULT_API_URL = 'https://api.multica.ai'
 DEFAULT_ORIGINS = ('https://claude.ai', 'https://claude.com')
 DEFAULT_HOSTS = ('127.0.0.1', 'localhost')
 DEFAULT_CLIENT = 'default'
+ALL_WORKSPACES = '*'  # every workspace the PAT owner belongs to, including ones they join later
 TRUE = ('1', 'true', 'yes')
 
 
@@ -29,6 +30,16 @@ class Client:
     token: str
     workspaces: tuple
     read_only: bool = False
+    ident: str = ''  # cache and audit key; for OAuth the Multica user id, so equal display names never mix
+    source: str = 'key'  # key: a bearer key from the configuration; oauth: signed in through Multica
+
+    @property
+    def cache_key(self):
+        return self.ident or self.name
+
+    @property
+    def any_workspace(self):
+        return ALL_WORKSPACES in self.workspaces
 
 
 def load_clients(path, default_workspaces):
@@ -58,6 +69,8 @@ def load_clients(path, default_workspaces):
         if not isinstance(workspaces, list) or not workspaces or not all(isinstance(w, str) and w.strip() for w in workspaces):
             raise ConfigError(f'MULTICA_MCP_CLIENTS[{i}]: workspaces must be a non-empty array of strings '
                               '(or set MULTICA_MCP_WORKSPACES as the default)')
+        if ALL_WORKSPACES in workspaces and len(workspaces) > 1:
+            raise ConfigError(f'MULTICA_MCP_CLIENTS[{i}]: "*" cannot be combined with other workspaces')
         read_only = row.get('read_only', False)
         if not isinstance(read_only, bool):
             raise ConfigError(f'MULTICA_MCP_CLIENTS[{i}]: read_only must be true or false')
@@ -69,6 +82,8 @@ def load_clients(path, default_workspaces):
 class Config:
     api_url: str
     clients: tuple
+    oauth_key_file: Path | None = None  # PAT encryption key; when set, OAuth sign-in through Multica is enabled
+    public_url: str = ''  # OAuth issuer and base of its endpoints; the protected resource is public_url + /mcp
     multica_bin: str = 'multica'
     run_dir: str | None = None  # parent of the empty per-run working directories; None means the system TMPDIR
     state_dir: Path = Path('.')
@@ -111,8 +126,18 @@ class Config:
             clients.append(Client(DEFAULT_CLIENT, key, need('MULTICA_PAT'), default_workspaces, read_only))
         if env.get('MULTICA_MCP_CLIENTS', '').strip():
             clients += load_clients(env['MULTICA_MCP_CLIENTS'].strip(), default_workspaces)
-        if not clients:
-            raise ConfigError('no clients: set MULTICA_MCP_KEY + MULTICA_PAT and/or MULTICA_MCP_CLIENTS')
+        oauth_key = env.get('MULTICA_MCP_OAUTH_KEY_FILE', '').strip()
+        if not clients and not oauth_key:
+            raise ConfigError('no clients: set MULTICA_MCP_KEY + MULTICA_PAT, MULTICA_MCP_CLIENTS '
+                              'and/or MULTICA_MCP_OAUTH_KEY_FILE')
+        public_url = env.get('MULTICA_MCP_PUBLIC_URL', '').strip().rstrip('/')
+        allowed_hosts = _list(env.get('MULTICA_MCP_ALLOWED_HOSTS')) or DEFAULT_HOSTS
+        if oauth_key:
+            match = re.fullmatch(r'https?://([A-Za-z0-9.-]+)(:\d+)?', public_url)
+            if not match:
+                raise ConfigError('MULTICA_MCP_PUBLIC_URL: OAuth needs the public http(s)://host[:port] without a path')
+            if match.group(1).lower() not in allowed_hosts:
+                raise ConfigError('MULTICA_MCP_ALLOWED_HOSTS must include the host of MULTICA_MCP_PUBLIC_URL')
         names = [c.name.lower() for c in clients]
         if len(set(names)) != len(names):
             raise ConfigError('client names must be unique')
@@ -126,8 +151,9 @@ class Config:
             raise ConfigError('MULTICA_MCP_PORT is out of range')
         return cls(
             api_url=api_url, clients=tuple(clients), state_dir=Path(state),
+            oauth_key_file=Path(oauth_key) if oauth_key else None, public_url=public_url,
             multica_bin=env.get('MULTICA_BIN', 'multica'), run_dir=env.get('MULTICA_MCP_RUN_DIR') or None,
             host=env.get('MULTICA_MCP_HOST', '127.0.0.1'), port=port,
             allowed_origins=_list(env.get('MULTICA_MCP_ALLOWED_ORIGINS')) or DEFAULT_ORIGINS,
-            allowed_hosts=_list(env.get('MULTICA_MCP_ALLOWED_HOSTS')) or DEFAULT_HOSTS,
+            allowed_hosts=allowed_hosts,
         )

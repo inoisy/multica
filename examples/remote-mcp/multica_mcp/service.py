@@ -6,6 +6,7 @@ import json
 import logging
 import re
 import threading
+import time
 
 from . import policy, tools
 from .audit import text_digest
@@ -15,13 +16,15 @@ log = logging.getLogger('multica_mcp')
 
 UUID_RE = re.compile(r'[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}')
 AUDIT_ARG_CHARS = 500
+MEMBERSHIP_TTL = 30.0  # seconds: removal from a workspace takes effect within this time
 
 
 class Service:
-    def __init__(self, runner, audit):
+    def __init__(self, runner, audit, clock=time.monotonic, membership_ttl=MEMBERSHIP_TTL):
         self.runner, self.audit = runner, audit
         self.redact = audit.redact
-        self._workspaces = {}  # client name -> [{id, slug, name}] from `workspace list`
+        self._clock, self.membership_ttl = clock, membership_ttl
+        self._workspaces = {}  # client cache_key -> (load time, [{id, slug, name}] from `workspace list`)
         self._meta = threading.Lock()
 
     def call_tool(self, name, arguments, client_ip='', client=None):
@@ -30,6 +33,8 @@ class Service:
             raise InvalidParams(f'unknown tool: {name}')
         args, stdin, workspace = tools.validate(arguments)
         entry = {'client': client.name, 'client_ip': client_ip, 'argv': [a[:AUDIT_ARG_CHARS] for a in args]}
+        if client.ident:
+            entry |= {'user_id': client.ident, 'auth': client.source}
         try:
             path = policy.check(args, client.read_only)
         except InvalidParams as e:
@@ -63,33 +68,58 @@ class Service:
     def _workspace_id(self, client, ref):
         wanted = list(client.workspaces)
         if ref is None:
+            if client.any_workspace:
+                known = self._membership(client)
+                if len(known) != 1:
+                    raise InvalidParams('workspace is required (' + ', '.join(_slugs(known)) + ')')
+                return str(known[0]['id'])
             if len(wanted) != 1:
                 raise InvalidParams('workspace is required for this key (' + ', '.join(wanted) + ')')
             ref = wanted[0]
         key = ref.lower()
         if UUID_RE.fullmatch(ref) and key in (w.lower() for w in wanted):
             return ref
-        for known in self._known(client):
-            if key in (str(known.get('id', '')).lower(), str(known.get('slug', '')).lower(), str(known.get('name', '')).lower()):
-                return str(known['id'])
-        raise InvalidParams(f'workspace {ref!r} is not allowed for this key (' + ', '.join(wanted) + ')')
+        found = _match(self._membership(client), key)
+        if found is None:
+            # The person may have joined the workspace after the cache was filled: reload once before refusing
+            found = _match(self._membership(client, refresh=True), key)
+        if found is None:
+            allowed = 'your workspaces' if client.any_workspace else ', '.join(wanted)
+            raise InvalidParams(f'workspace {ref!r} is not allowed for this key ({allowed})')
+        return str(found['id'])
 
-    def _known(self, client):
-        """The client's allowed workspaces, resolved to id/slug/name by `workspace list` with the client's own token."""
+    def _membership(self, client, refresh=False):
+        """Workspaces the token owner belongs to (and the client may use): `workspace list` with the client's own token, cached with a TTL."""
+        name = client.cache_key
         with self._meta:
-            if client.name not in self._workspaces:
-                wanted = {w.lower() for w in client.workspaces}
-                result = self.runner.run(client.token, ['workspace', 'list', '--output', 'json'])
-                if result.exit_code != 0:
-                    raise ToolError('workspace_lookup_failed', 'workspace list failed: ' + result.stderr.strip()[:300])
-                try:
-                    rows = json.loads(result.stdout)
-                except ValueError:
-                    raise ToolError('workspace_lookup_failed', 'workspace list: response is not JSON') from None
-                rows = rows.get('workspaces') if isinstance(rows, dict) else rows
-                if not isinstance(rows, list):
-                    raise ToolError('workspace_lookup_failed', 'workspace list: unexpected response shape')
-                self._workspaces[client.name] = [
-                    w for w in rows if isinstance(w, dict)
-                    and wanted & {str(w.get('id', '')).lower(), str(w.get('slug', '')).lower()}]
-            return self._workspaces[client.name]
+            cached = self._workspaces.get(name)
+            if cached and not refresh and self._clock() - cached[0] < self.membership_ttl:
+                return cached[1]
+        result = self.runner.run(client.token, ['workspace', 'list', '--output', 'json'])
+        if result.exit_code != 0:
+            raise ToolError('workspace_lookup_failed', 'workspace list failed: ' + result.stderr.strip()[:300])
+        try:
+            rows = json.loads(result.stdout)
+        except ValueError:
+            raise ToolError('workspace_lookup_failed', 'workspace list: response is not JSON') from None
+        rows = rows.get('workspaces') if isinstance(rows, dict) else rows
+        if not isinstance(rows, list):
+            raise ToolError('workspace_lookup_failed', 'workspace list: unexpected response shape')
+        rows = [w for w in rows if isinstance(w, dict)]
+        if not client.any_workspace:
+            wanted = {w.lower() for w in client.workspaces}
+            rows = [w for w in rows if wanted & {str(w.get('id', '')).lower(), str(w.get('slug', '')).lower()}]
+        with self._meta:
+            self._workspaces[name] = (self._clock(), rows)
+        return rows
+
+
+def _match(known, key):
+    for w in known:
+        if key in (str(w.get('id', '')).lower(), str(w.get('slug', '')).lower(), str(w.get('name', '')).lower()):
+            return w
+    return None
+
+
+def _slugs(known):
+    return [str(w.get('slug') or w.get('id')) for w in known]
