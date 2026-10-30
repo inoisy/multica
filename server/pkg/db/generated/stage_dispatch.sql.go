@@ -13,14 +13,20 @@ import (
 
 const listStageDispatchParents = `-- name: ListStageDispatchParents :many
 SELECT id FROM issue
-WHERE stage_squad_id IS NOT NULL
+WHERE stage_squad_id IS NOT NULL AND id > $1::uuid
 ORDER BY id
-LIMIT 500
+LIMIT $2::int
 `
 
-// Epics whose stages the server dispatches, for the periodic sweep.
-func (q *Queries) ListStageDispatchParents(ctx context.Context) ([]pgtype.UUID, error) {
-	rows, err := q.db.Query(ctx, listStageDispatchParents)
+type ListStageDispatchParentsParams struct {
+	After    pgtype.UUID `json:"after"`
+	PageSize int32       `json:"page_size"`
+}
+
+// One page of epics whose stages the server dispatches, for the periodic
+// sweep. The caller pages with the last id it saw.
+func (q *Queries) ListStageDispatchParents(ctx context.Context, arg ListStageDispatchParentsParams) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, listStageDispatchParents, arg.After, arg.PageSize)
 	if err != nil {
 		return nil, err
 	}
