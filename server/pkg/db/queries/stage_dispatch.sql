@@ -5,11 +5,12 @@ WHERE id = $1 AND workspace_id = $2
 RETURNING *;
 
 -- name: ListStageDispatchParents :many
--- Epics whose stages the server dispatches, for the periodic sweep.
+-- One page of epics whose stages the server dispatches, for the periodic
+-- sweep. The caller pages with the last id it saw.
 SELECT id FROM issue
-WHERE stage_squad_id IS NOT NULL
+WHERE stage_squad_id IS NOT NULL AND id > sqlc.arg('after')::uuid
 ORDER BY id
-LIMIT 500;
+LIMIT sqlc.arg('page_size')::int;
 
 -- name: ListWorkspaceStageDispatch :many
 -- Epics of a workspace whose stages the server dispatches, oldest first.
