@@ -18,6 +18,10 @@ services:
       MULTICA_MCP_RUN_DIR: /run/multica-cli
       # Per-person keys: mount an owner-only (0600) JSON file and point MULTICA_MCP_CLIENTS at it.
       # MULTICA_MCP_CLIENTS: /run/secrets/multica-mcp-clients.json
+      # OAuth sign-in: mount the owner-only Fernet key file, set the public URL of the web app that routes /mcp, and
+      # add its host to MULTICA_MCP_ALLOWED_HOSTS. oauth.sqlite is kept in /state next to the audit log.
+      # MULTICA_MCP_OAUTH_KEY_FILE: /run/secrets/multica-mcp-oauth.key
+      # MULTICA_MCP_PUBLIC_URL: https://multica.example.com
     read_only: true
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]

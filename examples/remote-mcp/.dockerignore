@@ -1,3 +1,4 @@
 *
+!requirements-oauth.txt
 !multica_mcp/
 !multica_mcp/*.py

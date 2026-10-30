@@ -16,6 +16,8 @@ RUN groupadd --gid 10001 mcp \
     && install -d -o mcp -g mcp -m 0700 /state
 COPY --from=multica-cli /app/multica /usr/local/bin/multica
 WORKDIR /app
+COPY requirements-oauth.txt requirements-oauth.txt
+RUN pip install --no-cache-dir --disable-pip-version-check -r requirements-oauth.txt
 COPY multica_mcp/ multica_mcp/
 USER 10001:10001
 EXPOSE 8101

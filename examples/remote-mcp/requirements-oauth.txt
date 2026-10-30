@@ -1,0 +1,2 @@
+# Only for OAuth sign-in (MULTICA_MCP_OAUTH_KEY_FILE): encrypts the PATs the server stores. Keys need nothing else.
+cryptography==50.0.2
