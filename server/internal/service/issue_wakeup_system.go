@@ -12,7 +12,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/multica-ai/multica/server/internal/events"
-	"github.com/multica-ai/multica/server/internal/featureflags"
 	inboxwriter "github.com/multica-ai/multica/server/internal/inbox"
 	"github.com/multica-ai/multica/server/internal/issuestatus"
 	"github.com/multica-ai/multica/server/internal/util"
@@ -554,10 +553,10 @@ func (s *IssueWakeupService) dispatchSystem(ctx context.Context, prev db.IssueWa
 	if current.Type != "none" {
 		facts["target_type"], facts["target_id"] = current.Type, util.UUIDToString(current.ID)
 	}
-	// A closed stage of a parent whose stages the server dispatches is already
-	// answered: the next stage went to the squad. The end of all work and a
-	// stage that closed with cancelled work still reach the assignee.
-	if strings.HasPrefix(state, "stage:") && !stageCancelled(observed) && s.stageDispatchOn(ctx, q, issue.ID) {
+	// A closed stage whose next stage the server just started is already
+	// answered. A pass that started nothing, the end of all work and a stage
+	// that closed with cancelled work still reach the assignee.
+	if strings.HasPrefix(state, "stage:") && !stageCancelled(observed) && stageDispatchStarted(ctx, issue.ID) {
 		facts["outcome"] = "stage_dispatch"
 		if err = q.ConsumeWakeupReceipts(ctx, db.ConsumeWakeupReceiptsParams{Ids: ids}); err != nil {
 			return err
@@ -834,12 +833,22 @@ func (s *IssueWakeupService) SetChildDoneDefault(ctx context.Context, workspaceI
 	return int64(len(changed)), tx.Commit(ctx)
 }
 
-// stageDispatchOn reports whether the server dispatches this parent's stages.
-// A failed read counts as off, so the wake still goes out.
-func (s *IssueWakeupService) stageDispatchOn(ctx context.Context, q *db.Queries, issueID pgtype.UUID) bool {
-	if s.Tasks == nil || !featureflags.StageDispatchV1Enabled(ctx, s.Tasks.FeatureFlags) {
-		return false
+type stageDispatchStartedKey struct{}
+
+// WithStageDispatchStarted marks the parents whose stage dispatch pass just
+// started a run, so the child_done wake that pass answers is not sent too.
+func WithStageDispatchStarted(ctx context.Context, parentIDs ...pgtype.UUID) context.Context {
+	if len(parentIDs) == 0 {
+		return ctx
 	}
-	_, err := q.GetIssueStageDispatch(ctx, issueID)
-	return err == nil
+	started := map[pgtype.UUID]bool{}
+	for _, id := range parentIDs {
+		started[id] = true
+	}
+	return context.WithValue(ctx, stageDispatchStartedKey{}, started)
+}
+
+func stageDispatchStarted(ctx context.Context, parentID pgtype.UUID) bool {
+	started, _ := ctx.Value(stageDispatchStartedKey{}).(map[pgtype.UUID]bool)
+	return started[parentID]
 }

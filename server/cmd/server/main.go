@@ -842,7 +842,7 @@ func main() {
 	if err := schedulerMgr.Register(scheduler.ChildEventSweepJob(&service.IssueWakeupService{Tasks: taskSvc})); err != nil {
 		slog.Error("scheduler: register child-done sweep", "error", err)
 	}
-	if err := schedulerMgr.Register(scheduler.StageDispatchJob(&service.StageDispatchService{Issues: h.IssueService, Flags: h.FeatureFlags})); err != nil {
+	if err := schedulerMgr.Register(scheduler.StageDispatchJob(h.StageDispatchService())); err != nil {
 		slog.Error("scheduler: register stage dispatch", "error", err)
 	}
 	if err := schedulerMgr.Register(scheduler.AutopilotScheduleDispatchJob(pool, queries, autopilotSvc)); err != nil {

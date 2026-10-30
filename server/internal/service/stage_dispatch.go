@@ -5,7 +5,6 @@ import (
 	"errors"
 	"log/slog"
 	"slices"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -21,14 +20,24 @@ var ErrStageDispatchInvalid = errors.New("stage dispatch: invalid request")
 
 // StageDispatchService assigns a parent issue's stages to a squad on the
 // server (#7345): the unassigned sub-issues of the first open stage go to the
-// squad once every earlier stage is closed. Assignment starts the squad's
-// leader exactly as a person assigning would. A stage that closed with
-// cancelled work halts dispatch: the next stage would build on work that was
-// never done, so the parent's assignee is woken to decide instead.
+// squad once every earlier stage is closed, and sub-issues someone assigned
+// ahead of time leave backlog. Each write goes through Start, which is the
+// update path a person's edit takes, so it starts the assignee's run, appears
+// on the timeline and reaches notifications and workflow handoffs the same
+// way. A stage that closed with cancelled work halts dispatch: the next stage
+// would build on work that was never done, so the parent's assignee is woken
+// to decide instead.
 type StageDispatchService struct {
 	Issues *IssueService
 	Flags  *featureflag.Service
+	Start  StageStarter
 }
+
+// StageStarter opens one sub-issue of the open stage on the revision it was
+// read at: an unassigned one goes to the dispatch squad, and one in backlog
+// moves to todo. It reports whether a run started. A sub-issue that changed
+// meanwhile is left alone and reports false without an error.
+type StageStarter func(ctx context.Context, issue db.Issue, cfg db.IssueStageDispatch) (started bool, err error)
 
 // Enabled reports whether stage dispatch runs at all (stage_dispatch_v1).
 func (s *StageDispatchService) Enabled(ctx context.Context) bool {
@@ -41,7 +50,7 @@ func (s *StageDispatchService) Enabled(ctx context.Context) bool {
 func (s *StageDispatchService) Set(ctx context.Context, parent db.Issue, squadID, by pgtype.UUID) (*db.IssueStageDispatch, error) {
 	q := s.Issues.Queries
 	if !squadID.Valid {
-		return nil, q.DeleteIssueStageDispatch(ctx, parent.ID)
+		return nil, q.DeleteIssueStageDispatch(ctx, db.DeleteIssueStageDispatchParams{IssueID: parent.ID, WorkspaceID: parent.WorkspaceID})
 	}
 	squad, err := q.GetSquadInWorkspace(ctx, db.GetSquadInWorkspaceParams{ID: squadID, WorkspaceID: parent.WorkspaceID})
 	if errors.Is(err, pgx.ErrNoRows) || (err == nil && squad.ArchivedAt.Valid) {
@@ -69,55 +78,98 @@ type stagedChild struct {
 	cancelled bool
 }
 
-// Dispatch assigns the open stage's unassigned sub-issues of one parent and
-// returns what it assigned. A sub-issue someone assigned meanwhile is left
-// alone: the write only lands on the revision this pass read.
-func (s *StageDispatchService) Dispatch(ctx context.Context, parentID pgtype.UUID) ([]db.Issue, error) {
+// Dispatch opens the open stage of one parent and returns how many runs it
+// started. In that stage an unassigned sub-issue goes to the squad, and a
+// sub-issue assigned ahead of time leaves backlog so its run starts now rather
+// than never; one that is already under way is left alone. A parent that is
+// gone or closed drops its row.
+func (s *StageDispatchService) Dispatch(ctx context.Context, parentID pgtype.UUID) (int, error) {
 	if !s.Enabled(ctx) {
-		return nil, nil
+		return 0, nil
+	}
+	if s.Start == nil {
+		return 0, errors.New("stage dispatch: no starter configured")
 	}
 	q := s.Issues.Queries
-	cfg, err := q.GetIssueStageDispatch(ctx, parentID)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
 	parent, err := q.GetIssue(ctx, parentID)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, nil
+		return 0, s.drop(ctx, parentID, pgtype.UUID{})
 	}
 	if err != nil {
-		return nil, err
+		return 0, err
+	}
+	cfg, err := q.GetIssueStageDispatch(ctx, db.GetIssueStageDispatchParams{IssueID: parentID, WorkspaceID: parent.WorkspaceID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
 	}
 	if category, cerr := issuestatus.CategoryWithError(ctx, q, parent.WorkspaceID, parent.Status); cerr != nil {
-		return nil, cerr
+		return 0, cerr
 	} else if category == "done" || category == "closed" {
-		return nil, nil
+		return 0, s.drop(ctx, parentID, parent.WorkspaceID)
 	}
 	children, err := s.loadStagedChildren(ctx, parent)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 	open := openStage(children)
 	if open == nil {
-		return nil, nil
+		return 0, nil
 	}
-	var assigned []db.Issue
+	squadUsable, err := s.squadUsable(ctx, cfg)
+	if err != nil {
+		return 0, err
+	}
+	started := 0
 	for _, ch := range children {
-		if !ch.issue.Stage.Valid || ch.issue.Stage.Int32 != *open || ch.closed || ch.issue.AssigneeID.Valid || ch.issue.TriageState.Valid {
+		if !ch.issue.Stage.Valid || ch.issue.Stage.Int32 != *open || ch.closed || ch.issue.TriageState.Valid {
 			continue
 		}
-		issue, ok, err := s.assign(ctx, ch.issue, cfg)
-		if err != nil {
-			return assigned, err
+		if ch.issue.AssigneeID.Valid && issuestatus.Effective(ctx, q, ch.issue.WorkspaceID, ch.issue.Status) != "backlog" {
+			continue
 		}
-		if ok {
-			assigned = append(assigned, issue)
+		if !ch.issue.AssigneeID.Valid && !squadUsable {
+			continue
+		}
+		ran, err := s.Start(ctx, ch.issue, cfg)
+		if err != nil {
+			return started, err
+		}
+		if ran {
+			started++
 		}
 	}
-	return assigned, nil
+	return started, nil
+}
+
+// squadUsable reports whether the dispatch squad can still take work: the
+// squad may have been archived after dispatch was turned on.
+func (s *StageDispatchService) squadUsable(ctx context.Context, cfg db.IssueStageDispatch) (bool, error) {
+	squad, err := s.Issues.Queries.GetSquadInWorkspace(ctx, db.GetSquadInWorkspaceParams{ID: cfg.SquadID, WorkspaceID: cfg.WorkspaceID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if squad.ArchivedAt.Valid {
+		slog.Warn("stage dispatch: squad is archived; unassigned sub-issues wait",
+			"parent_id", util.UUIDToString(cfg.IssueID), "squad_id", util.UUIDToString(cfg.SquadID))
+		return false, nil
+	}
+	return true, nil
+}
+
+// drop removes the row of a parent that is closed or gone. The workspace is
+// unknown for a parent that no longer exists, so its row is found by issue id.
+func (s *StageDispatchService) drop(ctx context.Context, parentID, workspaceID pgtype.UUID) error {
+	q := s.Issues.Queries
+	if !workspaceID.Valid {
+		return q.DeleteStageDispatchOfMissingIssue(ctx, parentID)
+	}
+	return q.DeleteIssueStageDispatch(ctx, db.DeleteIssueStageDispatchParams{IssueID: parentID, WorkspaceID: workspaceID})
 }
 
 func (s *StageDispatchService) loadStagedChildren(ctx context.Context, parent db.Issue) ([]stagedChild, error) {
@@ -185,53 +237,32 @@ func stageCancelled(observed map[string]any) bool {
 	return false
 }
 
-// assign gives one sub-issue to the parent's squad on the revision it was
-// read at; a backlog issue moves to todo so the assignment starts work.
-func (s *StageDispatchService) assign(ctx context.Context, issue db.Issue, cfg db.IssueStageDispatch) (db.Issue, bool, error) {
-	q := s.Issues.Queries
-	status := pgtype.Text{}
-	if issuestatus.Effective(ctx, q, issue.WorkspaceID, issue.Status) == "backlog" {
-		status = pgtype.Text{String: "todo", Valid: true}
-	}
-	updated, err := q.UpdateIssue(ctx, db.UpdateIssueParams{
-		ID: issue.ID, ExpectedRevision: pgtype.Int8{Int64: issue.Revision, Valid: true},
-		Title: pgtype.Text{String: issue.Title, Valid: true}, Description: issue.Description,
-		Status: status, Priority: pgtype.Text{String: issue.Priority, Valid: true},
-		AssigneeType: pgtype.Text{String: "squad", Valid: true}, AssigneeID: cfg.SquadID,
-		StartDate: issue.StartDate, DueDate: issue.DueDate, ParentIssueID: issue.ParentIssueID,
-		ProjectID: issue.ProjectID, Stage: issue.Stage, DuplicateOfIssueID: issue.DuplicateOfIssueID,
-	})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return issue, false, nil // changed since this pass read it
-	}
-	if err != nil {
-		return issue, false, err
-	}
-	if s.Issues.TaskService != nil && s.Issues.TaskService.Bus != nil {
-		s.Issues.TaskService.broadcastIssueUpdated(ctx, updated, issue.Status)
-	}
-	s.Issues.maybeEnqueueOnAssign(ctx, updated, "member", util.UUIDToString(cfg.DispatchBy), time.Time{})
-	slog.Info("stage dispatch: sub-issue assigned to the squad",
-		"parent_id", util.UUIDToString(cfg.IssueID), "issue_id", util.UUIDToString(updated.ID), "stage", updated.Stage.Int32)
-	return updated, true, nil
-}
+// sweepPageSize bounds one page of parents read by the sweep.
+const sweepPageSize = 500
 
-// Sweep dispatches every parent with stage dispatch on. It catches what the
-// pass right after a sub-issue change missed: a failed pass, and changes that
-// record no sub-issue event.
+// Sweep dispatches every parent with stage dispatch on, page by page so no
+// parent waits behind a full page of others. It catches what the pass right
+// after a sub-issue change missed: a failed pass, and changes that record no
+// sub-issue event.
 func (s *StageDispatchService) Sweep(ctx context.Context) error {
 	if !s.Enabled(ctx) {
 		return nil
 	}
-	ids, err := s.Issues.Queries.ListStageDispatchParents(ctx)
-	if err != nil {
-		return err
-	}
 	var errs []error
-	for _, id := range ids {
-		if _, err := s.Dispatch(ctx, id); err != nil {
-			errs = append(errs, err)
+	after := pgtype.UUID{Valid: true}
+	for {
+		ids, err := s.Issues.Queries.ListStageDispatchParents(ctx, db.ListStageDispatchParentsParams{After: after, PageSize: sweepPageSize})
+		if err != nil {
+			return errors.Join(append(errs, err)...)
 		}
+		for _, id := range ids {
+			if _, err := s.Dispatch(ctx, id); err != nil {
+				errs = append(errs, err)
+			}
+		}
+		if len(ids) < sweepPageSize {
+			return errors.Join(errs...)
+		}
+		after = ids[len(ids)-1]
 	}
-	return errors.Join(errs...)
 }

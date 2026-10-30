@@ -13,21 +13,74 @@ import (
 
 const deleteIssueStageDispatch = `-- name: DeleteIssueStageDispatch :exec
 DELETE FROM issue_stage_dispatch
-WHERE issue_id = $1
+WHERE issue_id = $1 AND workspace_id = $2
 `
 
-func (q *Queries) DeleteIssueStageDispatch(ctx context.Context, issueID pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, deleteIssueStageDispatch, issueID)
+type DeleteIssueStageDispatchParams struct {
+	IssueID     pgtype.UUID `json:"issue_id"`
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+}
+
+func (q *Queries) DeleteIssueStageDispatch(ctx context.Context, arg DeleteIssueStageDispatchParams) error {
+	_, err := q.db.Exec(ctx, deleteIssueStageDispatch, arg.IssueID, arg.WorkspaceID)
+	return err
+}
+
+const deleteIssueStageDispatchesByMember = `-- name: DeleteIssueStageDispatchesByMember :exec
+DELETE FROM issue_stage_dispatch
+WHERE workspace_id = $1 AND dispatch_by = $2
+`
+
+type DeleteIssueStageDispatchesByMemberParams struct {
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+	DispatchBy  pgtype.UUID `json:"dispatch_by"`
+}
+
+func (q *Queries) DeleteIssueStageDispatchesByMember(ctx context.Context, arg DeleteIssueStageDispatchesByMemberParams) error {
+	_, err := q.db.Exec(ctx, deleteIssueStageDispatchesByMember, arg.WorkspaceID, arg.DispatchBy)
+	return err
+}
+
+const deleteIssueStageDispatchesBySquad = `-- name: DeleteIssueStageDispatchesBySquad :exec
+DELETE FROM issue_stage_dispatch
+WHERE workspace_id = $1 AND squad_id = $2
+`
+
+type DeleteIssueStageDispatchesBySquadParams struct {
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+	SquadID     pgtype.UUID `json:"squad_id"`
+}
+
+func (q *Queries) DeleteIssueStageDispatchesBySquad(ctx context.Context, arg DeleteIssueStageDispatchesBySquadParams) error {
+	_, err := q.db.Exec(ctx, deleteIssueStageDispatchesBySquad, arg.WorkspaceID, arg.SquadID)
+	return err
+}
+
+const deleteStageDispatchOfMissingIssue = `-- name: DeleteStageDispatchOfMissingIssue :exec
+DELETE FROM issue_stage_dispatch d
+WHERE d.issue_id = $1
+  AND NOT EXISTS (SELECT 1 FROM issue i WHERE i.id = d.issue_id)
+`
+
+// A parent deleted outside the handler paths leaves its row behind; the sweep
+// drops it once the issue is gone.
+func (q *Queries) DeleteStageDispatchOfMissingIssue(ctx context.Context, issueID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteStageDispatchOfMissingIssue, issueID)
 	return err
 }
 
 const getIssueStageDispatch = `-- name: GetIssueStageDispatch :one
 SELECT issue_id, workspace_id, squad_id, dispatch_by, created_at, updated_at FROM issue_stage_dispatch
-WHERE issue_id = $1
+WHERE issue_id = $1 AND workspace_id = $2
 `
 
-func (q *Queries) GetIssueStageDispatch(ctx context.Context, issueID pgtype.UUID) (IssueStageDispatch, error) {
-	row := q.db.QueryRow(ctx, getIssueStageDispatch, issueID)
+type GetIssueStageDispatchParams struct {
+	IssueID     pgtype.UUID `json:"issue_id"`
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+}
+
+func (q *Queries) GetIssueStageDispatch(ctx context.Context, arg GetIssueStageDispatchParams) (IssueStageDispatch, error) {
+	row := q.db.QueryRow(ctx, getIssueStageDispatch, arg.IssueID, arg.WorkspaceID)
 	var i IssueStageDispatch
 	err := row.Scan(
 		&i.IssueID,
@@ -42,13 +95,20 @@ func (q *Queries) GetIssueStageDispatch(ctx context.Context, issueID pgtype.UUID
 
 const listStageDispatchParents = `-- name: ListStageDispatchParents :many
 SELECT issue_id FROM issue_stage_dispatch
+WHERE issue_id > $1::uuid
 ORDER BY issue_id
-LIMIT 500
+LIMIT $2::int
 `
 
-// Parents with stage dispatch on, for the periodic sweep.
-func (q *Queries) ListStageDispatchParents(ctx context.Context) ([]pgtype.UUID, error) {
-	rows, err := q.db.Query(ctx, listStageDispatchParents)
+type ListStageDispatchParentsParams struct {
+	After    pgtype.UUID `json:"after"`
+	PageSize int32       `json:"page_size"`
+}
+
+// One page of parents with stage dispatch on, for the periodic sweep. The
+// caller pages with the last issue_id it saw.
+func (q *Queries) ListStageDispatchParents(ctx context.Context, arg ListStageDispatchParentsParams) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, listStageDispatchParents, arg.After, arg.PageSize)
 	if err != nil {
 		return nil, err
 	}
