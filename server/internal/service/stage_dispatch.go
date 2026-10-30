@@ -170,9 +170,10 @@ func (s *StageDispatchService) startDue(ctx context.Context, issue db.Issue, squ
 
 // Held reports whether the issue is a sub-issue of a later stage than the
 // open one of a parent the server dispatches. Assigning it or moving it to
-// todo then starts no run: the stage opening does. A stage dispatch that
-// cannot be read holds too, since the pass that opens the stage starts the
-// run anyway.
+// todo then starts no run: the stage opening does. With no open stage (the
+// last one closed with cancelled work, say) dispatch starts nothing more, so
+// a person's assignment runs. A stage dispatch that cannot be read holds,
+// since the next pass starts the run anyway.
 func (s *StageDispatchService) Held(ctx context.Context, issue db.Issue) bool {
 	if !issue.ParentIssueID.Valid || !issue.Stage.Valid || !s.Enabled(ctx) {
 		return false
@@ -194,7 +195,7 @@ func (s *StageDispatchService) Held(ctx context.Context, issue db.Issue) bool {
 		return true
 	}
 	open := openStage(children)
-	return open == nil || issue.Stage.Int32 > *open
+	return open != nil && issue.Stage.Int32 > *open
 }
 
 // stageHeld is Held for the issue write paths, which have no dispatch service
