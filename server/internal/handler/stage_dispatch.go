@@ -46,8 +46,8 @@ func (h *Handler) GetIssueStageDispatch(w http.ResponseWriter, r *http.Request) 
 
 // SetIssueStageDispatch handles PUT /api/issues/{id}/stage-dispatch with
 // {"squad_id": "<id>"} to have the server assign the epic's stages to that
-// squad, or {"squad_id": null} to stop. Only a person turns it on: the runs
-// it starts answer to them.
+// squad, or {"squad_id": null} to stop. Only a person changes it: the runs
+// it starts answer to them, and an agent's run must not undo their choice.
 func (h *Handler) SetIssueStageDispatch(w http.ResponseWriter, r *http.Request) {
 	issue, ok := h.loadIssueForUser(w, r, chi.URLParam(r, "id"))
 	if !ok {
@@ -63,12 +63,12 @@ func (h *Handler) SetIssueStageDispatch(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	actorType, actorID := h.resolveActor(r, requestUserID(r), uuidToString(issue.WorkspaceID))
+	if actorType != "member" {
+		writeError(w, http.StatusForbidden, "only a person can change stage dispatch")
+		return
+	}
 	var squadID, by pgtype.UUID
 	if req.SquadID != nil {
-		if actorType != "member" {
-			writeError(w, http.StatusForbidden, "only a person can turn stage dispatch on")
-			return
-		}
 		id, ok := parseUUIDOrBadRequest(w, *req.SquadID, "squad_id")
 		if !ok {
 			return

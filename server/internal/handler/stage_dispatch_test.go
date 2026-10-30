@@ -175,6 +175,16 @@ func TestStageDispatchLeavesAssignedWorkAndNeedsAPerson(t *testing.T) {
 	agentReq.Header.Set("X-Actor-Source", "task_token")
 	testutil.Call(t, testHandler.SetIssueStageDispatch, agentReq).Want(http.StatusForbidden)
 
+	// An agent's run cannot switch a person's dispatch off either.
+	offReq := withURLParam(newRequest(http.MethodPut, "/", map[string]any{"squad_id": nil}), "id", r.epic)
+	offReq.Header = agentReq.Header.Clone()
+	testutil.Call(t, testHandler.SetIssueStageDispatch, offReq).Want(http.StatusForbidden)
+	var after StageDispatchResponse
+	testutil.Call(t, testHandler.GetIssueStageDispatch, withURLParam(newRequest(http.MethodGet, "/", nil), "id", r.epic)).Want(http.StatusOK).JSON(&after)
+	if after.SquadID == nil {
+		t.Fatal("an agent switched dispatch off")
+	}
+
 	var bad map[string]any
 	r.set(map[string]any{"squad_id": "00000000-0000-0000-0000-000000000000"}).Want(http.StatusBadRequest).JSON(&bad)
 }
@@ -410,5 +420,26 @@ func TestStageDispatchSkipsAnArchivedSquad(t *testing.T) {
 	updateChildStatus(t, r.kids["s1"], "done")
 	if typ, _, _ := r.assignee("s2"); typ != "" {
 		t.Fatalf("stage 2 went to an archived squad (%s)", typ)
+	}
+}
+
+// Dispatch halted by cancelled work leaves the way open for a person: a
+// sub-issue of the next stage that they assign or move to todo runs at once,
+// since no pass will start it.
+func TestStageDispatchHaltedByCancellationDoesNotHoldManualWork(t *testing.T) {
+	exec := dbfx.Agent(t, "manual executor", testRuntimeID)
+	r := newStageRigWith(t, map[string]testutil.Cols{
+		"s1": {"stage": 1},
+		"s2": {"stage": 2, "status": "todo"},
+	})
+	r.set(map[string]any{"squad_id": r.squad}).Want(http.StatusOK)
+	updateChildStatus(t, r.kids["s1"], "cancelled")
+	if r.onSquad("s2") {
+		t.Fatal("stage 2 was dispatched after stage 1 was cancelled")
+	}
+
+	r.update("s2", map[string]any{"assignee_type": "agent", "assignee_id": exec})
+	if n := r.runs(exec, r.kids["s2"]); n != 1 {
+		t.Fatalf("manual assignment after a halt started %d runs, want 1", n)
 	}
 }

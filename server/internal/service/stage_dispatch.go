@@ -195,9 +195,10 @@ func (s *StageDispatchService) squadUsable(ctx context.Context, parent db.Issue)
 
 // Held reports whether the issue is a sub-issue of a later stage than the
 // open one of an epic the server dispatches. Assigning it or moving it to
-// todo then starts no run: the stage opening does. A stage dispatch that
-// cannot be read holds too, since the pass that opens the stage starts the
-// run anyway.
+// todo then starts no run: the stage opening does. With no open stage (the
+// last one closed with cancelled work, say) dispatch starts nothing more, so
+// a person's assignment runs. A stage dispatch that cannot be read holds,
+// since the next pass starts the run anyway.
 func (s *StageDispatchService) Held(ctx context.Context, issue db.Issue) bool {
 	if !issue.ParentIssueID.Valid || !issue.Stage.Valid {
 		return false
@@ -213,7 +214,7 @@ func (s *StageDispatchService) Held(ctx context.Context, issue db.Issue) bool {
 		var children []stagedChild
 		if children, err = s.loadStagedChildren(ctx, parent); err == nil {
 			open := openStage(children)
-			return open == nil || issue.Stage.Int32 > *open
+			return open != nil && issue.Stage.Int32 > *open
 		}
 	}
 	slog.Warn("stage dispatch: reading the stages of an epic failed; the run waits for its stage",
