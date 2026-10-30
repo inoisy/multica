@@ -166,6 +166,14 @@ func TestStageDispatchLeavesAssignedWorkAndNeedsAMember(t *testing.T) {
 	agentReq.Header.Set("X-Actor-Source", "task_token")
 	testutil.Call(t, testHandler.SetIssueStageDispatch, agentReq).Want(http.StatusForbidden)
 
+	// An agent's run cannot switch a member's dispatch off either.
+	offReq := withURLParam(newRequest(http.MethodPut, "/", map[string]any{"squad_id": nil}), "id", r.parent)
+	offReq.Header = agentReq.Header.Clone()
+	testutil.Call(t, testHandler.SetIssueStageDispatch, offReq).Want(http.StatusForbidden)
+	if !r.hasDispatch() {
+		t.Fatal("an agent switched dispatch off")
+	}
+
 	r.set(map[string]any{"squad_id": "00000000-0000-0000-0000-000000000000"}).Want(http.StatusBadRequest)
 }
 
@@ -248,23 +256,60 @@ func TestStageDispatchStartsPreassignedBacklogOfALaterStage(t *testing.T) {
 	}
 }
 
-// A sub-issue assigned ahead of time and already in todo started when it was
-// assigned, so opening its stage has nothing to start: the closed stage still
-// wakes the parent's owner, who would otherwise never hear of it.
+func (r *stageRig) update(name string, body map[string]any) {
+	r.t.Helper()
+	testutil.Call(r.t, testHandler.UpdateIssue, withURLParam(newRequest(http.MethodPut, "/", body), "id", r.kids[name])).Want(http.StatusOK)
+}
+
+// Assigning a sub-issue of a later stage, or moving it out of backlog, starts
+// no run while an earlier stage is open: the stage opening does, and that run
+// answers the closed stage, so the parent's owner is not woken as well.
+func TestStageDispatchHoldsAssignedWorkUntilItsStageOpens(t *testing.T) {
+	exec := dbfx.Agent(t, "pre-assigned executor", testRuntimeID)
+	r := newStageRigWith(t, true, map[string]testutil.Cols{
+		"s1":       {"stage": 1},
+		"assigned": {"stage": 2, "status": "todo"},
+		"parked":   {"stage": 2, "status": "backlog", "assignee_type": "agent", "assignee_id": exec},
+	})
+	r.set(map[string]any{"squad_id": r.squad}).Want(http.StatusOK)
+
+	r.update("assigned", map[string]any{"assignee_type": "agent", "assignee_id": exec})
+	r.update("parked", map[string]any{"status": "todo"})
+	for _, name := range []string{"assigned", "parked"} {
+		if n := r.runs(exec, r.kids[name]); n != 0 {
+			t.Fatalf("%s started %d runs while stage 1 was open", name, n)
+		}
+	}
+
+	updateChildStatus(t, r.kids["s1"], "done")
+	for _, name := range []string{"assigned", "parked"} {
+		if typ, id, status := r.assignee(name); typ != "agent" || id != exec || status != "todo" {
+			t.Fatalf("%s is %s %s %s, want agent %s todo", name, typ, id, status, exec)
+		}
+		if n := r.runs(exec, r.kids[name]); n != 1 {
+			t.Fatalf("%s runs = %d after its stage opened, want 1", name, n)
+		}
+	}
+	if n := r.runs(r.owner, r.parent); n != 0 {
+		t.Fatalf("parent owner woken %d times though the stage was started", n)
+	}
+}
+
+// A sub-issue assigned ahead of time that already had its run has nothing to
+// start when its stage opens: the closed stage still wakes the parent's owner,
+// who would otherwise never hear of it.
 func TestStageDispatchWakesTheOwnerWhenItStartsNothing(t *testing.T) {
 	exec := dbfx.Agent(t, "pre-assigned executor", testRuntimeID)
 	r := newStageRigWith(t, true, map[string]testutil.Cols{
 		"s1":  {"stage": 1},
-		"pre": {"stage": 2, "status": "todo", "assignee_type": "agent", "assignee_id": exec},
+		"pre": {"stage": 2, "status": "in_progress", "assignee_type": "agent", "assignee_id": exec},
 	})
+	dbfx.Task(t, exec, testutil.Cols{"runtime_id": testRuntimeID, "issue_id": r.kids["pre"], "status": "completed"})
 	r.set(map[string]any{"squad_id": r.squad}).Want(http.StatusOK)
 
 	updateChildStatus(t, r.kids["s1"], "done")
-	if typ, id, status := r.assignee("pre"); typ != "agent" || id != exec || status != "todo" {
-		t.Fatalf("pre-assigned sub-issue changed: %s %s %s", typ, id, status)
-	}
-	if n := r.runs(exec, r.kids["pre"]); n != 0 {
-		t.Fatalf("dispatch started %d runs for work already under way", n)
+	if n := r.runs(exec, r.kids["pre"]); n != 1 {
+		t.Fatalf("dispatch started a run for work already under way (%d tasks)", n)
 	}
 	if n := r.runs(r.owner, r.parent); n != 1 {
 		t.Fatalf("parent owner runs = %d, want 1", n)

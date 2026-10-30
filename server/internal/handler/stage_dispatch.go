@@ -62,8 +62,8 @@ func (h *Handler) GetIssueStageDispatch(w http.ResponseWriter, r *http.Request) 
 
 // SetIssueStageDispatch handles PUT /api/issues/{id}/stage-dispatch with
 // {"squad_id": "<id>"} to have the server assign the parent's stages to that
-// squad, or {"squad_id": null} to stop. Only a member turns it on: the runs it
-// starts answer to them.
+// squad, or {"squad_id": null} to stop. Only a member changes it: the runs it
+// starts answer to them, and an agent's run must not undo their choice.
 func (h *Handler) SetIssueStageDispatch(w http.ResponseWriter, r *http.Request) {
 	svc := h.StageDispatchService()
 	if !svc.Enabled(r.Context()) {
@@ -84,12 +84,12 @@ func (h *Handler) SetIssueStageDispatch(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	actorType, actorID := h.resolveActor(r, requestUserID(r), uuidToString(issue.WorkspaceID))
+	if actorType != "member" {
+		writeError(w, http.StatusForbidden, "only a member can change stage dispatch")
+		return
+	}
 	var squadID, by pgtype.UUID
 	if req.SquadID != nil {
-		if actorType != "member" {
-			writeError(w, http.StatusForbidden, "only a member can turn stage dispatch on")
-			return
-		}
 		id, ok := parseUUIDOrBadRequest(w, *req.SquadID, "squad_id")
 		if !ok {
 			return
@@ -117,11 +117,11 @@ func (h *Handler) SetIssueStageDispatch(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, stageDispatchResponse(issue.ID, row))
 }
 
-// startStagedIssue is the stage dispatch write. It follows UpdateIssue for a
-// member (the one who turned dispatch on): the same workflow check, status
-// guard, issue:updated payload and run decision, so the assignment looks like
-// a person's. It does not process child events: the caller's next pass and the
-// scheduler sweep do.
+// startStagedIssue opens one sub-issue of the open stage. A write follows
+// UpdateIssue for a member (the one who turned dispatch on): the same workflow
+// check, status guard, issue:updated payload and run decision, so the
+// assignment looks like a person's. It does not process child events: the
+// caller's next pass and the scheduler sweep do.
 func (h *Handler) startStagedIssue(ctx context.Context, prev db.Issue, cfg db.IssueStageDispatch) (bool, error) {
 	actorType, actorID := "member", uuidToString(cfg.DispatchBy)
 	ctx = context.WithValue(ctx, wakeupActorKey{}, wakeupActor{kind: actorType, id: actorID})
@@ -136,6 +136,15 @@ func (h *Handler) startStagedIssue(ctx context.Context, prev db.Issue, cfg db.Is
 		params.AssigneeType, params.AssigneeID = pgtype.Text{String: "squad", Valid: true}, cfg.SquadID
 	}
 	leavesBacklog := issuestatus.Effective(ctx, h.Queries, prev.WorkspaceID, prev.Status) == "backlog"
+	if !assigns && !leavesBacklog {
+		// Assigned ahead of time and already in todo: nothing to write, only
+		// the run held back until this stage opened.
+		trigger, willRun := h.IssueService.WillEnqueueRun(ctx, service.IssueTriggerInput{Issue: prev, AssigneeChanged: true}, service.IssueTriggerProbe{})
+		if willRun {
+			h.dispatchIssueRun(ctx, prev, trigger, actorType, actorID, "")
+		}
+		return willRun, nil
+	}
 	if leavesBacklog {
 		params.Status = pgtype.Text{String: "todo", Valid: true}
 	}

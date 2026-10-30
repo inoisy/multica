@@ -34,8 +34,9 @@ type StageDispatchService struct {
 }
 
 // StageStarter opens one sub-issue of the open stage on the revision it was
-// read at: an unassigned one goes to the dispatch squad, and one in backlog
-// moves to todo. It reports whether a run started. A sub-issue that changed
+// read at: an unassigned one goes to the dispatch squad, one in backlog moves
+// to todo, and one already in todo gets its held run. It reports whether a run
+// started. A sub-issue that changed
 // meanwhile is left alone and reports false without an error.
 type StageStarter func(ctx context.Context, issue db.Issue, cfg db.IssueStageDispatch) (started bool, err error)
 
@@ -80,9 +81,9 @@ type stagedChild struct {
 
 // Dispatch opens the open stage of one parent and returns how many runs it
 // started. In that stage an unassigned sub-issue goes to the squad, and a
-// sub-issue assigned ahead of time leaves backlog so its run starts now rather
-// than never; one that is already under way is left alone. A parent that is
-// gone or closed drops its row.
+// sub-issue assigned ahead of time starts now: it leaves backlog, or in todo
+// gets the run held back until its stage opened. One that is under way or has
+// had a run is left alone. A parent that is gone or closed drops its row.
 func (s *StageDispatchService) Dispatch(ctx context.Context, parentID pgtype.UUID) (int, error) {
 	if !s.Enabled(ctx) {
 		return 0, nil
@@ -127,10 +128,11 @@ func (s *StageDispatchService) Dispatch(ctx context.Context, parentID pgtype.UUI
 		if !ch.issue.Stage.Valid || ch.issue.Stage.Int32 != *open || ch.closed || ch.issue.TriageState.Valid {
 			continue
 		}
-		if ch.issue.AssigneeID.Valid && issuestatus.Effective(ctx, q, ch.issue.WorkspaceID, ch.issue.Status) != "backlog" {
-			continue
+		due, err := s.startDue(ctx, ch.issue, squadUsable)
+		if err != nil {
+			return started, err
 		}
-		if !ch.issue.AssigneeID.Valid && !squadUsable {
+		if !due {
 			continue
 		}
 		ran, err := s.Start(ctx, ch.issue, cfg)
@@ -142,6 +144,66 @@ func (s *StageDispatchService) Dispatch(ctx context.Context, parentID pgtype.UUI
 		}
 	}
 	return started, nil
+}
+
+// startDue reports whether a sub-issue of the open stage still has to be
+// started: an unassigned one goes to the squad, and one assigned ahead of time
+// leaves backlog or, sitting in todo, gets the run that was held back until
+// its stage opened. Work that has had a run, or is under way, is left alone.
+func (s *StageDispatchService) startDue(ctx context.Context, issue db.Issue, squadUsable bool) (bool, error) {
+	q := s.Issues.Queries
+	if !issue.AssigneeID.Valid {
+		return squadUsable, nil
+	}
+	switch issuestatus.Effective(ctx, q, issue.WorkspaceID, issue.Status) {
+	case "backlog":
+		return true, nil
+	case "todo":
+		if issue.AssigneeType.String != "agent" && issue.AssigneeType.String != "squad" {
+			return false, nil
+		}
+		ran, err := q.HasTaskForIssue(ctx, issue.ID)
+		return !ran, err
+	}
+	return false, nil
+}
+
+// Held reports whether the issue is a sub-issue of a later stage than the
+// open one of a parent the server dispatches. Assigning it or moving it to
+// todo then starts no run: the stage opening does. A stage dispatch that
+// cannot be read holds too, since the pass that opens the stage starts the
+// run anyway.
+func (s *StageDispatchService) Held(ctx context.Context, issue db.Issue) bool {
+	if !issue.ParentIssueID.Valid || !issue.Stage.Valid || !s.Enabled(ctx) {
+		return false
+	}
+	q := s.Issues.Queries
+	_, err := q.GetIssueStageDispatch(ctx, db.GetIssueStageDispatchParams{IssueID: issue.ParentIssueID, WorkspaceID: issue.WorkspaceID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false
+	}
+	if err != nil {
+		slog.Warn("stage dispatch: reading the dispatch of a parent failed; the run waits for its stage",
+			"issue_id", util.UUIDToString(issue.ID), "error", err)
+		return true
+	}
+	children, err := s.loadStagedChildren(ctx, db.Issue{ID: issue.ParentIssueID, WorkspaceID: issue.WorkspaceID})
+	if err != nil {
+		slog.Warn("stage dispatch: reading the stages of a parent failed; the run waits for its stage",
+			"issue_id", util.UUIDToString(issue.ID), "error", err)
+		return true
+	}
+	open := openStage(children)
+	return open == nil || issue.Stage.Int32 > *open
+}
+
+// stageHeld is Held for the issue write paths, which have no dispatch service
+// of their own.
+func (s *IssueService) stageHeld(ctx context.Context, issue db.Issue) bool {
+	if s.TaskService == nil {
+		return false
+	}
+	return (&StageDispatchService{Issues: s, Flags: s.TaskService.FeatureFlags}).Held(ctx, issue)
 }
 
 // squadUsable reports whether the dispatch squad can still take work: the
