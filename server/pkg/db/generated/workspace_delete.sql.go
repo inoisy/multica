@@ -244,6 +244,9 @@ deleted_child_events AS (
 deleted_workflow_artifacts AS (
  DELETE FROM issue_workflow_artifact WHERE workspace_id=$1
 ),
+deleted_unread AS (
+ DELETE FROM issue_unread WHERE workspace_id=$1
+),
 deleted_issues AS (
     DELETE FROM issue WHERE issue.workspace_id = $1
 ),

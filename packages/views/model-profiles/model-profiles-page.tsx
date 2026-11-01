@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Layers, Pencil, Plus, Trash2 } from "@multica/ui/icons";
+import { Layers, Pencil, Trash2 } from "@multica/ui/icons";
 import { toast } from "sonner";
 import type { ModelProfile, ModelProfileChange, ModelProfileInput, ModelProfileKind } from "@multica/core/types";
 import { useWorkspaceId } from "@multica/core/hooks";
@@ -41,7 +41,7 @@ import {
 } from "@multica/ui/components/ui/select";
 import { cn } from "@multica/ui/lib/utils";
 import { useIsMobile } from "@multica/ui/hooks/use-mobile";
-import { CollectionPageHeader, CollectionPageHeaderAction } from "../layout/collection-page";
+import { CollectionCreateButton, CollectionPageHeader } from "../layout/collection-page";
 import { SectionTabs } from "../layout/section-tabs";
 import { PAGE_GUTTER } from "../layout/page-header";
 import { AppLink, useNavigation } from "../navigation";
@@ -309,12 +309,9 @@ export function ModelProfilesPage() {
         icon={Layers}
         title={t(($) => $.model_profiles.title)}
         tabs={<SectionTabs section="agents" current="modelProfiles" />}
-        description={t(($) => $.model_profiles.description)}
         actions={
           canManage ? (
-            <CollectionPageHeaderAction
-              icon={Plus}
-              variant="default"
+            <CollectionCreateButton
               label={t(($) => $.model_profiles.create)}
               onClick={() => open({ id: null, input: emptyInput(), fromAgent: "" })}
             />

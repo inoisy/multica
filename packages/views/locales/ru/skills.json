@@ -1,9 +1,7 @@
 {
   "page": {
     "title": "Навыки",
-    "learn_more": "Узнать больше →",
     "new_skill": "Новый навык",
-    "search_placeholder": "Поиск навыков…",
     "scopes": {
       "all": {
         "label": "Все",
@@ -76,8 +74,6 @@
     "added_toast": "Добавлено агенту {{name}}",
     "add_failed_toast": "Не удалось добавить навык",
     "delete": "Удалить",
-    "selected": "Выбрано: {{count}}",
-    "clear_selection": "Снять выделение",
     "delete_no_permission": "В выборке есть навыки, которые может удалить только их создатель или администратор",
     "delete_dialog_title_one": "Удалить {{count}} навык?",
     "delete_dialog_title_other": "Удалить {{count}} навыков?",
@@ -119,31 +115,16 @@
     "added_multi_toast_many": "Добавлено агентам: {{count}}"
   },
   "toolbar": {
-    "result_count_title": "Найдено навыков / всего навыков",
-    "filter_label": "Фильтр",
-    "filter_active_count_one": "{{count}} фильтр",
-    "filter_active_count_other": "Фильтров: {{count}}",
-    "clear_filters": "Сбросить фильтры",
     "section_usage": "Использование",
     "section_labels": "Метки",
     "filter_search_placeholder": "Фильтр...",
     "no_labels": "Пока нет меток",
     "no_results": "Ничего не найдено",
-    "display": "Отображение",
-    "sort_by": "Сортировать по",
-    "direction_asc": "По возрастанию",
-    "direction_desc": "По убыванию",
-    "section_columns": "Столбцы",
     "manage_labels": "Управлять метками...",
-    "manage_labels_title": "Метки навыков",
-    "filter_active_count_few": "Фильтров: {{count}}",
-    "filter_active_count_many": "Фильтров: {{count}}"
+    "manage_labels_title": "Метки навыков"
   },
   "detail": {
-    "all_skills": "Все навыки",
     "read_only": "Только для чтения",
-    "delete_aria": "Удалить навык",
-    "delete_tooltip": "Удалить навык",
     "supporting_data_warning": "Не удалось загрузить часть данных рабочего пространства. Атрибуция автора, названия сред выполнения или права на редактирование могут отображаться не полностью до следующего обновления.",
     "delete_file": "Удалить файл",
     "name_placeholder": "skill-name",
@@ -181,8 +162,6 @@
     "toast_deleted": "Навык удалён",
     "toast_delete_failed": "Не удалось удалить навык",
     "refresh": {
-      "button": "Обновить",
-      "tooltip": "Повторно загрузить этот навык из источника",
       "source_github": "GitHub",
       "source_skills_sh": "Skills.sh",
       "source_clawhub": "ClawHub",
@@ -226,40 +205,20 @@
     "header": {
       "files_one": "{{count}} файл",
       "files_other": "Файлов: {{count}}",
-      "used_by_one": "{{count}} агент",
-      "used_by_other": "Агентов: {{count}}",
-      "updated": "Обновлён {{when}}",
-      "updated_by": "Обновлён {{when}} — {{name}}",
       "files_few": "Файлов: {{count}}",
-      "files_many": "Файлов: {{count}}",
-      "used_by_few": "Агентов: {{count}}",
-      "used_by_many": "Агентов: {{count}}"
-    },
-    "tabs": {
-      "aria": "Разделы навыка",
-      "overview": "Обзор",
-      "files_one": "Файлы {{count}}",
-      "files_other": "Файлы {{count}}",
-      "files_few": "Файлы {{count}}",
-      "files_many": "Файлы {{count}}"
+      "files_many": "Файлов: {{count}}"
     },
     "overview": {
       "properties": "Свойства",
-      "properties_hint": "Эти поля синхронизированы с frontmatter файла SKILL.md.",
       "name": "Название",
       "description": "Описание",
       "description_hint": "Агенты читают это, чтобы решить, когда загружать навык.",
       "labels": "Метки",
-      "used_by_one": "Используется {{count}} агентом",
-      "used_by_other": "Используется агентами: {{count}}",
       "used_by_empty": "Пока не назначен ни одному агенту. Чтобы назначить, откройте вкладку «Навыки» у агента.",
       "permissions_owner": "Вы можете редактировать и удалять этот навык. Изменения вступят в силу при следующем запуске агента.",
       "permissions_locked_creator": "Редактировать этот навык может только создатель ({{name}}) или администратор рабочего пространства.",
       "permissions_locked": "Редактировать этот навык может только создатель или администратор рабочего пространства.",
-      "properties_help": "О свойствах навыка",
-      "character_count": "Символов: {{count}}",
-      "used_by_few": "Используется агентами: {{count}}",
-      "used_by_many": "Используется агентами: {{count}}"
+      "character_count": "Символов: {{count}}"
     },
     "files": {
       "list_aria": "Файлы навыка",
@@ -274,6 +233,21 @@
       "mode_raw": "Обычный текст",
       "supporting_few": "Дополнительные {{count}}",
       "supporting_many": "Дополнительные {{count}}"
+    },
+    "sections": {
+      "content": "Содержимое",
+      "files": "Файлы",
+      "edit": "Изменить",
+      "open": "Открыть",
+      "add": "Добавить"
+    },
+    "menu": {
+      "copy_link": "Копировать ссылку",
+      "link_copied": "Ссылка скопирована",
+      "delete": "Удалить навык"
+    },
+    "panel": {
+      "add_description": "Добавить описание"
     }
   },
   "create": {

@@ -41,7 +41,7 @@ export function SavedModelRow({
         {label || "—"}
       </p>
       <p className="text-caption text-muted-foreground">{t(($) => $.inspector.model_saved_hint)}</p>
-      <Button type="button" variant="link" className="h-auto p-0 text-caption" onClick={scrollToAgentModels}>
+      <Button type="button" variant="link" className="h-auto p-0 text-caption" onClick={() => scrollToAgentModels()}>
         {t(($) => $.inspector.model_open_models)}
       </Button>
     </div>

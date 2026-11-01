@@ -1,6 +1,5 @@
 {
   "page": {
-    "title": "Автопилот",
     "new_autopilot": "Новый автопилот",
     "start_blank": "Начать с нуля",
     "table": {
@@ -20,7 +19,6 @@
       "title": "Пока нет автопилотов",
       "hint": "Настройте повторяющиеся задачи для ваших AI-агентов. Выберите шаблон или начните с нуля."
     },
-    "scope_all": "Все",
     "no_matches": "Нет подходящих автоматизаций",
     "retry": "Повторить"
   },
@@ -87,10 +85,8 @@
     "run_blocked_quota_exceeded": "Не запущен — достигнут лимит запусков за этот период",
     "run_blocked_issue_limit_reached": "Не запущен — рабочее пространство достигло лимита задач",
     "run_blocked_generic": "Не запущен — запуск заблокирован",
-    "section_properties": "Свойства",
     "section_triggers": "Триггеры",
     "section_run_history": "История запусков",
-    "section_danger": "Опасная зона",
     "field_agent": "Агент",
     "field_created_by": "Создал",
     "field_output_mode": "Режим вывода",
@@ -100,6 +96,16 @@
     "field_prompt": "Промпт",
     "field_subscribers": "Подписчики",
     "field_subscribers_none": "Нет",
+    "no_prompt": "Промпта пока нет.",
+    "copy_link": "Копировать ссылку",
+    "link_copied": "Ссылка скопирована",
+    "link_copy_failed": "Не удалось скопировать ссылку",
+    "open_project": "Открыть проект",
+    "summary": {
+      "create_issue": "{{agent}} создаёт задачу при каждом запуске",
+      "run_only": "{{agent}} выполняет без создания задачи",
+      "with_trigger": "{{trigger}} · {{action}}"
+    },
     "add_trigger": "Добавить триггер",
     "no_triggers": "Триггеры не настроены. Добавьте расписание для автоматического запуска.",
     "no_runs": "Пока нет запусков. Нажмите «Запустить сейчас» для ручного запуска.",
@@ -441,31 +447,16 @@
     "search_placeholder": "Поиск часового пояса..."
   },
   "toolbar": {
-    "result_count_title": "Найденные автоматизации / все автоматизации",
-    "filter_label": "Фильтр",
-    "filter_active_count_one": "{{count}} фильтр",
-    "filter_active_count_other": "{{count}} фильтров",
-    "clear_filters": "Сбросить фильтры",
     "section_assignee": "Исполнитель",
     "section_mode": "Режим",
     "section_trigger": "Триггер",
-    "section_creator": "Создал",
-    "display": "Отображение",
-    "sort_by": "Сортировать по",
-    "direction_asc": "По возрастанию",
-    "direction_desc": "По убыванию",
-    "section_columns": "Столбцы",
-    "filter_active_count_few": "{{count}} фильтра",
-    "filter_active_count_many": "{{count}} фильтров"
+    "section_creator": "Создал"
   },
   "actions": {
     "row_menu": "Действия с автоматизацией",
     "pause": "Приостановить",
     "resume": "Возобновить",
     "delete": "Удалить",
-    "selected_one": "Выбрано: {{count}}",
-    "selected_other": "Выбрано: {{count}}",
-    "clear_selection": "Снять выбор",
     "delete_dialog": {
       "title": "Удалить автоматизацию?",
       "description_one": "Это навсегда удалит «{{name}}» и её историю запусков.",
@@ -476,13 +467,10 @@
       "deleting": "Удаление…",
       "description_few": "Это навсегда удалит {{count}} автоматизации и их историю запусков.",
       "description_many": "Это навсегда удалит {{count}} автоматизаций и их историю запусков."
-    },
-    "selected_few": "Выбрано: {{count}}",
-    "selected_many": "Выбрано: {{count}}"
+    }
   },
   "wakeups": {
     "title": "Будильники задач",
-    "scope": "Охват",
     "issue": "Задача",
     "trigger": "Триггер",
     "enabled": "Включён",
@@ -491,7 +479,6 @@
     "at": "Однократно",
     "recurring": "Повторяющийся",
     "all_agents": "Все агенты",
-    "search": "Поиск по задачам и агентам",
     "running": "Выполняется",
     "active_runs": "Активных запусков: {{count}}",
     "issue_closed": "Задача закрыта",
@@ -501,12 +488,7 @@
     "load_error": "Не удалось загрузить будильники",
     "loading": "Загрузка будильников…",
     "empty": "Правил будильников пока нет",
-    "selected": "Выбрано: {{count}}",
     "disable_selected": "Выключить выбранные",
-    "clear": "Снять выбор",
-    "results": "Страница {{page}} · результатов: {{count}}",
-    "previous": "Назад",
-    "next_page": "Вперёд",
     "confirm_title": "Выключить будильники ({{count}})?",
     "confirm_body": "Будущие срабатывания прекратятся. Запуски, которые ещё в очереди и не переданы агенту, будут отозваны. Уже отправленные запуски продолжатся; остановить их можно из журнала выполнения.",
     "cancel": "Отмена",

@@ -20,11 +20,14 @@ import {
   memberListOptions,
 } from "@multica/core/workspace/queries";
 import enCommon from "../../locales/en/common.json";
+import enLayout from "../../locales/en/layout.json";
 import enRuntimes from "../../locales/en/runtimes.json";
 import enAgents from "../../locales/en/agents.json";
 import { RuntimesPage } from "./runtimes-page";
 
-const TEST_RESOURCES = { en: { common: enCommon, runtimes: enRuntimes, agents: enAgents } };
+const TEST_RESOURCES = {
+  en: { common: enCommon, layout: enLayout, runtimes: enRuntimes, agents: enAgents },
+};
 const WS = "ws-test";
 
 const navigationState = vi.hoisted(() => ({ search: "", replace: vi.fn() }));
@@ -59,7 +62,12 @@ vi.mock("../../navigation", () => ({
     pathname: "/workspace-test/runtimes",
     searchParams: new URLSearchParams(navigationState.search),
   }),
-  useRowLink: () => () => ({}),
+  useIntentNavigate: () => vi.fn(),
+  useRowLink: () => () => ({
+    onClick: vi.fn(),
+    onAuxClick: vi.fn(),
+    onMouseEnter: vi.fn(),
+  }),
 }));
 
 const NOW = Date.now();
@@ -182,11 +190,11 @@ describe("RuntimesPage", () => {
   it("offers an environment through accounts only to an instance admin", async () => {
     const user = userEvent.setup();
     const first = renderPage();
-    await user.click(screen.getByRole("button", { name: /^Add/ }));
+    await user.click(screen.getByRole("button", { name: "Add runtime" }));
     expect(within(await screen.findByRole("menu")).queryByText("Add an environment through accounts")).not.toBeInTheDocument();
     first.unmount();
     renderPage({ instanceAdmin: true });
-    await user.click(screen.getByRole("button", { name: /^Add/ }));
+    await user.click(screen.getByRole("button", { name: "Add runtime" }));
     expect(within(await screen.findByRole("menu")).getByText("Add an environment through accounts")).toBeInTheDocument();
   });
 
@@ -222,14 +230,69 @@ describe("RuntimesPage", () => {
     expect(screen.getByTestId("machine-runs-24h-compact")).toBeEmptyDOMElement();
   });
 
-  it("keeps the header, toolbar and column headers up while the list loads", () => {
+  it("keeps the header and column headers up while the list loads", () => {
     const { container } = renderPage({ runtimes: null });
 
-    expect(screen.getByRole("heading", { name: "Runtimes" })).toBeInTheDocument();
-    expect(screen.getByRole("textbox")).toBeInTheDocument();
+    const header = screen.getByRole("banner");
+    expect(
+      within(header).getByRole("heading", { name: "All runtimes", level: 1 }),
+    ).toBeInTheDocument();
     expect(screen.getAllByRole("columnheader").length).toBeGreaterThan(0);
     expect(container.querySelector('[data-slot="skeleton"]')).not.toBeNull();
     expect(screen.queryByText("Machines")).not.toBeInTheDocument();
+  });
+
+  it("keeps the top bar to one row of icon tools with a single icon add action", () => {
+    renderPage();
+
+    const header = screen.getByRole("banner");
+    expect(screen.getAllByRole("banner")).toHaveLength(1);
+    expect(within(header).queryByText("Learn more →")).not.toBeInTheDocument();
+    expect(within(header).queryByText("2")).not.toBeInTheDocument();
+    const add = within(header).getByRole("button", { name: "Add runtime" });
+    expect(add).not.toHaveTextContent("Add runtime");
+    expect(screen.queryByRole("button", { name: /^Offline/ })).not.toBeInTheDocument();
+  });
+
+  it("lists every add option behind the + icon", async () => {
+    const user = userEvent.setup();
+    renderPage({ connection: qoder({ configured: true, enabled: true, status: "online" }) });
+
+    await user.click(screen.getByRole("button", { name: "Add runtime" }));
+    const menu = await screen.findByRole("menu");
+    expect(within(menu).getByText("Machines")).toBeInTheDocument();
+    expect(within(menu).getByText("This computer")).toBeInTheDocument();
+    expect(within(menu).getByText("Other machine or server")).toBeInTheDocument();
+    expect(within(menu).getByText("Cloud services")).toBeInTheDocument();
+    expect(within(menu).getByText("Qoder Cloud Agents")).toBeInTheDocument();
+    expect(within(menu).getByText("Cursor Cloud Agents")).toBeInTheDocument();
+    expect(within(menu).getByText("Claude Managed Agents")).toBeInTheDocument();
+  });
+
+  it("counts machines and cloud services per status in the scope menu", async () => {
+    const user = userEvent.setup();
+    renderPage({
+      runtimes: [
+        makeRuntime(),
+        makeRuntime({
+          id: "rt-codex",
+          daemon_id: "daemon-2",
+          name: "Codex (build-server)",
+          provider: "codex",
+          device_info: "build-server · codex 0.5.0",
+          status: "offline",
+          last_seen_at: new Date(NOW - 3 * 60 * 60_000).toISOString(),
+        }),
+      ],
+      connection: qoder({ configured: true, enabled: true, status: "online" }),
+    });
+
+    await user.click(screen.getByRole("button", { name: /All runtimes/ }));
+    expect(
+      await screen.findByRole("menuitemradio", { name: /All runtimes/ }),
+    ).toHaveTextContent("3");
+    expect(screen.getByRole("menuitemradio", { name: /Online/ })).toHaveTextContent("2");
+    expect(screen.getByRole("menuitemradio", { name: /Offline/ })).toHaveTextContent("1");
   });
 
   it("offers the desktop download on web when no machine is connected", () => {
@@ -250,7 +313,7 @@ describe("RuntimesPage", () => {
     expect(screen.getByText("This device")).toBeInTheDocument();
     expect(screen.queryByText("Run on this computer")).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /^Add/ }));
+    await user.click(screen.getByRole("button", { name: "Add runtime" }));
     const menu = await screen.findByRole("menu");
     expect(within(menu).getByText("Connected · Jiayuan's MacBook")).toBeInTheDocument();
     expect(within(menu).getByText("Other machine or server")).toBeInTheDocument();
@@ -258,7 +321,7 @@ describe("RuntimesPage", () => {
     expect(within(menu).getByText("By Qoder")).toBeInTheDocument();
   });
 
-  it("filters rows by search and status", async () => {
+  it("filters rows by status", async () => {
     const user = userEvent.setup();
     renderPage({
       runtimes: [
@@ -276,19 +339,23 @@ describe("RuntimesPage", () => {
       connection: qoder({ configured: true, enabled: true, status: "online" }),
     });
 
-    await user.click(screen.getByRole("button", { name: /^Offline/ }));
+    await user.click(screen.getByRole("button", { name: /All runtimes/ }));
+    await user.click(await screen.findByRole("menuitemradio", { name: /Offline/ }));
+    expect(
+      within(screen.getByRole("banner")).getByRole("heading", { name: "Offline" }),
+    ).toBeInTheDocument();
     expect(screen.getByText("build-server")).toBeInTheDocument();
     expect(screen.queryByText("dev-machine.local")).not.toBeInTheDocument();
     expect(screen.queryByText("Qoder Cloud Agents")).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /^All/ }));
-    await user.type(screen.getByRole("textbox"), "zzz");
-    expect(
-      screen.getByText("No machines or cloud services match"),
-    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Offline/ }));
+    await user.click(await screen.findByRole("menuitemradio", { name: /All runtimes/ }));
+    expect(screen.getByText("dev-machine.local")).toBeInTheDocument();
+    expect(screen.getByText("build-server")).toBeInTheDocument();
   });
 
-  it("never lists the Qoder runtime as a machine", () => {
+  it("never lists the Qoder runtime as a machine", async () => {
+    const user = userEvent.setup();
     const qoderRuntime = makeRuntime({
       id: "rt-qoder",
       daemon_id: "qoder-managed-ws-test",
@@ -309,9 +376,10 @@ describe("RuntimesPage", () => {
       expect(screen.queryAllByText("Qoder Cloud Agents")).toHaveLength(
         1,
       );
-      expect(screen.getByRole("button", { name: /^All/ })).toHaveTextContent(
-        connection.configured ? "2" : "1",
-      );
+      await user.click(screen.getByRole("button", { name: /All runtimes/ }));
+      expect(
+        await screen.findByRole("menuitemradio", { name: /All runtimes/ }),
+      ).toHaveTextContent(connection.configured ? "2" : "1");
       unmount();
     }
   });

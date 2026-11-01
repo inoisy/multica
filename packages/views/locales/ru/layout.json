@@ -14,7 +14,8 @@
     "settings": "Настройки",
     "subscriptions": "Подписки",
     "pages": "Страницы",
-    "model_profiles": "Профили моделей"
+    "model_profiles": "Профили моделей",
+    "views": "Представления"
   },
   "tab": {
     "issue": "Задача",
@@ -28,6 +29,7 @@
     "runtime": "Среда выполнения",
     "attachment": "Вложение",
     "create_agent": "Создать агента",
+    "my_agents": "Работа моих агентов",
     "unknown": "Неизвестная страница"
   },
   "help": {
@@ -60,16 +62,102 @@
     "invitation_decline": "Отклонить",
     "log_out": "Выйти",
     "new_issue": "Новая задача",
-    "new_issue_shortcut": "C",
     "pinned_label": "Закреплённые",
-    "work_group": "Работа",
-    "ai_team_group": "ИИ-команда",
     "show_more_pins": "Показать ещё {{count}}…",
-    "show_fewer_pins": "Показать меньше",
-    "unread_overflow": "99+",
-    "discord_card": {
-      "title": "Присоединяйтесь к нашему Discord",
-      "dismiss": "Скрыть"
+    "show_fewer_pins": "Показать меньше"
+  },
+  "spaces": {
+    "work": "Работа",
+    "team": "Команда"
+  },
+  "rail": {
+    "label": "Навигация приложения",
+    "sheet_description": "Переключение разделов и рабочих пространств.",
+    "inbox": "Почта",
+    "work": "Работа",
+    "team": "Агенты",
+    "chat": "Чат",
+    "autopilots": "Авто",
+    "switch_workspace": "Сменить рабочее пространство",
+    "invitation_from": "{{name}} приглашает вас",
+    "open_in_new_window": "Открыть в новом окне",
+    "open_in_new_window_click": "Клик",
+    "open_in_other_window": "Уже открыто в другом окне",
+    "in_other_window": "Другое окно",
+    "all_workspaces_open": "Все рабочие пространства уже открыты в окнах"
+  },
+  "panels": {
+    "work": {
+      "my_agents": "Работа моих агентов",
+      "all_issues": "Все задачи",
+      "views": "Представления",
+      "new_project": "Новый проект",
+      "new_issue_in_project": "Новая задача в «{{name}}»",
+      "all_projects_one": "Все проекты ({{count}})",
+      "all_projects_few": "Все проекты ({{count}})",
+      "all_projects_many": "Все проекты ({{count}})",
+      "all_projects_other": "Все проекты ({{count}})",
+      "project_issues": "Задачи в «{{name}}»",
+      "project_issues_empty": "Нет задач",
+      "project_issues_error": "Не удалось загрузить задачи",
+      "project_issues_settings": "Задачи в проектах",
+      "settings_status": "Статус",
+      "settings_assignee": "Исполнитель",
+      "assignee_anyone": "Любой",
+      "assignee_me": "Я",
+      "assignee_my_agents": "Мои агенты",
+      "assignee_me_and_my_agents": "Я и мои агенты",
+      "reset": "Сбросить",
+      "load_more": "Загрузить ещё",
+      "show_less": "Показать меньше",
+      "projects_settings": "Отображение проектов",
+      "projects_ordering": "Порядок",
+      "projects_order_manual": "Вручную",
+      "projects_order_name": "Название",
+      "projects_order_updated": "Недавно обновлённые",
+      "projects_order_created": "Недавно созданные",
+      "projects_show": "Показывать",
+      "projects_only_mine": "Только проекты, которые я веду",
+      "projects_show_count": "Число открытых задач",
+      "new_view": "Новое представление",
+      "all_views": "Все представления",
+      "view_actions": "Действия для «{{name}}»",
+      "view_copy_link": "Копировать ссылку",
+      "view_remove": "Убрать из боковой панели",
+      "view_rename": "Переименовать",
+      "view_duplicate": "Дублировать",
+      "view_delete": "Удалить представление"
+    },
+    "team": {
+      "new_agent": "Новый агент",
+      "needs_attention": "Требуют внимания",
+      "stuck_one": "{{count}} задача ждёт среду выполнения не в сети",
+      "stuck_few": "{{count}} задачи ждут среду выполнения не в сети",
+      "stuck_many": "{{count}} задач ждут среду выполнения не в сети",
+      "stuck_other": "{{count}} задачи ждут среду выполнения не в сети",
+      "working_now": "Работают сейчас",
+      "running_tasks_one": "{{count}} задача выполняется",
+      "running_tasks_few": "{{count}} задачи выполняются",
+      "running_tasks_many": "{{count}} задач выполняется",
+      "running_tasks_other": "{{count}} задачи выполняется",
+      "all_agents": "Все агенты",
+      "my_agents": "Мои агенты",
+      "squads_and_members": "Команды и участники",
+      "members_one": "{{count}} участник",
+      "members_few": "{{count}} участника",
+      "members_many": "{{count}} участников",
+      "members_other": "{{count}} участника",
+      "resources": "Ресурсы",
+      "runtimes_offline_one": "{{count}} не в сети",
+      "runtimes_offline_few": "{{count}} не в сети",
+      "runtimes_offline_many": "{{count}} не в сети",
+      "runtimes_offline_other": "{{count}} не в сети",
+      "invite_member": "Пригласить участника"
+    },
+    "autopilots": {
+      "all": "Все автопилоты",
+      "list": "Автопилоты",
+      "templates": "Из шаблона"
     }
   },
   "custom_pages": {
@@ -113,5 +201,44 @@
   "section_tabs_short": {
     "modelProfiles": "Профили",
     "runtimes": "Среды"
+  },
+  "account": {
+    "trigger": "Аккаунт",
+    "profile": "Профиль",
+    "theme": "Тема",
+    "themes": {
+      "light": "Светлая",
+      "dark": "Тёмная",
+      "system": "Системная"
+    },
+    "language": "Язык",
+    "shortcuts": "Горячие клавиши"
+  },
+  "collection": {
+    "filter": "Фильтр",
+    "filter_count_one": "{{count}} фильтр",
+    "filter_count_few": "{{count}} фильтра",
+    "filter_count_many": "{{count}} фильтров",
+    "filter_count_other": "{{count}} фильтров",
+    "reset": "Сбросить",
+    "display": "Настройки отображения",
+    "selected_one": "Выбран {{count}}",
+    "selected_few": "Выбрано {{count}}",
+    "selected_many": "Выбрано {{count}}",
+    "selected_other": "Выбрано {{count}}",
+    "clear_selection": "Снять выделение",
+    "select_all": "Выбрать все",
+    "select_row": "Выбрать строку",
+    "row_actions": "Действия со строкой",
+    "sort_by": "Сортировка",
+    "direction_asc": "По возрастанию",
+    "direction_desc": "По убыванию",
+    "section_columns": "Столбцы",
+    "load_more": "Загрузить ещё",
+    "loading_more": "Загрузка…"
+  },
+  "object_page": {
+    "toggle_panel": "Показать или скрыть правую панель",
+    "properties": "Свойства"
   }
 }

@@ -157,14 +157,12 @@ function CustomPagesBody({ state }: { state: CustomPagesEditorState }) {
 /** Workspace pages managed by their owner and admins. */
 export function CustomPagesPage() {
   const state = useCustomPagesEditor();
-  const { t, pages } = state;
+  const { t } = state;
   return (
     <div className="flex h-full min-h-0 flex-col">
       <CollectionPageHeader
         icon={AppWindow}
         title={t(($) => $.custom_pages.title)}
-        count={pages.length}
-        description={t(($) => $.custom_pages.description)}
         actions={<CustomPagesActions state={state} />}
       />
       <div className={cn("min-h-0 flex-1 overflow-y-auto py-4", PAGE_GUTTER)}>
