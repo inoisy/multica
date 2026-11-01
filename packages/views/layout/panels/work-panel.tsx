@@ -20,6 +20,7 @@ import { PinnedSection, usePanelPins } from "./pinned-section";
 import { useKeptActiveItem } from "./sidebar-tree";
 import { ProjectsSection, useIssueIdInTree } from "./work-tree";
 import { ViewsSection } from "./views-section";
+import { CustomPagesSection } from "./custom-pages-section";
 
 const EMPTY_PROJECTS: Project[] = [];
 /** The Projects section's key in the kept-rows store, apart from every sidebar source. */
@@ -159,6 +160,8 @@ export function WorkPanel() {
               activeIssueId={plainRowsLit ? currentIssueId : null}
             />
           )}
+
+          <CustomPagesSection pathname={pathname} />
         </PanelBody>
       </IssueContextMenuProvider>
     </>

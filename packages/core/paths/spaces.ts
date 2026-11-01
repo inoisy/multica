@@ -32,7 +32,13 @@ const SPACE_BY_SEGMENT: Record<string, AppSpaceId> = {
   issues: "work",
   projects: "work",
   views: "work",
+  // Fork pages: workspace pages and the epics redirect live with work, model
+  // profiles and subscriptions with the team's agents and runtimes.
+  pages: "work",
+  conveyor: "work",
   agents: "team",
+  profiles: "team",
+  subscriptions: "team",
   squads: "team",
   members: "team",
   skills: "team",

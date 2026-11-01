@@ -29,6 +29,7 @@ import {
   isPathWithin,
 } from "../panel-nav";
 import { useTeamAgentStatus } from "./team-status";
+import { sectionHrefsFor } from "../section-tabs";
 
 const EMPTY_TASKS: AgentTask[] = [];
 const MEMBER_AVATAR_LIMIT = 4;
@@ -130,7 +131,8 @@ export function TeamPanel() {
   const mineCount = userId ? agents.filter((agent) => agent.owner_id === userId).length : 0;
   const myRole = members.find((member) => member.user_id === userId)?.role;
   const canInvite = myRole === "owner" || myRole === "admin";
-  const onAgents = pathname === p.agents();
+  // Model profiles is a page of the Agents section (see SectionTabs).
+  const onAgents = sectionHrefsFor(p, p.agents()).includes(pathname);
   // Member pages live under /members/:id; the list itself is a Settings tab.
   const membersRoot = p.memberDetail("").replace(/\/$/, "");
 
