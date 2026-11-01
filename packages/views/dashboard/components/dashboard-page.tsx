@@ -472,22 +472,22 @@ export function DashboardPage() {
             <BarChart3 aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
             <span className="truncate">{t(($) => $.title)}</span>
           </h1>
-          <TabsList variant="line" className="shrink-0 gap-0 p-0 group-data-horizontal/tabs:h-full">
+          <TabsList variant="line" className="min-w-0 shrink justify-start gap-0 overflow-x-auto p-0 [scrollbar-width:none] group-data-horizontal/tabs:h-full">
             <TabsTrigger
               value="usage"
-              className="h-full rounded-none px-2.5 group-data-horizontal/tabs:after:bottom-0"
+              className="h-full shrink-0 rounded-none px-2.5 group-data-horizontal/tabs:after:bottom-0"
             >
               {t(($) => $.tab_usage)}
             </TabsTrigger>
             <TabsTrigger
               value="errors"
-              className="h-full rounded-none px-2.5 group-data-horizontal/tabs:after:bottom-0"
+              className="h-full shrink-0 rounded-none px-2.5 group-data-horizontal/tabs:after:bottom-0"
             >
               {t(($) => $.errors.title)}
             </TabsTrigger>
             <TabsTrigger
               value="subscriptions"
-              className="h-full rounded-none px-2.5 group-data-horizontal/tabs:after:bottom-0"
+              className="h-full shrink-0 rounded-none px-2.5 group-data-horizontal/tabs:after:bottom-0"
             >
               {t(($) => $.tab_subscriptions)}
             </TabsTrigger>
