@@ -13,7 +13,6 @@ import {
   AGENT_MAX_CONCURRENT_TASKS_MAX,
   AGENT_MAX_CONCURRENT_TASKS_MIN,
 } from "@multica/core/agents";
-import { isRuntimeUsableForUser } from "@multica/core/runtimes";
 import { useConfigStore } from "@multica/core/config";
 import { isImeComposing } from "@multica/core/utils";
 import { useCurrentWorkspace } from "@multica/core/paths";
@@ -38,6 +37,7 @@ import { useConversationStartersFocus } from "./use-conversation-starters-focus"
 import { RuntimePicker } from "./inspector/runtime-picker";
 import { SavedModelRow } from "./inspector/saved-model-row";
 import { ServiceTierSettingField } from "./inspector/service-tier-setting-field";
+import { useExecutionControls } from "./inspector/use-execution-controls";
 
 interface InspectorProps {
   agent: Agent;
@@ -138,15 +138,14 @@ export function AgentDetailInspector({
     isEqual: profileDraftsEqual,
   });
 
-  // A Qoder agent is bound to an agent in Qoder Cloud Agents, and the model lives there. Moving
-  // between Qoder and any other runtime would need a different configuration
-  // the server either rejects or the bridge refuses, so neither direction is
-  // offered here. It also never opens a chat, so nothing chat-facing applies.
-  const qoderRuntime = runtime?.provider === "qoder_cloud";
+  // The fork saves models through model profiles (SavedModelRow), so the
+  // hook's model/runtime change handlers are not used here.
+  const { qoderRuntime, canDiscoverRuntimeModels, runtimeOptions } =
+    useExecutionControls({ agent, runtime, runtimes, currentUserId, update });
   const conversationStartersEnabled = useConfigStore(
     (state) => state.agentConversationStartersSupported,
   );
-  const showStarters = conversationStartersEnabled && !qoderRuntime;
+  const showStarters = conversationStartersEnabled;
   const startersComplete = starters.every(
     (item) => item.label.trim() && item.prompt.trim(),
   );
@@ -170,18 +169,7 @@ export function AgentDetailInspector({
   const startersFocus = useConversationStartersFocus(agent.id, showStarters);
   const workspace = useCurrentWorkspace();
   const models = useQuery(agentModelsOptions(workspace?.id ?? "", agent.id));
-  const isOnline = runtime?.status === "online";
-  const canReadRuntime =
-    runtime != null && isRuntimeUsableForUser(runtime, currentUserId);
-  const canDiscoverRuntimeModels = isOnline && canReadRuntime && !qoderRuntime;
   const nameInvalid = name.trim().length === 0;
-  const runtimeOptions = useMemo(
-    () =>
-      qoderRuntime
-        ? runtimes
-        : runtimes.filter((r) => r.provider !== "qoder_cloud"),
-    [qoderRuntime, runtimes],
-  );
 
   return (
     <div className="@container">
@@ -354,19 +342,17 @@ export function AgentDetailInspector({
           </SettingsSection>
         </div>
 
-        {qoderRuntime ? null : (
-          <SettingsSection
-            title={t(($) => $.conversation_starters.preview_label)}
-            className="hidden @4xl:sticky @4xl:top-0 @4xl:block"
-          >
-            <NewChatPreview
-              name={name.trim() || agent.name}
-              description={description}
-              avatarUrl={agent.avatar_url ?? null}
-              starters={showStarters ? starters : []}
-            />
-          </SettingsSection>
-        )}
+        <SettingsSection
+          title={t(($) => $.conversation_starters.preview_label)}
+          className="hidden @4xl:sticky @4xl:top-0 @4xl:block"
+        >
+          <NewChatPreview
+            name={name.trim() || agent.name}
+            description={description}
+            avatarUrl={agent.avatar_url ?? null}
+            starters={showStarters ? starters : []}
+          />
+        </SettingsSection>
       </div>
     </div>
   );

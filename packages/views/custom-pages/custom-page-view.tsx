@@ -90,7 +90,11 @@ export function CustomPageView({ pageId }: { pageId: string }) {
       <CollectionPageHeader
         icon={AppWindow}
         title={page?.title ?? t(($) => $.custom_pages.page)}
-        description={subtitle ?? (page?.description || undefined)}
+        tools={subtitle || page?.description ? (
+          <span className="ml-1 hidden min-w-0 truncate text-caption text-muted-foreground md:block">
+            {subtitle ?? page?.description}
+          </span>
+        ) : undefined}
         actions={actions}
       />
       {query.isLoading ? (

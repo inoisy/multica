@@ -325,3 +325,73 @@ func TestWorkflowAcceptIsGone(t *testing.T) {
 		t.Fatal("multica issue conveyor still exists")
 	}
 }
+
+func workflowHandoffServer(t *testing.T, puts *[]map[string]any) {
+	t.Helper()
+	review := map[string]any{
+		"id": testWorkflowID, "name": "Review flow", "is_default": false, "project_ids": []any{},
+		"steps": []any{
+			map[string]any{"status_key": "todo", "handler": map[string]any{"type": "none"}},
+			map[string]any{
+				"status_key": "in_review", "handler": map[string]any{"type": "agent", "id": "55555555-5555-4555-8555-555555555555"},
+				"instructions": "Review the PR", "next_status_key": "done", "back_status_key": "todo",
+			},
+			map[string]any{"status_key": "done"},
+		},
+	}
+	setupWorkflowCLI(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/issue-workflows/"+testWorkflowID:
+			_ = json.NewEncoder(w).Encode(review)
+		case r.Method == http.MethodPut && strings.HasPrefix(r.URL.Path, "/api/issue-workflows/"+testWorkflowID+"/handoffs/"):
+			var body map[string]any
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			body["path"] = r.URL.Path
+			*puts = append(*puts, body)
+			_ = json.NewEncoder(w).Encode(review)
+		default:
+			t.Errorf("unexpected request %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	})
+}
+
+func TestWorkflowHandoffSetKeepsUnchangedFields(t *testing.T) {
+	var puts []map[string]any
+	workflowHandoffServer(t, &puts)
+	cmd := newWorkflowHandoffCommand().Commands()[0]
+	_ = cmd.Flags().Set("instructions", "Check tests too")
+	_ = cmd.Flags().Set("back", "")
+	if err := runWorkflowHandoffSet(cmd, []string{testWorkflowID, "in_review"}); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if len(puts) != 1 {
+		t.Fatalf("puts = %v", puts)
+	}
+	put := puts[0]
+	if put["path"] != "/api/issue-workflows/"+testWorkflowID+"/handoffs/in_review" {
+		t.Fatalf("path = %v", put["path"])
+	}
+	handler, _ := put["handler"].(map[string]any)
+	if handler["type"] != "agent" || handler["id"] != "55555555-5555-4555-8555-555555555555" {
+		t.Fatalf("handler = %v, want the existing agent kept", put["handler"])
+	}
+	if put["instructions"] != "Check tests too" || put["next_status_key"] != "done" || put["back_status_key"] != "" {
+		t.Fatalf("body = %v", put)
+	}
+	if _, ok := put["copy_for_project_id"]; ok {
+		t.Fatalf("copy_for_project_id must be omitted: %v", put)
+	}
+}
+
+func TestWorkflowHandoffSetRejectsUnknownStep(t *testing.T) {
+	var puts []map[string]any
+	workflowHandoffServer(t, &puts)
+	cmd := newWorkflowHandoffCommand().Commands()[0]
+	if err := runWorkflowHandoffSet(cmd, []string{testWorkflowID, "qa"}); err == nil {
+		t.Fatal("want error for a status the workflow does not list")
+	}
+	if len(puts) != 0 {
+		t.Fatalf("no write expected, got %v", puts)
+	}
+}

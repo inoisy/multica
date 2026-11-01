@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -94,7 +95,29 @@ func newWorkflowCommand() *cobra.Command {
 		}
 		cmd.AddCommand(c)
 	}
+	cmd.AddCommand(newWorkflowHandoffCommand())
 	return cmd
+}
+
+func newWorkflowHandoffCommand() *cobra.Command {
+	handoff := &cobra.Command{Use: "handoff", Short: "Manage what happens when an issue enters a workflow status"}
+	set := &cobra.Command{
+		Use:   "set <workflow-id|default> <status-key>",
+		Short: "Set the handler, instructions, and next/back status for one step",
+		Long:  "Set the handoff of one step. Only the flags you pass change; the rest of the step is kept.\n\n--handler accepts none, project_lead, creator, or a member, agent, or squad name or UUID.",
+		Args:  exactArgs(2),
+		RunE:  runWorkflowHandoffSet,
+	}
+	set.Flags().String("handler", "", "none, project_lead, creator, or a member/agent/squad name or UUID")
+	set.Flags().String("instructions", "", "Instructions the handler's run gets")
+	set.Flags().String("instructions-file", "", "Read instructions from a file inside the working directory")
+	set.Flags().String("next", "", "Status the handler moves the issue to when done (empty to clear)")
+	set.Flags().String("back", "", "Status the handler sends the issue back to (empty to clear)")
+	set.Flags().String("copy-for-project", "", "Save on a copy of the workflow used only by this project")
+	set.Flags().Bool("allow-external-file", false, "Allow reading files outside the working directory")
+	set.Flags().String("output", "json", "Output format: json")
+	handoff.AddCommand(set)
+	return handoff
 }
 
 func addWorkflowMappingFlags(cmd *cobra.Command) {
@@ -343,6 +366,111 @@ func runProjectWorkflow(cmd *cobra.Command, args []string, action string) error 
 	}
 	if err != nil {
 		return fmt.Errorf("%s project workflow: %w", action, err)
+	}
+	return cli.PrintJSON(os.Stdout, result)
+}
+
+func resolveHandoffHandler(ctx context.Context, client *cli.APIClient, value string) (*workflowHandler, error) {
+	v := strings.TrimSpace(value)
+	switch strings.ToLower(v) {
+	case "", "none":
+		return &workflowHandler{Type: "none"}, nil
+	case "project_lead", "creator":
+		return &workflowHandler{Type: strings.ToLower(v)}, nil
+	}
+	var typ, id string
+	var err error
+	if uuidRegexp.MatchString(v) {
+		typ, id, err = resolveAssigneeByID(ctx, client, v, issueAssigneeKinds)
+	} else {
+		typ, id, err = resolveAssignee(ctx, client, v, issueAssigneeKinds)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("resolve handler: %w", err)
+	}
+	return &workflowHandler{Type: typ, ID: id}, nil
+}
+
+func runWorkflowHandoffSet(cmd *cobra.Command, args []string) error {
+	if output, _ := cmd.Flags().GetString("output"); output != "json" {
+		return fmt.Errorf("unsupported output format %q", output)
+	}
+	if cmd.Flags().Changed("instructions") && cmd.Flags().Changed("instructions-file") {
+		return fmt.Errorf("use either --instructions or --instructions-file, not both")
+	}
+	statusKey := strings.TrimSpace(args[1])
+	client, err := newAPIClient(cmd)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := cli.APIContext(cmd.Context())
+	defer cancel()
+	id, err := resolveWorkflowID(ctx, client, args[0])
+	if err != nil {
+		return err
+	}
+	var workflow workflowDTO
+	if err := client.GetJSON(ctx, "/api/issue-workflows/"+id, &workflow); err != nil {
+		return fmt.Errorf("get workflow: %w", err)
+	}
+	var current *workflowStep
+	for i := range workflow.Steps {
+		if workflow.Steps[i].StatusKey == statusKey {
+			current = &workflow.Steps[i]
+			break
+		}
+	}
+	if current == nil {
+		return fmt.Errorf("workflow %s has no step %q", workflow.Name, statusKey)
+	}
+
+	// The API replaces the whole handoff; start from the current step so
+	// only the flags passed change.
+	body := struct {
+		Handler          *workflowHandler `json:"handler"`
+		Instructions     string           `json:"instructions"`
+		NextStatusKey    string           `json:"next_status_key"`
+		BackStatusKey    string           `json:"back_status_key"`
+		CopyForProjectID string           `json:"copy_for_project_id,omitempty"`
+	}{current.Handler, current.Instructions, current.NextStatusKey, current.BackStatusKey, ""}
+	if body.Handler == nil {
+		body.Handler = &workflowHandler{Type: "none"}
+	}
+	if cmd.Flags().Changed("handler") {
+		v, _ := cmd.Flags().GetString("handler")
+		if body.Handler, err = resolveHandoffHandler(ctx, client, v); err != nil {
+			return err
+		}
+	}
+	if cmd.Flags().Changed("instructions") {
+		body.Instructions, _ = cmd.Flags().GetString("instructions")
+	}
+	if path, _ := cmd.Flags().GetString("instructions-file"); path != "" {
+		if err := ensureFileFlagWithinWorkdir(cmd, "instructions-file", "instructions", path); err != nil {
+			return err
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return fmt.Errorf("read --instructions-file: %w", err)
+		}
+		body.Instructions = string(data)
+	}
+	if cmd.Flags().Changed("next") {
+		body.NextStatusKey, _ = cmd.Flags().GetString("next")
+	}
+	if cmd.Flags().Changed("back") {
+		body.BackStatusKey, _ = cmd.Flags().GetString("back")
+	}
+	if v, _ := cmd.Flags().GetString("copy-for-project"); v != "" {
+		project, err := resolveProjectID(ctx, client, v)
+		if err != nil {
+			return fmt.Errorf("resolve project: %w", err)
+		}
+		body.CopyForProjectID = project.ID
+	}
+	var result any
+	if err := client.PutJSON(ctx, "/api/issue-workflows/"+id+"/handoffs/"+url.PathEscape(statusKey), body, &result); err != nil {
+		return fmt.Errorf("set handoff: %w", err)
 	}
 	return cli.PrintJSON(os.Stdout, result)
 }
