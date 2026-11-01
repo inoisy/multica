@@ -15,10 +15,6 @@
     "row_menu": "Действия с командой",
     "archive_action": "Архивировать"
   },
-  "inspector": {
-    "details_section": "Детали",
-    "archive_button": "Архивировать"
-  },
   "member_type": {
     "agent": "Агент",
     "member": "Участник"
@@ -65,16 +61,8 @@
     "responsibility_placeholder": "За что отвечает эта команда?",
     "save": "Сохранить"
   },
-  "discard_changes_dialog": {
-    "title": "Отменить несохранённые изменения?",
-    "description": "На этой вкладке есть несохранённые изменения. При переключении вкладок они будут потеряны.",
-    "keep_editing": "Продолжить редактирование",
-    "discard_button": "Отменить"
-  },
   "members_tab": {
     "section_title": "Участники",
-    "section_count_one": "{{count}} участник в этой команде",
-    "section_count_other": "{{count}} участников в этой команде",
     "add_member_button": "Добавить участника",
     "create_agent_button": "Создать агента",
     "leader_chip": "Лидер",
@@ -87,21 +75,29 @@
     "status_unstable": "Нестабильно",
     "status_archived": "Архивирован",
     "issue_status_blocked": "заблокирована",
-    "active_issue_more": "и ещё {{count}}",
-    "last_active_label": "последняя активность {{time}}",
-    "section_count_few": "{{count}} участника в этой команде",
-    "section_count_many": "{{count}} участников в этой команде"
+    "active_issue_more": "и ещё {{count}}"
   },
-  "detail_tabs": {
-    "members": "Участники",
-    "instructions": "Инструкции"
+  "detail": {
+    "assign_work": "Назначить работу",
+    "copy_link": "Копировать ссылку",
+    "link_copied": "Ссылка скопирована",
+    "not_found": "Команда не найдена",
+    "instructions": "Инструкции",
+    "edit": "Изменить",
+    "cancel": "Отмена",
+    "recent_work": "Недавняя работа",
+    "recent_work_empty": "Этой команде ещё не назначали задач.",
+    "member_menu": "Действия для «{{name}}»",
+    "working_on": "Работает над"
   },
   "details": {
     "leader": "Лидер",
     "members": "Участники",
     "created_by": "Создал",
     "created": "Создана",
-    "updated": "Обновлена"
+    "updated": "Обновлена",
+    "visibility": "Видимость",
+    "visibility_workspace": "Рабочее пространство"
   },
   "toasts": {
     "member_added": "Участник добавлен",
@@ -139,18 +135,5 @@
     "mine": "Мои",
     "all": "Все"
   },
-  "toolbar": {
-    "display": "Отображение",
-    "sort_by": "Сортировать по",
-    "direction_asc": "По возрастанию",
-    "direction_desc": "По убыванию",
-    "section_columns": "Столбцы",
-    "result_count_title": "Найдено команд / всего команд",
-    "filter_label": "Фильтр",
-    "filter_active_count_one": "{{count}} фильтр",
-    "filter_active_count_other": "{{count}} фильтров",
-    "clear_filters": "Сбросить фильтры",
-    "filter_active_count_few": "{{count}} фильтра",
-    "filter_active_count_many": "{{count}} фильтров"
-  }
+  "toolbar": {}
 }

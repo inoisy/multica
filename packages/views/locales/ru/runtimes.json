@@ -1,9 +1,7 @@
 {
   "page": {
     "title": "Среды выполнения",
-    "learn_more": "Подробнее →",
     "connect_remote": "Добавить компьютер",
-    "search_placeholder": "Поиск сред выполнения…",
     "scope_mine": "Мои",
     "scope_all": "Все",
     "live": "В реальном времени",
@@ -103,8 +101,7 @@
     "this_machine": "Это устройство",
     "local_badge": "Локально · этот компьютер",
     "pending_custom_runtimes": "Ожидающие пользовательские среды выполнения",
-    "runtime_count_one": "{{count}} среда выполнения",
-    "runtime_count_other": "{{count}} сред выполнения",
+    "daemon_title": "Демон",
     "busy_count_one": "{{count}} занята",
     "busy_count_other": "{{count}} занято",
     "no_matches_title": "Машин не найдено",
@@ -148,8 +145,6 @@
       "toast_cleared": "Имя машины очищено",
       "toast_failed": "Не удалось переименовать машину"
     },
-    "runtime_count_few": "{{count}} среды выполнения",
-    "runtime_count_many": "{{count}} сред выполнения",
     "busy_count_few": "{{count}} заняты",
     "busy_count_many": "{{count}} занято"
   },
@@ -180,14 +175,10 @@
     "fact_owner": "Владелец",
     "fact_device": "Устройство",
     "fact_runtime": "Среда выполнения",
-    "technical_details": "Технические детали",
     "fact_daemon_cli": "CLI демона",
     "fact_daemon_id": "ID демона",
-    "serving_title": "Обслуживает",
-    "serving_count_one": "{{count}} агент",
-    "serving_count_other": "{{count}} агентов",
+    "usage_title": "Использование",
     "no_agents": "К этой среде выполнения пока не привязано ни одного агента.",
-    "diagnostics_title": "Диагностика",
     "diagnostics_cli": "CLI",
     "diagnostics_visibility": "Видимость",
     "visibility_label": {
@@ -285,8 +276,6 @@
     "running_chip_other": "· {{count}} выполняется",
     "queued_chip_one": "· {{count}} в очереди",
     "queued_chip_other": "· {{count}} в очереди",
-    "serving_count_few": "{{count}} агента",
-    "serving_count_many": "{{count}} агентов",
     "running_chip_few": "· {{count}} выполняется",
     "running_chip_many": "· {{count}} выполняется",
     "queued_chip_few": "· {{count}} в очереди",
