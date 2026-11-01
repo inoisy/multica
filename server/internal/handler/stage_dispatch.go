@@ -17,38 +17,59 @@ import (
 	"github.com/multica-ai/multica/server/pkg/protocol"
 )
 
-// StageDispatchResponse is an epic's stage dispatch: the squad its stages go
-// to (null when off) and the person the runs answer to.
+// StageDispatchResponse is a parent issue's stage dispatch: the squad its
+// stages go to (null when off) and the member the runs answer to.
 type StageDispatchResponse struct {
 	IssueID    string  `json:"issue_id"`
 	SquadID    *string `json:"squad_id"`
 	DispatchBy *string `json:"dispatch_by"`
 }
 
+func stageDispatchResponse(issueID pgtype.UUID, row *db.IssueStageDispatch) StageDispatchResponse {
+	out := StageDispatchResponse{IssueID: uuidToString(issueID)}
+	if row != nil {
+		out.SquadID, out.DispatchBy = uuidToPtr(row.SquadID), uuidToPtr(row.DispatchBy)
+	}
+	return out
+}
+
 // StageDispatchService is the server-side stage dispatch wired to this
 // handler's issue update path.
 func (h *Handler) StageDispatchService() *service.StageDispatchService {
-	return &service.StageDispatchService{Issues: h.IssueService, Start: h.startStagedIssue}
-}
-
-func stageDispatchResponse(issue db.Issue) StageDispatchResponse {
-	return StageDispatchResponse{IssueID: uuidToString(issue.ID), SquadID: uuidToPtr(issue.StageSquadID), DispatchBy: uuidToPtr(issue.StageDispatchBy)}
+	return &service.StageDispatchService{Issues: h.IssueService, Flags: h.FeatureFlags, Start: h.startStagedIssue}
 }
 
 // GetIssueStageDispatch handles GET /api/issues/{id}/stage-dispatch.
 func (h *Handler) GetIssueStageDispatch(w http.ResponseWriter, r *http.Request) {
+	if !h.StageDispatchService().Enabled(r.Context()) {
+		writeError(w, http.StatusNotFound, "stage dispatch is not enabled")
+		return
+	}
 	issue, ok := h.loadIssueForUser(w, r, chi.URLParam(r, "id"))
 	if !ok {
 		return
 	}
-	writeJSON(w, http.StatusOK, stageDispatchResponse(issue))
+	row, err := h.Queries.GetIssueStageDispatch(r.Context(), db.GetIssueStageDispatchParams{IssueID: issue.ID, WorkspaceID: issue.WorkspaceID})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		writeJSON(w, http.StatusOK, stageDispatchResponse(issue.ID, nil))
+	case err != nil:
+		writeError(w, http.StatusInternalServerError, "failed to load stage dispatch")
+	default:
+		writeJSON(w, http.StatusOK, stageDispatchResponse(issue.ID, &row))
+	}
 }
 
 // SetIssueStageDispatch handles PUT /api/issues/{id}/stage-dispatch with
-// {"squad_id": "<id>"} to have the server assign the epic's stages to that
-// squad, or {"squad_id": null} to stop. Only a person changes it: the runs
-// it starts answer to them, and an agent's run must not undo their choice.
+// {"squad_id": "<id>"} to have the server assign the parent's stages to that
+// squad, or {"squad_id": null} to stop. Only a member changes it: the runs it
+// starts answer to them, and an agent's run must not undo their choice.
 func (h *Handler) SetIssueStageDispatch(w http.ResponseWriter, r *http.Request) {
+	svc := h.StageDispatchService()
+	if !svc.Enabled(r.Context()) {
+		writeError(w, http.StatusNotFound, "stage dispatch is not enabled")
+		return
+	}
 	issue, ok := h.loadIssueForUser(w, r, chi.URLParam(r, "id"))
 	if !ok {
 		return
@@ -64,7 +85,7 @@ func (h *Handler) SetIssueStageDispatch(w http.ResponseWriter, r *http.Request) 
 	}
 	actorType, actorID := h.resolveActor(r, requestUserID(r), uuidToString(issue.WorkspaceID))
 	if actorType != "member" {
-		writeError(w, http.StatusForbidden, "only a person can change stage dispatch")
+		writeError(w, http.StatusForbidden, "only a member can change stage dispatch")
 		return
 	}
 	var squadID, by pgtype.UUID
@@ -84,7 +105,7 @@ func (h *Handler) SetIssueStageDispatch(w http.ResponseWriter, r *http.Request) 
 		}
 		squadID, by = id, parseUUID(actorID)
 	}
-	updated, err := h.StageDispatchService().Set(r.Context(), issue, squadID, by)
+	row, err := svc.Set(r.Context(), issue, squadID, by)
 	if errors.Is(err, service.ErrStageDispatchInvalid) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -93,45 +114,16 @@ func (h *Handler) SetIssueStageDispatch(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusInternalServerError, "failed to update stage dispatch")
 		return
 	}
-	writeJSON(w, http.StatusOK, stageDispatchResponse(updated))
-}
-
-// StageDispatchEpicResponse is one epic on the conveyor board: the issue and
-// the squad its stages go to.
-type StageDispatchEpicResponse struct {
-	Issue      IssueResponse `json:"issue"`
-	SquadID    string        `json:"squad_id"`
-	DispatchBy *string       `json:"dispatch_by"`
-}
-
-// ListStageDispatch handles GET /api/stage-dispatch: the workspace's epics
-// whose stages the server dispatches, for the conveyor board.
-func (h *Handler) ListStageDispatch(w http.ResponseWriter, r *http.Request) {
-	workspaceID := workspaceIDFromURL(r, "workspaceId")
-	wsUUID, ok := parseUUIDOrBadRequest(w, workspaceID, "workspace_id")
-	if !ok {
-		return
-	}
-	issues, err := h.Queries.ListWorkspaceStageDispatch(r.Context(), wsUUID)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to list stage dispatch")
-		return
-	}
-	prefix := h.getIssuePrefix(r.Context(), wsUUID)
-	out := make([]StageDispatchEpicResponse, len(issues))
-	for i, issue := range issues {
-		out[i] = StageDispatchEpicResponse{Issue: issueToResponse(issue, prefix), SquadID: uuidToString(issue.StageSquadID), DispatchBy: uuidToPtr(issue.StageDispatchBy)}
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"epics": out})
+	writeJSON(w, http.StatusOK, stageDispatchResponse(issue.ID, row))
 }
 
 // startStagedIssue opens one sub-issue of the open stage. A write follows
-// UpdateIssue for a person (the one who turned dispatch on): the same workflow
+// UpdateIssue for a member (the one who turned dispatch on): the same workflow
 // check, status guard, issue:updated payload and run decision, so the
 // assignment looks like a person's. It does not process child events: the
 // caller's next pass and the scheduler sweep do.
-func (h *Handler) startStagedIssue(ctx context.Context, prev, parent db.Issue) (bool, error) {
-	actorType, actorID := "member", uuidToString(parent.StageDispatchBy)
+func (h *Handler) startStagedIssue(ctx context.Context, prev db.Issue, cfg db.IssueStageDispatch) (bool, error) {
+	actorType, actorID := "member", uuidToString(cfg.DispatchBy)
 	ctx = context.WithValue(ctx, wakeupActorKey{}, wakeupActor{kind: actorType, id: actorID})
 	assigns := !prev.AssigneeID.Valid
 	params := db.UpdateIssueParams{
@@ -141,7 +133,7 @@ func (h *Handler) startStagedIssue(ctx context.Context, prev, parent db.Issue) (
 		ProjectID: prev.ProjectID, Stage: prev.Stage,
 	}
 	if assigns {
-		params.AssigneeType, params.AssigneeID = pgtype.Text{String: "squad", Valid: true}, parent.StageSquadID
+		params.AssigneeType, params.AssigneeID = pgtype.Text{String: "squad", Valid: true}, cfg.SquadID
 	}
 	leavesBacklog := issuestatus.Effective(ctx, h.Queries, prev.WorkspaceID, prev.Status) == "backlog"
 	if !assigns && !leavesBacklog {
@@ -204,6 +196,6 @@ func (h *Handler) startStagedIssue(ctx context.Context, prev, parent db.Issue) (
 		h.dispatchIssueRun(ctx, issue, trigger, actorType, actorID, "")
 	}
 	slog.Info("stage dispatch: sub-issue opened",
-		"parent_id", uuidToString(parent.ID), "issue_id", uuidToString(issue.ID), "stage", issue.Stage.Int32, "run", willRun)
+		"parent_id", uuidToString(cfg.IssueID), "issue_id", uuidToString(issue.ID), "stage", issue.Stage.Int32, "run", willRun)
 	return willRun, nil
 }

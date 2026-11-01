@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// StageDispatcher assigns the open stages of epics whose stages the server
+// StageDispatcher assigns the open stages of parents whose stages the server
 // dispatches.
 type StageDispatcher interface {
 	Sweep(context.Context) error

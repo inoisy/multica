@@ -835,7 +835,7 @@ func (s *IssueWakeupService) SetChildDoneDefault(ctx context.Context, workspaceI
 
 type stageDispatchStartedKey struct{}
 
-// WithStageDispatchStarted marks the epics whose stage dispatch pass just
+// WithStageDispatchStarted marks the parents whose stage dispatch pass just
 // started a run, so the child_done wake that pass answers is not sent too.
 func WithStageDispatchStarted(ctx context.Context, parentIDs ...pgtype.UUID) context.Context {
 	if len(parentIDs) == 0 {

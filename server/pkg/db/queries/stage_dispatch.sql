@@ -1,20 +1,38 @@
--- name: SetIssueStageDispatch :one
--- Turns an epic's stage dispatch on (a squad) or off (NULL).
-UPDATE issue SET stage_squad_id = sqlc.narg('squad_id'), stage_dispatch_by = sqlc.narg('dispatch_by'), updated_at = now()
-WHERE id = $1 AND workspace_id = $2
+-- name: GetIssueStageDispatch :one
+SELECT * FROM issue_stage_dispatch
+WHERE issue_id = $1 AND workspace_id = $2;
+
+-- name: UpsertIssueStageDispatch :one
+-- Turns stage dispatch on for a parent issue, or moves it to another squad.
+INSERT INTO issue_stage_dispatch (issue_id, workspace_id, squad_id, dispatch_by)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (issue_id) DO UPDATE
+SET squad_id = EXCLUDED.squad_id, dispatch_by = EXCLUDED.dispatch_by, updated_at = now()
 RETURNING *;
 
+-- name: DeleteIssueStageDispatch :exec
+DELETE FROM issue_stage_dispatch
+WHERE issue_id = $1 AND workspace_id = $2;
+
+-- name: DeleteIssueStageDispatchesBySquad :exec
+DELETE FROM issue_stage_dispatch
+WHERE workspace_id = $1 AND squad_id = $2;
+
+-- name: DeleteIssueStageDispatchesByMember :exec
+DELETE FROM issue_stage_dispatch
+WHERE workspace_id = $1 AND dispatch_by = $2;
+
 -- name: ListStageDispatchParents :many
--- One page of epics whose stages the server dispatches, for the periodic
--- sweep. The caller pages with the last id it saw.
-SELECT id FROM issue
-WHERE stage_squad_id IS NOT NULL AND id > sqlc.arg('after')::uuid
-ORDER BY id
+-- One page of parents with stage dispatch on, for the periodic sweep. The
+-- caller pages with the last issue_id it saw.
+SELECT issue_id FROM issue_stage_dispatch
+WHERE issue_id > sqlc.arg('after')::uuid
+ORDER BY issue_id
 LIMIT sqlc.arg('page_size')::int;
 
--- name: ListWorkspaceStageDispatch :many
--- Epics of a workspace whose stages the server dispatches, oldest first.
-SELECT * FROM issue
-WHERE workspace_id = $1 AND stage_squad_id IS NOT NULL
-ORDER BY number
-LIMIT 200;
+-- name: DeleteStageDispatchOfMissingIssue :exec
+-- A parent deleted outside the handler paths leaves its row behind; the sweep
+-- drops it once the issue is gone.
+DELETE FROM issue_stage_dispatch d
+WHERE d.issue_id = $1
+  AND NOT EXISTS (SELECT 1 FROM issue i WHERE i.id = d.issue_id);

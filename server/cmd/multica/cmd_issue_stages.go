@@ -15,10 +15,11 @@ import (
 func init() {
 	stages := &cobra.Command{
 		Use:   "stages <issue-id>",
-		Short: "Show or set the squad the server assigns this epic's stages to",
+		Short: "Show or set the squad the server assigns this issue's stages to",
 		Long: "With --squad the server assigns the unassigned sub-issues of the first open stage to the squad as soon as\n" +
-			"every earlier stage is closed. Sub-issues in\n" +
-			"the \"waiting\" status wait for the customer: they are not assigned and do not hold later stages. --off stops it.",
+			"every earlier stage is closed. A stage that closed with a cancelled sub-issue halts dispatch and wakes\n" +
+			"this issue's assignee instead. Sub-issues in the \"waiting\" status wait for the customer: they are not\n" +
+			"assigned and do not hold later stages. --off stops it. Requires the stage_dispatch_v1 feature flag on the server.",
 		Args: exactArgs(1),
 		RunE: runIssueStages,
 	}

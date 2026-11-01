@@ -11,10 +11,92 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const deleteIssueStageDispatch = `-- name: DeleteIssueStageDispatch :exec
+DELETE FROM issue_stage_dispatch
+WHERE issue_id = $1 AND workspace_id = $2
+`
+
+type DeleteIssueStageDispatchParams struct {
+	IssueID     pgtype.UUID `json:"issue_id"`
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+}
+
+func (q *Queries) DeleteIssueStageDispatch(ctx context.Context, arg DeleteIssueStageDispatchParams) error {
+	_, err := q.db.Exec(ctx, deleteIssueStageDispatch, arg.IssueID, arg.WorkspaceID)
+	return err
+}
+
+const deleteIssueStageDispatchesByMember = `-- name: DeleteIssueStageDispatchesByMember :exec
+DELETE FROM issue_stage_dispatch
+WHERE workspace_id = $1 AND dispatch_by = $2
+`
+
+type DeleteIssueStageDispatchesByMemberParams struct {
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+	DispatchBy  pgtype.UUID `json:"dispatch_by"`
+}
+
+func (q *Queries) DeleteIssueStageDispatchesByMember(ctx context.Context, arg DeleteIssueStageDispatchesByMemberParams) error {
+	_, err := q.db.Exec(ctx, deleteIssueStageDispatchesByMember, arg.WorkspaceID, arg.DispatchBy)
+	return err
+}
+
+const deleteIssueStageDispatchesBySquad = `-- name: DeleteIssueStageDispatchesBySquad :exec
+DELETE FROM issue_stage_dispatch
+WHERE workspace_id = $1 AND squad_id = $2
+`
+
+type DeleteIssueStageDispatchesBySquadParams struct {
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+	SquadID     pgtype.UUID `json:"squad_id"`
+}
+
+func (q *Queries) DeleteIssueStageDispatchesBySquad(ctx context.Context, arg DeleteIssueStageDispatchesBySquadParams) error {
+	_, err := q.db.Exec(ctx, deleteIssueStageDispatchesBySquad, arg.WorkspaceID, arg.SquadID)
+	return err
+}
+
+const deleteStageDispatchOfMissingIssue = `-- name: DeleteStageDispatchOfMissingIssue :exec
+DELETE FROM issue_stage_dispatch d
+WHERE d.issue_id = $1
+  AND NOT EXISTS (SELECT 1 FROM issue i WHERE i.id = d.issue_id)
+`
+
+// A parent deleted outside the handler paths leaves its row behind; the sweep
+// drops it once the issue is gone.
+func (q *Queries) DeleteStageDispatchOfMissingIssue(ctx context.Context, issueID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteStageDispatchOfMissingIssue, issueID)
+	return err
+}
+
+const getIssueStageDispatch = `-- name: GetIssueStageDispatch :one
+SELECT issue_id, workspace_id, squad_id, dispatch_by, created_at, updated_at FROM issue_stage_dispatch
+WHERE issue_id = $1 AND workspace_id = $2
+`
+
+type GetIssueStageDispatchParams struct {
+	IssueID     pgtype.UUID `json:"issue_id"`
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+}
+
+func (q *Queries) GetIssueStageDispatch(ctx context.Context, arg GetIssueStageDispatchParams) (IssueStageDispatch, error) {
+	row := q.db.QueryRow(ctx, getIssueStageDispatch, arg.IssueID, arg.WorkspaceID)
+	var i IssueStageDispatch
+	err := row.Scan(
+		&i.IssueID,
+		&i.WorkspaceID,
+		&i.SquadID,
+		&i.DispatchBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const listStageDispatchParents = `-- name: ListStageDispatchParents :many
-SELECT id FROM issue
-WHERE stage_squad_id IS NOT NULL AND id > $1::uuid
-ORDER BY id
+SELECT issue_id FROM issue_stage_dispatch
+WHERE issue_id > $1::uuid
+ORDER BY issue_id
 LIMIT $2::int
 `
 
@@ -23,8 +105,8 @@ type ListStageDispatchParentsParams struct {
 	PageSize int32       `json:"page_size"`
 }
 
-// One page of epics whose stages the server dispatches, for the periodic
-// sweep. The caller pages with the last id it saw.
+// One page of parents with stage dispatch on, for the periodic sweep. The
+// caller pages with the last issue_id it saw.
 func (q *Queries) ListStageDispatchParents(ctx context.Context, arg ListStageDispatchParentsParams) ([]pgtype.UUID, error) {
 	rows, err := q.db.Query(ctx, listStageDispatchParents, arg.After, arg.PageSize)
 	if err != nil {
@@ -33,11 +115,11 @@ func (q *Queries) ListStageDispatchParents(ctx context.Context, arg ListStageDis
 	defer rows.Close()
 	items := []pgtype.UUID{}
 	for rows.Next() {
-		var id pgtype.UUID
-		if err := rows.Scan(&id); err != nil {
+		var issue_id pgtype.UUID
+		if err := rows.Scan(&issue_id); err != nil {
 			return nil, err
 		}
-		items = append(items, id)
+		items = append(items, issue_id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -45,124 +127,37 @@ func (q *Queries) ListStageDispatchParents(ctx context.Context, arg ListStageDis
 	return items, nil
 }
 
-const listWorkspaceStageDispatch = `-- name: ListWorkspaceStageDispatch :many
-SELECT id, workspace_id, title, description, status, priority, assignee_type, assignee_id, creator_type, creator_id, parent_issue_id, acceptance_criteria, context_refs, position, due_date, created_at, updated_at, number, project_id, origin_type, origin_id, first_executed_at, start_date, metadata, stage, properties, revision, last_activity_at, triage_state, duplicate_of_issue_id, model_profile_id, stage_squad_id, stage_dispatch_by FROM issue
-WHERE workspace_id = $1 AND stage_squad_id IS NOT NULL
-ORDER BY number
-LIMIT 200
+const upsertIssueStageDispatch = `-- name: UpsertIssueStageDispatch :one
+INSERT INTO issue_stage_dispatch (issue_id, workspace_id, squad_id, dispatch_by)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (issue_id) DO UPDATE
+SET squad_id = EXCLUDED.squad_id, dispatch_by = EXCLUDED.dispatch_by, updated_at = now()
+RETURNING issue_id, workspace_id, squad_id, dispatch_by, created_at, updated_at
 `
 
-// Epics of a workspace whose stages the server dispatches, oldest first.
-func (q *Queries) ListWorkspaceStageDispatch(ctx context.Context, workspaceID pgtype.UUID) ([]Issue, error) {
-	rows, err := q.db.Query(ctx, listWorkspaceStageDispatch, workspaceID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []Issue{}
-	for rows.Next() {
-		var i Issue
-		if err := rows.Scan(
-			&i.ID,
-			&i.WorkspaceID,
-			&i.Title,
-			&i.Description,
-			&i.Status,
-			&i.Priority,
-			&i.AssigneeType,
-			&i.AssigneeID,
-			&i.CreatorType,
-			&i.CreatorID,
-			&i.ParentIssueID,
-			&i.AcceptanceCriteria,
-			&i.ContextRefs,
-			&i.Position,
-			&i.DueDate,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.Number,
-			&i.ProjectID,
-			&i.OriginType,
-			&i.OriginID,
-			&i.FirstExecutedAt,
-			&i.StartDate,
-			&i.Metadata,
-			&i.Stage,
-			&i.Properties,
-			&i.Revision,
-			&i.LastActivityAt,
-			&i.TriageState,
-			&i.DuplicateOfIssueID,
-			&i.ModelProfileID,
-			&i.StageSquadID,
-			&i.StageDispatchBy,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const setIssueStageDispatch = `-- name: SetIssueStageDispatch :one
-UPDATE issue SET stage_squad_id = $3, stage_dispatch_by = $4, updated_at = now()
-WHERE id = $1 AND workspace_id = $2
-RETURNING id, workspace_id, title, description, status, priority, assignee_type, assignee_id, creator_type, creator_id, parent_issue_id, acceptance_criteria, context_refs, position, due_date, created_at, updated_at, number, project_id, origin_type, origin_id, first_executed_at, start_date, metadata, stage, properties, revision, last_activity_at, triage_state, duplicate_of_issue_id, model_profile_id, stage_squad_id, stage_dispatch_by
-`
-
-type SetIssueStageDispatchParams struct {
-	ID          pgtype.UUID `json:"id"`
+type UpsertIssueStageDispatchParams struct {
+	IssueID     pgtype.UUID `json:"issue_id"`
 	WorkspaceID pgtype.UUID `json:"workspace_id"`
 	SquadID     pgtype.UUID `json:"squad_id"`
 	DispatchBy  pgtype.UUID `json:"dispatch_by"`
 }
 
-// Turns an epic's stage dispatch on (a squad) or off (NULL).
-func (q *Queries) SetIssueStageDispatch(ctx context.Context, arg SetIssueStageDispatchParams) (Issue, error) {
-	row := q.db.QueryRow(ctx, setIssueStageDispatch,
-		arg.ID,
+// Turns stage dispatch on for a parent issue, or moves it to another squad.
+func (q *Queries) UpsertIssueStageDispatch(ctx context.Context, arg UpsertIssueStageDispatchParams) (IssueStageDispatch, error) {
+	row := q.db.QueryRow(ctx, upsertIssueStageDispatch,
+		arg.IssueID,
 		arg.WorkspaceID,
 		arg.SquadID,
 		arg.DispatchBy,
 	)
-	var i Issue
+	var i IssueStageDispatch
 	err := row.Scan(
-		&i.ID,
+		&i.IssueID,
 		&i.WorkspaceID,
-		&i.Title,
-		&i.Description,
-		&i.Status,
-		&i.Priority,
-		&i.AssigneeType,
-		&i.AssigneeID,
-		&i.CreatorType,
-		&i.CreatorID,
-		&i.ParentIssueID,
-		&i.AcceptanceCriteria,
-		&i.ContextRefs,
-		&i.Position,
-		&i.DueDate,
+		&i.SquadID,
+		&i.DispatchBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.Number,
-		&i.ProjectID,
-		&i.OriginType,
-		&i.OriginID,
-		&i.FirstExecutedAt,
-		&i.StartDate,
-		&i.Metadata,
-		&i.Stage,
-		&i.Properties,
-		&i.Revision,
-		&i.LastActivityAt,
-		&i.TriageState,
-		&i.DuplicateOfIssueID,
-		&i.ModelProfileID,
-		&i.StageSquadID,
-		&i.StageDispatchBy,
 	)
 	return i, err
 }
