@@ -1719,10 +1719,6 @@
     "label": "Model profile",
     "assignee": "Assignee's profile"
   },
-  "stage_dispatch": {
-    "label": "단계",
-    "off": "배정 안 함"
-  },
   "views": {
     "builtin": {
       "my_issues": "내 태스크",

@@ -4,7 +4,6 @@ import type { IssueWakeup, IssueWakeupInput, IssueWakeupSummaryRow, PausedWakeup
 import type { WorkspaceWakeupPage, WorkspaceWakeupFilters } from "../types/issue-wakeup";
 import type { AgentModels, CreateModelProfileInput, CreatePersonalProfileInput, IssueModelProfile, ModelProfile, ModelProfileChange, ModelProfileInput, ModelProfileKind, RuntimeUnavailable, SetPersonalProfileInput, SingleModelInput, UpdateAgentModelsInput } from "../types/model-profile";
 import { AgentModelsSchema, IssueModelProfileSchema, ModelProfilePreviewSchema, ModelProfileSchema, RuntimeUnavailableSchema } from "./schemas";
-import { IssueStageDispatchSchema } from "./schemas";
 import {
   DeleteSubscriptionResultSchema,
   PoolListSchema,
@@ -35,7 +34,6 @@ import type {
   UpdateSubscriptionInput,
 } from "../types/subscription";
 import type { ManualRunList, RuntimeModelUsage, RuntimeRunFacts } from "../types/runtime-model";
-import type { IssueStageDispatch } from "../types/stage-dispatch";
 import { WorkspaceWakeupPageSchema, IssueWakeupSchema, IssueWakeupSummaryRowSchema, PausedWakeupSchema, SystemWakeupSchema, WakeupRunSchema, WorkspaceSystemWakeupSchema } from "./schemas";
 import type { ArchivedInboxFilters } from "../inbox/filter-store";
 import type { ArchivedInboxPage, ArchivedInboxFacets } from "../types/inbox";
@@ -1453,29 +1451,6 @@ export class ApiClient {
 
   setAgentSingleModel(agentId: string, input: SingleModelInput): Promise<AgentModels> {
     return this.sendAgentModels(agentId, "/single", "PUT", input);
-  }
-
-  /** The epic's stage dispatch; a backend without it reads as off. */
-  async getIssueStageDispatch(issueId: string): Promise<IssueStageDispatch> {
-    const off: IssueStageDispatch = { issue_id: issueId, squad_id: null, dispatch_by: null };
-    try {
-      const raw = await this.fetch<unknown>(`/api/issues/${encodeURIComponent(issueId)}/stage-dispatch`);
-      return parseWithFallback<IssueStageDispatch>(raw, IssueStageDispatchSchema, off, { endpoint: "GET /api/issues/:id/stage-dispatch" });
-    } catch (error) {
-      if (error instanceof ApiError && error.status === 404) return off;
-      throw error;
-    }
-  }
-
-  /** Hands the epic's stages to a squad, or stops with null. */
-  async setIssueStageDispatch(issueId: string, squadId: string | null): Promise<IssueStageDispatch> {
-    const raw = await this.fetch<unknown>(`/api/issues/${encodeURIComponent(issueId)}/stage-dispatch`, {
-      method: "PUT",
-      body: JSON.stringify({ squad_id: squadId }),
-    });
-    return parseWithFallback<IssueStageDispatch>(raw, IssueStageDispatchSchema, { issue_id: issueId, squad_id: squadId, dispatch_by: null }, {
-      endpoint: "PUT /api/issues/:id/stage-dispatch",
-    });
   }
 
   async getIssueModelProfile(issueId: string): Promise<IssueModelProfile> {

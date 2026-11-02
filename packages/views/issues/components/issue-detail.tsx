@@ -72,7 +72,6 @@ import { ActionShortcutKeycaps } from "../../common/shortcut-keycaps";
 import { PropRow } from "../../common/prop-row";
 import { TimelineHandoff } from "../../workflows/timeline-handoff";
 import { IssueModelProfilePicker } from "../../model-profiles/issue-model-profile-picker";
-import { IssueStageDispatchPicker } from "../../conveyor/issue-stage-dispatch-picker";
 import { PropertyIcon } from "../../common/property-icon";
 import type { Attachment, Issue, IssueProperty, IssueStatus, IssueStatusCategory, IssuePriority, TimelineEntry, UpdateIssueRequest } from "@multica/core/types";
 import { contentReferencesAttachment } from "@multica/core/types";
@@ -2909,7 +2908,6 @@ export function IssueDetail({ issueId, onDelete, onDone, defaultSidebarOpen = tr
           </PropRow>
           <IssueWorkflowPropRow projectId={issue.project_id} status={issue.status} label={t(($) => $.workflows.project.label)} />
           <IssueModelProfilePicker wsId={wsId} issueId={issue.id} />
-          <IssueStageDispatchPicker wsId={wsId} issueId={issue.id} hasChildren={childIssues.length > 0} />
 
           {/* Optional props — rendered only when set on the issue OR added
               via "+ Add property" in this session. Row order follows the

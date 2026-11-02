@@ -844,9 +844,6 @@ func main() {
 	if err := schedulerMgr.Register(scheduler.ChildEventSweepJob(&service.IssueWakeupService{Tasks: taskSvc})); err != nil {
 		slog.Error("scheduler: register child-done sweep", "error", err)
 	}
-	if err := schedulerMgr.Register(scheduler.StageDispatchJob(h.StageDispatchService())); err != nil {
-		slog.Error("scheduler: register stage dispatch", "error", err)
-	}
 	if err := schedulerMgr.Register(scheduler.ModelRoutingJob(taskSvc)); err != nil {
 		slog.Error("scheduler: register model routing", "error", err)
 	}
