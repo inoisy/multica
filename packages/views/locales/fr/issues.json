@@ -1787,10 +1787,6 @@
     "label": "Model profile",
     "assignee": "Assignee's profile"
   },
-  "stage_dispatch": {
-    "label": "Étapes",
-    "off": "Non attribuées"
-  },
   "views": {
     "builtin": {
       "my_issues": "Mes tâches",

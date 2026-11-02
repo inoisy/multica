@@ -4064,14 +4064,6 @@ export const IssueModelProfileSchema = z.object({
 
 export const ModelProfilePreviewSchema = z.object({ changes: z.array(ModelProfileChangeSchema).default([]) });
 
-// Stage dispatch of an epic (GET/PUT /api/issues/:id/stage-dispatch). Older
-// backends lack it; the client turns that into "off".
-export const IssueStageDispatchSchema = z.object({
-  issue_id: z.string(),
-  squad_id: z.string().nullable().default(null),
-  dispatch_by: z.string().nullable().default(null),
-}).loose();
-
 // Instance subscriptions. Enum-like fields fall back to a safe value so a
 // newer server's states still render; every optional field has a default.
 const nullableString = z.string().nullish().catch(null).transform((v) => v ?? null);

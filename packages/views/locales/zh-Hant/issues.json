@@ -1719,10 +1719,6 @@
     "label": "Model profile",
     "assignee": "Assignee's profile"
   },
-  "stage_dispatch": {
-    "label": "階段",
-    "off": "不分派"
-  },
   "views": {
     "builtin": {
       "my_issues": "我的任務",

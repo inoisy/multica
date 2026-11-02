@@ -2129,8 +2129,6 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 					r.Put("/system-wakeups/{rule}", h.UpdateIssueSystemWakeup)
 					r.Get("/model-profile", h.GetIssueModelProfile)
 					r.Put("/model-profile", h.SetIssueModelProfile)
-					r.Get("/stage-dispatch", h.GetIssueStageDispatch)
-					r.Put("/stage-dispatch", h.SetIssueStageDispatch)
 					r.Get("/active-task", h.GetActiveTaskForIssue)
 					r.Post("/tasks/{taskId}/cancel", h.CancelTask)
 					r.With(handler.RequireHumanActor).Post("/tasks/{taskId}/supplements", h.CreateTaskSupplement)
@@ -2241,9 +2239,6 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 					r.Delete("/resources/{resourceId}", h.DeleteProjectResource)
 				})
 			})
-
-			// Epics whose stages the server dispatches (conveyor board)
-			r.Get("/api/stage-dispatch", h.ListStageDispatch)
 
 			// Squads
 			r.Route("/api/squads", func(r chi.Router) {

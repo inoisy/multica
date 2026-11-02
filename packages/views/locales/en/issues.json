@@ -1787,10 +1787,6 @@
     "label": "Model profile",
     "assignee": "Assignee's profile"
   },
-  "stage_dispatch": {
-    "label": "Stages",
-    "off": "Not dispatched"
-  },
   "views": {
     "builtin": {
       "my_issues": "My Issues",

@@ -1719,10 +1719,6 @@
     "label": "Model profile",
     "assignee": "Assignee's profile"
   },
-  "stage_dispatch": {
-    "label": "ステージ",
-    "off": "割り当てない"
-  },
   "views": {
     "builtin": {
       "my_issues": "マイタスク",
