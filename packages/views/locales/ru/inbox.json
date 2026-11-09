@@ -12,14 +12,14 @@
   "filters": {
     "tooltip": "Фильтр входящих",
     "active_count_one": "{{count}} активный фильтр",
-    "active_count_other": "{{count}} активных фильтров",
+    "active_count_other": "{{count}} активных фильтра",
     "status": "Статус",
     "priority": "Приоритет",
     "from": "От",
     "unread_only": "Только непрочитанные",
     "no_agents_working": "Нет работающих агентов",
     "notification_count_one": "{{count}} уведомление",
-    "notification_count_other": "{{count}} уведомлений",
+    "notification_count_other": "{{count}} уведомления",
     "clear": "Очистить фильтры",
     "empty": "Нет уведомлений, соответствующих фильтрам",
     "active_count_few": "{{count}} активных фильтра",
@@ -76,8 +76,8 @@
     "new_comment": "Новый комментарий",
     "mentioned": "Упоминание",
     "review_requested": "Запрошено ревью",
-    "task_completed": "Задача выполнена",
-    "task_failed": "Задача не выполнена",
+    "task_completed": "Запуск завершён",
+    "task_failed": "Запуск завершился ошибкой",
     "agent_blocked": "Агент заблокирован",
     "agent_completed": "Агент завершил работу",
     "reaction_added": "Реакция",
@@ -101,7 +101,7 @@
     "created_with_agent": "Создано с помощью агента: {{identifier}}",
     "failed_with_detail": "Ошибка: {{detail}}",
     "autopilot_quota_blocked": "Запуск заблокирован, так как достигнут лимит",
-    "children_done_stage": "Подзадачи стадии {{stage}} завершены"
+    "children_done_stage": "Подзадачи этапа {{stage}} завершены"
   },
   "toasts": {
     "source_context_retry_started": "Повтор запущен с исходным контекстом",

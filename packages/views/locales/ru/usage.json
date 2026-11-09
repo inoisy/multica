@@ -1,6 +1,5 @@
 {
   "title": "Аналитика",
-  "tab_subscriptions": "Подписки",
   "tab_usage": "Использование",
   "header": {
     "timezone_and_updated": "{{tz}} · обновлено {{time}}",
@@ -16,8 +15,8 @@
     "tokens_label": "Токены · {{days}} дн.",
     "tokens_hint": "Вход {{input}} · Выход {{output}}",
     "run_time_label": "Время выполнения · {{days}} дн.",
-    "run_time_hint": "По {{tasks}} задачам",
-    "tasks_label": "Задачи · {{days}} дн.",
+    "run_time_hint": "Всего запусков: {{tasks}}",
+    "tasks_label": "Запуски · {{days}} дн.",
     "tasks_hint": "{{failed}} с ошибкой"
   },
   "dim": {
@@ -29,12 +28,12 @@
     "title_cost": "Стоимость по дням",
     "title_tokens": "Токены по дням",
     "title_time": "Время выполнения по дням",
-    "title_tasks": "Задачи по дням",
+    "title_tasks": "Запуски по дням",
     "title_errors": "Ошибки по дням",
     "metric_cost": "Стоимость",
     "metric_tokens": "Токены",
     "metric_time": "Время",
-    "metric_tasks": "Задачи",
+    "metric_tasks": "Запуски",
     "no_data": "Нет использования за этот период.",
     "metric_label": "Метрика"
   },
@@ -42,12 +41,12 @@
     "title_cost": "Стоимость по неделям",
     "title_tokens": "Токены по неделям",
     "title_time": "Время выполнения по неделям",
-    "title_tasks": "Задачи по неделям",
+    "title_tasks": "Запуски по неделям",
     "title_errors": "Ошибки по неделям",
     "partial_label": "{{range}} (неполная · {{covered}} из 7 дней)"
   },
   "errors": {
-    "kpi_failed_label": "Задачи с ошибкой · {{days}} дн.",
+    "kpi_failed_label": "Запуски с ошибкой · {{days}} дн.",
     "kpi_failed_hint": "Из {{total}} запусков",
     "kpi_rate_label": "Доля ошибок · {{days}} дн.",
     "kpi_agents_label": "Затронуто агентов · {{days}} дн.",
@@ -77,7 +76,7 @@
     "header_rate": "Доля",
     "other_agents": "Другие агенты",
     "low_sample": "Меньше {{count}} запусков за этот период — доля не показательна.",
-    "no_data": "Нет неудачных запусков за этот период.",
+    "no_data": "Нет неудачных запусков за этот период",
     "show_reasons": "Показать коды ошибок",
     "hide_reasons": "Скрыть коды ошибок",
     "show_all": "Показать все {{count}}",
@@ -94,11 +93,11 @@
     "header_tokens": "Токены",
     "header_cost": "Стоимость",
     "header_time": "Время",
-    "header_tasks": "Задачи",
+    "header_tasks": "Запуски",
     "usage_unreported_one": "{{count}} запуск не сообщил об использовании",
-    "usage_unreported_other": "{{count}} запусков не сообщили об использовании",
+    "usage_unreported_other": "{{count}} запуска не сообщили об использовании",
     "usage_unreported_pending_one": "{{count}} запуск не сообщил об использовании · итоги ещё обрабатываются",
-    "usage_unreported_pending_other": "{{count}} запусков не сообщили об использовании · итоги ещё обрабатываются",
+    "usage_unreported_pending_other": "{{count}} запуска не сообщили об использовании · итоги ещё обрабатываются",
     "usage_totals_pending": "Итоги использования ещё обрабатываются",
     "show_all": "Показать все",
     "show_less": "Показать топ {{count}}",
@@ -110,9 +109,10 @@
   },
   "empty": {
     "title": "Данных пока нет",
-    "body": "Как только агенты начнут выполнять здесь задачи, расход токенов и время выполнения появятся в этом разделе."
+    "body": "Как только агенты начнут работать, здесь появятся расход токенов, стоимость и доля запусков с ошибками."
   },
   "duration": {
     "less_than_minute": "<1 мин"
-  }
+  },
+  "tab_subscriptions": "Подписки"
 }

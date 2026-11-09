@@ -43,8 +43,8 @@
       "harness": "Harness",
       "agents": "Agents",
       "workload": "Workload",
-      "runs_24h": "Runs, 24 h",
-      "status": "Status"
+      "status": "Status",
+      "runs_24h": "Runs, 24 h"
     },
     "groups": {
       "machines": {
@@ -63,12 +63,12 @@
       "add_machine_hint": "Run two commands on that machine so agents can use the CLIs installed there",
       "view_commands": "View commands",
       "owner_you": "You",
-      "runs_24h": "Runs in 24 h: {{count}}",
-      "runs_unavailable": "Run counts unavailable",
       "connect": "Connect",
       "not_connected": "Not connected",
       "provided_by": "By {{vendor}}",
-      "no_matches": "No machines or cloud services match"
+      "no_matches": "No machines or cloud services match",
+      "runs_24h": "Runs in 24 h: {{count}}",
+      "runs_unavailable": "Run counts unavailable"
     },
     "filters": {
       "all": "All runtimes",
@@ -175,6 +175,10 @@
     "no_agents": "No agents are bound to this runtime yet.",
     "diagnostics_cli": "CLI",
     "diagnostics_visibility": "Visibility",
+    "concurrency_title": "Concurrency",
+    "concurrency_none": "No limit",
+    "concurrency_hint": "Max runs at once across all agents on this runtime ({{min}}–{{max}}). Leave empty for no limit.",
+    "toast_concurrency_failed": "Failed to update concurrency limit",
     "visibility_label": {
       "private": "Private",
       "public": "Public",
@@ -679,6 +683,30 @@
       "working": "Disconnecting…",
       "cancel": "Cancel",
       "done": "Qoder disconnected"
+    }
+  },
+  "intro": {
+    "title": "Give your agents a computer to work on",
+    "description": "A runtime is where agents actually run their work: your computer, a server, or a cloud service.",
+    "slides": {
+      "local": {
+        "title": "This computer connects itself",
+        "description": "Download the desktop app and sign in. Claude Code, Codex and the other CLIs on this computer show up on their own."
+      },
+      "remote": {
+        "title": "Another machine, two commands",
+        "description": "Install the CLI on a server or another computer, then run multica setup to connect it."
+      },
+      "cloud": {
+        "title": "Or use a cloud node",
+        "description": "Rather not manage machines? Create a cloud node hosted by Multica."
+      }
+    },
+    "art": {
+      "this_computer": "This computer · Desktop",
+      "detected": "Detected harnesses",
+      "run_there": "Run on that machine",
+      "connected": "{{name}} connected to Multica"
     }
   },
   "accounts": {

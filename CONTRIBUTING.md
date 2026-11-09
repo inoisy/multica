@@ -1,9 +1,10 @@
 # Contributing Guide
 
-This guide documents the local development workflow for contributors working on the Multica codebase.
+This guide documents issue and pull request requirements and the local development workflow for contributors working on the Multica codebase.
 
 It covers:
 
+- issue templates, pull request requirements, and review evidence
 - first-time setup
 - environments: starting, inspecting, stopping and deleting them
 - day-to-day development in the main checkout
@@ -28,6 +29,47 @@ other work — you agree to condition 2 of the [Multica License](LICENSE):
 
 See the [LICENSE](LICENSE) file for the full terms.
 
+## Opening an Issue
+
+Choose the form that fits your report:
+
+- **[Feature request](.github/ISSUE_TEMPLATE/feature_request.yml):** Explain the
+  **Problem** and **Goal**. A high-level **Proposal**, **Alternatives**, and
+  **Screenshots** are optional; you can raise a problem without designing its
+  solution.
+- **[Bug report](.github/ISSUE_TEMPLATE/bug_report.yml):** Describe the
+  **Problem**, **Expected behavior**, and **Steps to reproduce**. For intermittent
+  bugs, explain what you tried and how often it happens. Screenshots, logs, and
+  environment details are optional supporting information.
+
+Select the affected area so we can route the report. Bug reports also ask for
+the deployment type. Screenshots are optional for issues; the mandatory
+screenshot rule below applies to PRs that change UI or interactions.
+
+## Pull Request Requirements
+
+Use the [PR template](.github/PULL_REQUEST_TEMPLATE.md) with these five sections:
+
+1. **Problem:** Describe the concrete problem, who is affected, and why it matters.
+2. **Goal:** State the intended outcome of the change.
+3. **Proposal:** Explain the high-level design and why it achieves the goal.
+   Make it understandable to a reader without much project background. Keep
+   implementation details to a minimum.
+4. **Alternatives (optional):** When useful, briefly describe other approaches
+   and why you did not choose them.
+5. **Screenshots:** For UI or interaction changes, attach screenshots or a
+   screen recording from the running app showing the affected screens and
+   states. Before/after comparisons are strongly preferred; for a new screen,
+   show the after state. If there is no UI or interaction impact, write "N/A"
+   and explain why.
+
+End the description with `Closes #<issue>` when the PR resolves an issue.
+
+**UI or interaction PRs without screenshots or a recording are rejected by
+default.** Reviewers should request changes or close the PR until one is
+provided. PRs
+missing the problem, goal, or high-level proposal are also not ready for review.
+
 ## Development Model
 
 Local development uses one shared PostgreSQL container and one database per checkout.
@@ -46,6 +88,40 @@ This keeps Docker simple while still isolating schema and data.
 - `pnpm` `10.28.2`
 - Go `1.26.9`
 - Docker
+
+Outside mobile, `pnpm typecheck` uses the native TypeScript 7 compiler (`tsc`,
+provided by the `@typescript/native` npm alias). The `typescript` dependency
+aliases `@typescript/typescript6` so ESLint, Next.js builds, and repository
+scripts retain the compatible TypeScript 6 API. Use `tsc6` to check with that
+compiler explicitly. Keep both dependencies when updating the toolchain;
+replacing the API package with TypeScript 7 breaks API consumers.
+Mobile keeps its own TypeScript dependency.
+When removing TS6 compatibility, update the `typescript` peer range in
+`packages/eslint-config/package.json` together with TypeScript API support in
+`typescript-eslint`.
+
+### Editor TypeScript SDK
+
+The compatibility package provides the compiler API but does not include
+`node_modules/typescript/lib/tsserver.js`. An existing workspace SDK selection
+or `typescript.tsdk` setting pointing to `node_modules/typescript/lib` can
+therefore become invalid or fall back to the editor's bundled TypeScript.
+
+To keep TS6 in VS Code with the repository root open:
+
+1. After `pnpm install`, set the SDK directory to
+   `node_modules/@typescript/old/lib`, the real TS6 installation in this
+   repository's pnpm layout. Use `typescript.tsdk`, or `js/ts.tsdk.path` in
+   versions using that setting name. The selected directory must contain
+   `tsserver.js`.
+2. Open a TypeScript file, run **TypeScript: Select TypeScript Version**, and
+   select the workspace version. Confirm TS6 is selected in the language
+   status item. See [VS Code's SDK selection instructions](https://code.visualstudio.com/docs/typescript/typescript-transpiling#_using-newer-typescript-versions).
+
+To use the TS7 language server instead, remove the TS6 SDK override, install
+the [official TypeScript 7 extension](https://marketplace.visualstudio.com/items?itemName=TypeScriptTeam.native-preview),
+and run **TypeScript: Enable TypeScript 7**. The editor language server is
+selected separately from the CLI compiler used by `pnpm typecheck`.
 
 ## Important Rules
 
@@ -466,6 +542,64 @@ this environment's Electron userData. Direct `pnpm dev:desktop` still uses its
 path-derived fallback when it is run outside `make up`.
 
 Log in with `dev@localhost` and `888888`.
+
+#### Scripting Desktop over CDP
+
+Some bugs only reproduce in Electron, so evidence for them has to come from the
+running app driven with real input. Start Desktop with a Chrome DevTools
+Protocol endpoint, then attach Playwright to it:
+
+```bash
+make up C=desktop ARGS="--ephemeral --cdp"
+make env-exec ARGS="-- node scripts/desktop-cdp.mjs --screenshot desktop.png"
+make env-exec ARGS="-- node scripts/desktop-cdp.mjs --record steps.mp4 ./steps.mjs"
+make destroy ARGS="--yes"
+```
+
+`--cdp` allocates a port for the environment, `--remote-debugging-port N`
+picks one, and `--no-cdp` drops it; later `make up` runs keep it. `make status`
+prints the endpoint, and `make status ARGS="--json"` reports `desktop_cdp_port`.
+
+`scripts/desktop-cdp.mjs` attaches to the main window of the already signed-in
+Desktop. A script argument is an ES module whose default export receives
+`{ browser, context, page, env, login, screencast, args }`. Drive it with
+`page.mouse` or locator clicks, which go through Chromium's input pipeline,
+rather than `element.click()` inside `page.evaluate`. `--login`, or `login()`
+from a script, signs `dev@localhost` back in after a step signed out.
+`--record` needs `ffmpeg` to encode; without it the frames and an ffconcat file
+stay in `<file>.frames/`. The helper only disconnects, so the app stays up for
+the next attach.
+
+#### Capturing the native window
+
+A renderer screenshot has no title bar or traffic lights. To capture the real
+macOS window of this environment's Desktop, start it with the debug port from
+above and run the capture script from the checkout:
+
+```bash
+make up C=desktop ARGS="--ephemeral --cdp"
+node scripts/desktop-window-capture.mjs window.png
+node scripts/desktop-window-capture.mjs --compare origin/main shots/ -- apps/desktop packages/views
+make destroy ARGS="--yes"
+```
+
+The script finds the window by its owner PID, the process listening on the
+CDP port that `make status` has verified for this environment. It never matches
+by app name or window title: a dev build is also called "Multica Canary", and
+its title is the current page, so either could pick up your own Desktop window.
+Transparent rounded corners are flattened onto white, and the colour profile is
+kept. The app running the command needs Screen Recording permission.
+
+`--compare BASE` writes `before.png` with BASE's version of the changed files
+and `after.png` with the worktree's. Desktop is stopped and relaunched for each
+state, because swapping files under HMR can leave the app stuck loading. The
+index is never touched, and the files are restored on success, failure and
+interrupt. A pathspec after `--` limits which files are swapped.
+
+`--prepare CMD` runs before every capture, in both modes, for example
+`make env-exec ARGS="-- node scripts/desktop-cdp.mjs ./open-page.mjs"` to open
+the page to show. It sees `DESKTOP_CAPTURE_STATE` set to `current`, `before` or
+`after`, and a non-zero exit aborts the run without capturing.
 
 ### Isolation Guarantee
 

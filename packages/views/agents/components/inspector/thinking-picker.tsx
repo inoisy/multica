@@ -30,6 +30,7 @@ export function ThinkingPicker({
   value,
   levels,
   canEdit = true,
+  allowClear = true,
   variant = "chip",
   showLabel = true,
   compact = false,
@@ -44,6 +45,8 @@ export function ThinkingPicker({
   levels: RuntimeModelThinkingLevel[];
   /** When false, render a static read-only display and skip the popover. */
   canEdit?: boolean;
+  /** ZCode requires an explicit reasoning level for reasoning-capable models. */
+  allowClear?: boolean;
   variant?: "chip" | "field";
   showLabel?: boolean;
   /** Field variant at the 32px height of the kit Input and Select. */
@@ -174,7 +177,7 @@ export function ThinkingPicker({
         </PickerItem>
       ))}
 
-      {value && (
+      {value && allowClear && (
         <TooltipHint label={t(($) => $.pickers.thinking_clear_title)}>
           <button
             type="button"

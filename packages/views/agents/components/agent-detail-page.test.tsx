@@ -26,20 +26,28 @@ import {
 vi.mock("./agent-properties-panel", () => ({
   AgentPropertiesPanel: ({
     agent,
+    onUpdate,
     onEditAccess,
-    onOpenModels,
+    onOpenSettings,
   }: {
     agent: Agent;
+    onUpdate: (id: string, data: Record<string, unknown>) => Promise<void>;
     onEditAccess: () => void;
-    onOpenModels: () => void;
+    onOpenSettings: () => void;
   }) => (
     <div>
       <span>model:{agent.model}</span>
+      <button
+        type="button"
+        onClick={() => void onUpdate(agent.id, { model: "new-model" })}
+      >
+        update model
+      </button>
       <button type="button" onClick={onEditAccess}>
         edit access
       </button>
-      <button type="button" onClick={onOpenModels}>
-        open models
+      <button type="button" onClick={onOpenSettings}>
+        all settings
       </button>
     </div>
   ),
@@ -76,33 +84,20 @@ vi.mock("./agent-advanced-settings", () => ({
       "integrations",
     ].includes(value),
   AgentAdvancedSettings: ({
-    agent,
     section,
     onSectionChange,
-    onUpdate,
   }: {
-    agent: Agent;
     section: string | null;
     onSectionChange: (section: string | null) => void;
-    onUpdate: (id: string, data: Record<string, unknown>) => Promise<void>;
-  }) => (
-    <>
-      <button
-        type="button"
-        onClick={() => void onUpdate(agent.id, { model: "new-model" })}
-      >
-        update model
-      </button>
-      {section === null ? null : (
-        <div data-testid="advanced-settings">
-          advanced:{section}
-          <button type="button" onClick={() => onSectionChange(null)}>
-            close advanced
-          </button>
-        </div>
-      )}
-    </>
-  ),
+  }) =>
+    section === null ? null : (
+      <div data-testid="advanced-settings">
+        advanced:{section}
+        <button type="button" onClick={() => onSectionChange(null)}>
+          close advanced
+        </button>
+      </div>
+    ),
 }));
 vi.mock("./agent-work-dialog", () => ({
   AgentWorkDialog: ({
@@ -504,18 +499,6 @@ describe("AgentDetailPage direct-detail fallback", () => {
   });
 });
 
-describe("AgentDetailPage models", () => {
-  it("opens General in Advanced settings, where the Models list lives", async () => {
-    agentsRef.current = [baseAgent];
-    renderPage();
-    await screen.findByRole("button", { name: "Assign work" });
-
-    fireEvent.click(screen.getByRole("button", { name: "open models" }));
-
-    expect(await screen.findByTestId("advanced-settings")).toHaveTextContent("advanced:general");
-  });
-});
-
 describe("AgentDetailPage layout", () => {
   it("puts the agent in the breadcrumb and its name and description in the body", async () => {
     agentsRef.current = [{ ...baseAgent, description: "Design and frontend" }];
@@ -574,7 +557,7 @@ describe("AgentDetailPage layout", () => {
 });
 
 describe("AgentDetailPage deep links", () => {
-  it("opens Advanced settings at the section named by ?view=", async () => {
+  it("opens Settings at the section named by ?view=", async () => {
     renderPage("view=general&focus=conversation_starters");
     expect(await screen.findByTestId("advanced-settings")).toHaveTextContent(
       "advanced:general",
@@ -628,6 +611,15 @@ describe("AgentDetailPage deep links", () => {
     expect(screen.getByTestId("advanced-settings")).toHaveTextContent(
       "advanced:access",
     );
+  });
+
+  it("opens Settings at General from the properties panel", async () => {
+    const { replace } = renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "all settings" }));
+    expect(screen.getByTestId("advanced-settings")).toHaveTextContent(
+      "advanced:general",
+    );
+    expect(replace).toHaveBeenLastCalledWith("/acme/agents/agent-1?view=general");
   });
 
   it("opens the work list from View all", async () => {
@@ -721,7 +713,7 @@ describe("AgentDetailPage DM button", () => {
 });
 
 describe("AgentDetailPage more actions", () => {
-  it("keeps Advanced settings and copy actions but no Archive for a system agent", async () => {
+  it("keeps Settings and copy actions but no Archive for a system agent", async () => {
     // An admin passes `canEditAgent`, so only the system key keeps Archive
     // out of the menu.
     agentsRef.current = [{ ...baseAgent, system_key: "mika" }];
@@ -731,7 +723,7 @@ describe("AgentDetailPage more actions", () => {
     await screen.findByRole("button", { name: "Assign work" });
     const menu = openMoreActions();
     expect(
-      within(menu).getByRole("menuitem", { name: "Advanced settings" }),
+      within(menu).getByRole("menuitem", { name: "Settings" }),
     ).toBeInTheDocument();
     expect(
       within(menu).getByRole("menuitem", { name: "Copy link" }),
@@ -755,15 +747,31 @@ describe("AgentDetailPage more actions", () => {
     expect(push).toHaveBeenCalledWith("/acme/agents");
   });
 
-  it("opens Advanced settings at General", async () => {
+  it("opens Settings at General", async () => {
     renderPage();
     await screen.findByRole("button", { name: "Assign work" });
     fireEvent.click(
-      within(openMoreActions()).getByRole("menuitem", { name: "Advanced settings" }),
+      within(openMoreActions()).getByRole("menuitem", { name: "Settings" }),
     );
     expect(screen.getByTestId("advanced-settings")).toHaveTextContent(
       "advanced:general",
     );
+  });
+
+  it("opens Settings at General from the header button", async () => {
+    const { replace } = renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
+    expect(screen.getByTestId("advanced-settings")).toHaveTextContent(
+      "advanced:general",
+    );
+    expect(replace).toHaveBeenLastCalledWith("/acme/agents/agent-1?view=general");
+  });
+
+  it("keeps the header Settings button on an archived agent", async () => {
+    agentsRef.current = [{ ...baseAgent, archived_at: "2026-06-01T00:00:00Z" }];
+    renderPage();
+    await screen.findByText(/This agent is archived/);
+    expect(screen.getByRole("button", { name: "Settings" })).toBeInTheDocument();
   });
 
   it("copies the shareable link and the agent ID", async () => {

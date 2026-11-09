@@ -12,10 +12,10 @@
     "runtimes": "Среды выполнения",
     "skills": "Навыки",
     "settings": "Настройки",
+    "views": "Представления",
     "subscriptions": "Подписки",
     "pages": "Страницы",
-    "model_profiles": "Профили моделей",
-    "views": "Представления"
+    "model_profiles": "Профили моделей"
   },
   "tab": {
     "issue": "Задача",
@@ -71,20 +71,22 @@
     "team": "Команда"
   },
   "rail": {
-    "label": "Навигация приложения",
-    "sheet_description": "Переключение разделов и рабочих пространств.",
-    "inbox": "Почта",
+    "label": "Навигация по приложению",
+    "sheet_description": "Переключайтесь между разделами и рабочими пространствами.",
+    "inbox": "Входящие",
     "work": "Работа",
-    "team": "Агенты",
+    "team": "Команда",
     "chat": "Чат",
     "autopilots": "Авто",
     "switch_workspace": "Сменить рабочее пространство",
-    "invitation_from": "{{name}} приглашает вас",
+    "invitation_from": "Вас приглашает {{name}}",
     "open_in_new_window": "Открыть в новом окне",
-    "open_in_new_window_click": "Клик",
+    "open_in_new_window_click": "Нажмите",
     "open_in_other_window": "Уже открыто в другом окне",
     "in_other_window": "Другое окно",
-    "all_workspaces_open": "Все рабочие пространства уже открыты в окнах"
+    "all_workspaces_open": "Все рабочие пространства уже открыты в окнах",
+    "pin_workspace": "Закрепить рабочее пространство",
+    "unpin_workspace": "Открепить рабочее пространство"
   },
   "panels": {
     "work": {
@@ -93,10 +95,8 @@
       "views": "Представления",
       "new_project": "Новый проект",
       "new_issue_in_project": "Новая задача в «{{name}}»",
-      "all_projects_one": "Все проекты ({{count}})",
-      "all_projects_few": "Все проекты ({{count}})",
-      "all_projects_many": "Все проекты ({{count}})",
-      "all_projects_other": "Все проекты ({{count}})",
+      "all_projects_one": "Всего {{count}} проект",
+      "all_projects_other": "Всего {{count}} проекта",
       "project_issues": "Задачи в «{{name}}»",
       "project_issues_empty": "Нет задач",
       "project_issues_error": "Не удалось загрузить задачи",
@@ -117,48 +117,120 @@
       "projects_order_updated": "Недавно обновлённые",
       "projects_order_created": "Недавно созданные",
       "projects_show": "Показывать",
-      "projects_only_mine": "Только проекты, которые я веду",
+      "projects_only_mine": "Только проекты, которыми я руковожу",
       "projects_show_count": "Число открытых задач",
       "new_view": "Новое представление",
       "all_views": "Все представления",
-      "view_actions": "Действия для «{{name}}»",
+      "view_actions": "Действия с «{{name}}»",
       "view_copy_link": "Копировать ссылку",
-      "view_remove": "Убрать из боковой панели",
+      "view_remove": "Убрать с боковой панели",
       "view_rename": "Переименовать",
       "view_duplicate": "Дублировать",
-      "view_delete": "Удалить представление"
+      "view_delete": "Удалить представление",
+      "all_projects_few": "Всего {{count}} проекта",
+      "all_projects_many": "Всего {{count}} проектов",
+      "project_issues_retry": "Повторить",
+      "unread": "Непрочитанные"
     },
     "team": {
       "new_agent": "Новый агент",
-      "needs_attention": "Требуют внимания",
-      "stuck_one": "{{count}} задача ждёт среду выполнения не в сети",
-      "stuck_few": "{{count}} задачи ждут среду выполнения не в сети",
-      "stuck_many": "{{count}} задач ждут среду выполнения не в сети",
-      "stuck_other": "{{count}} задачи ждут среду выполнения не в сети",
+      "needs_attention": "Требует внимания",
+      "stuck_one": "{{count}} запуск ожидает подключения среды выполнения",
+      "stuck_other": "{{count}} запуска ожидают подключения среды выполнения",
       "working_now": "Работают сейчас",
-      "running_tasks_one": "{{count}} задача выполняется",
-      "running_tasks_few": "{{count}} задачи выполняются",
-      "running_tasks_many": "{{count}} задач выполняется",
-      "running_tasks_other": "{{count}} задачи выполняется",
+      "running_tasks_one": "Выполняется {{count}} запуск",
+      "running_tasks_other": "Выполняется {{count}} запуска",
       "all_agents": "Все агенты",
       "my_agents": "Мои агенты",
-      "squads_and_members": "Команды и участники",
+      "squads_and_members": "Отряды и участники",
       "members_one": "{{count}} участник",
-      "members_few": "{{count}} участника",
-      "members_many": "{{count}} участников",
       "members_other": "{{count}} участника",
       "resources": "Ресурсы",
-      "runtimes_offline_one": "{{count}} не в сети",
-      "runtimes_offline_few": "{{count}} не в сети",
-      "runtimes_offline_many": "{{count}} не в сети",
-      "runtimes_offline_other": "{{count}} не в сети",
-      "invite_member": "Пригласить участника"
+      "invite_member": "Пригласить участника",
+      "stuck_few": "{{count}} запуска ожидают подключения среды выполнения",
+      "stuck_many": "{{count}} запусков ожидают подключения среды выполнения",
+      "running_tasks_few": "Выполняются {{count}} запуска",
+      "running_tasks_many": "Выполняется {{count}} запусков",
+      "members_few": "{{count}} участника",
+      "members_many": "{{count}} участников",
+      "runtimes_online_one": "В сети: {{count}}",
+      "runtimes_online_few": "В сети: {{count}}",
+      "runtimes_online_many": "В сети: {{count}}",
+      "runtimes_online_other": "В сети: {{count}}",
+      "show_fewer_agents": "Показать меньше",
+      "show_more_agents": "Ещё {{count}}…"
     },
     "autopilots": {
       "all": "Все автопилоты",
       "list": "Автопилоты",
       "templates": "Из шаблона"
     }
+  },
+  "account": {
+    "trigger": "Аккаунт",
+    "profile": "Профиль",
+    "theme": "Тема",
+    "themes": {
+      "light": "Светлая",
+      "dark": "Тёмная",
+      "system": "Системная"
+    },
+    "language": "Язык",
+    "shortcuts": "Сочетания клавиш"
+  },
+  "collection": {
+    "filter": "Фильтр",
+    "filter_count_one": "{{count}} фильтр",
+    "filter_count_other": "{{count}} фильтра",
+    "reset": "Сбросить",
+    "clear_search": "Очистить поиск",
+    "display": "Настройки отображения",
+    "selected_one": "Выбрано: {{count}}",
+    "selected_other": "Выбрано: {{count}}",
+    "clear_selection": "Снять выделение",
+    "select_all": "Выбрать всё",
+    "select_row": "Выбрать строку",
+    "row_actions": "Действия со строкой",
+    "sort_by": "Сортировать по",
+    "direction_asc": "По возрастанию",
+    "direction_desc": "По убыванию",
+    "section_columns": "Столбцы",
+    "load_more": "Загрузить ещё",
+    "loading_more": "Загрузка…",
+    "filter_count_few": "{{count}} фильтра",
+    "filter_count_many": "{{count}} фильтров",
+    "selected_few": "Выбрано: {{count}}",
+    "selected_many": "Выбрано: {{count}}",
+    "clear_filters": "Сбросить фильтры",
+    "clear_filters_and_search": "Сбросить фильтры и поиск"
+  },
+  "object_page": {
+    "toggle_panel": "Показать или скрыть правую панель",
+    "properties": "Свойства"
+  },
+  "feature_intro": {
+    "carousel": "карусель",
+    "go_to_slide": "Перейти к слайду {{index}}",
+    "next": "Далее",
+    "previous": "Назад",
+    "read_docs": "Открыть документацию",
+    "slide": "слайд",
+    "slide_position": "{{current}} из {{total}}"
+  },
+  "whats_new": {
+    "action": {
+      "learn_more": "Подробнее",
+      "open": "Открыть",
+      "try": "Попробовать"
+    },
+    "panel": {
+      "close": "Закрыть",
+      "full_changelog": "Полный список изменений",
+      "new": "Новое",
+      "release_notes": "Изменения в v{{version}}",
+      "title": "Что нового"
+    },
+    "trigger": "Что нового"
   },
   "custom_pages": {
     "title": "Страницы",
@@ -201,44 +273,5 @@
   "section_tabs_short": {
     "modelProfiles": "Профили",
     "runtimes": "Среды"
-  },
-  "account": {
-    "trigger": "Аккаунт",
-    "profile": "Профиль",
-    "theme": "Тема",
-    "themes": {
-      "light": "Светлая",
-      "dark": "Тёмная",
-      "system": "Системная"
-    },
-    "language": "Язык",
-    "shortcuts": "Горячие клавиши"
-  },
-  "collection": {
-    "filter": "Фильтр",
-    "filter_count_one": "{{count}} фильтр",
-    "filter_count_few": "{{count}} фильтра",
-    "filter_count_many": "{{count}} фильтров",
-    "filter_count_other": "{{count}} фильтров",
-    "reset": "Сбросить",
-    "display": "Настройки отображения",
-    "selected_one": "Выбран {{count}}",
-    "selected_few": "Выбрано {{count}}",
-    "selected_many": "Выбрано {{count}}",
-    "selected_other": "Выбрано {{count}}",
-    "clear_selection": "Снять выделение",
-    "select_all": "Выбрать все",
-    "select_row": "Выбрать строку",
-    "row_actions": "Действия со строкой",
-    "sort_by": "Сортировка",
-    "direction_asc": "По возрастанию",
-    "direction_desc": "По убыванию",
-    "section_columns": "Столбцы",
-    "load_more": "Загрузить ещё",
-    "loading_more": "Загрузка…"
-  },
-  "object_page": {
-    "toggle_panel": "Показать или скрыть правую панель",
-    "properties": "Свойства"
   }
 }

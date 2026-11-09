@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronRight, Loader2, Maximize2, Square } from "@multica/ui/icons";
 import { toast } from "sonner";
@@ -11,6 +11,8 @@ import { useCustomPricingStore } from "@multica/core/runtimes/custom-pricing-sto
 import type { AgentTask } from "@multica/core/types";
 import { IconButton } from "@multica/ui/components/common/icon-button";
 import { cn } from "@multica/ui/lib/utils";
+import { Checkbox } from "@multica/ui/components/ui/checkbox";
+import { Skeleton } from "@multica/ui/components/ui/skeleton";
 import { useTimeAgo } from "../../i18n";
 import {
   Tooltip,
@@ -28,7 +30,7 @@ import { compareActiveIssueTasks } from "./active-task-order";
 import { formatDuration as formatAgentTime } from "../../dashboard/utils";
 import {
   formatTokens,
-  formatUsd,
+  hasTokenFigure,
   summarizeTaskUsage,
   summarizeTaskUsageAcross,
 } from "../../runtimes/utils";
@@ -43,7 +45,7 @@ import {
 import { canRetryRun, RetryRunButton } from "./retry-run-button";
 import { TaskStatusIcon } from "./task-status-icon";
 import { useTaskWaitText } from "../../model-profiles";
-import { useStatusLabel, useTriggerText } from "./task-run-labels";
+import { useFormatSpend, useStatusLabel, useTriggerText } from "./task-run-labels";
 import { WakeupRunLabel } from "./wakeup-source-chip";
 
 // Sidebar summary: totals, a bounded cost chart, active runs and recent history.
@@ -68,6 +70,7 @@ interface ExecutionLogSectionProps {
   /** Shown in the Runs dialog's subtitle so it names the issue it lays out. */
   identifier?: string;
   issueTitle?: string;
+  hasChildren?: boolean;
 }
 
 // The sidebar lists this many rows; everything else is in the Runs dialog.
@@ -87,10 +90,18 @@ const PAST_STATUS_RANK: Record<string, number> = {
   completed: 2,
 };
 
-export function ExecutionLogSection({ issueId, identifier, issueTitle }: ExecutionLogSectionProps) {
+export function ExecutionLogSection({
+  issueId,
+  identifier,
+  issueTitle,
+  hasChildren = false,
+}: ExecutionLogSectionProps) {
   const { t } = useT("issues");
   const [open, setOpen] = useState(true);
   const [runsOpen, setRunsOpen] = useState(false);
+  const [includeChildren, setIncludeChildren] = useState(false);
+  const scopeLabelId = useId();
+  const includeDescendants = hasChildren && includeChildren;
   const pricings = useCustomPricingStore((s) => s.pricings);
 
   // Cache key registered in `issueKeys.tasks` (packages/core/issues/queries.ts)
@@ -98,7 +109,9 @@ export function ExecutionLogSection({ issueId, identifier, issueTitle }: Executi
   // a `["issues", "tasks"]` prefix-match — no local WS subscriptions
   // needed, and the cache stays fresh even when this component isn't
   // mounted (e.g. user cancels from agent-side, then navigates here).
-  const { data: tasks = [] } = useQuery(issueTasksOptions(issueId));
+  const { data: tasks = [], isPending, isError, refetch } = useQuery(
+    issueTasksOptions(issueId, includeDescendants),
+  );
 
   const activeTasks = useMemo(
     () =>
@@ -141,7 +154,7 @@ export function ExecutionLogSection({ issueId, identifier, issueTitle }: Executi
     [tasks, pricings],
   );
 
-  if (activeTasks.length === 0 && pastTasks.length === 0) return null;
+  if (!hasChildren && activeTasks.length === 0 && pastTasks.length === 0) return null;
 
   const queuedTasks = activeTasks.filter((task) => task.status === "queued");
   const startedTasks = activeTasks.filter((task) => task.status !== "queued");
@@ -177,17 +190,44 @@ export function ExecutionLogSection({ issueId, identifier, issueTitle }: Executi
           )}
           {activeTasks.length > 0 && (
             <div className="max-h-48 space-y-0.5 overflow-y-auto overscroll-contain rounded-md focus-visible:outline-2 focus-visible:outline-ring" role="region" aria-label={t(($) => $.runs_timeline.count_active, { count: activeTasks.length })} tabIndex={0}>
-              {startedTasks.map((task) => <ActiveTaskRow key={task.id} task={task} issueId={issueId} />)}
+              {startedTasks.map((task) => <ActiveTaskRow key={task.id} task={task} issueId={task.issue_id || issueId} showIssue={includeDescendants} />)}
               {groupQueued ? (
-                <QueuedTasksGroup tasks={queuedTasks} issueId={issueId} />
+                <QueuedTasksGroup tasks={queuedTasks} issueId={issueId} showIssue={includeDescendants} />
               ) : (
-                queuedTasks.map((task) => <ActiveTaskRow key={task.id} task={task} issueId={issueId} />)
+                queuedTasks.map((task) => <ActiveTaskRow key={task.id} task={task} issueId={task.issue_id || issueId} showIssue={includeDescendants} />)
               )}
             </div>
           )}
-          {latest.length > 0 && <div className="space-y-0.5">
-            {latest.map((task) => <PastRow key={task.id} task={task} issueId={issueId} />)}
-          </div>}
+          {hasChildren && (
+            <div className="flex min-h-7 items-center justify-between gap-2 px-2 text-micro text-muted-foreground">
+              <span>{t(($) => $.execution_log.latest)}</span>
+              <label className="flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap">
+                <Checkbox
+                  aria-labelledby={scopeLabelId}
+                  checked={includeDescendants}
+                  onCheckedChange={setIncludeChildren}
+                  className="size-3 [&_svg]:size-2.5"
+                />
+                <span id={scopeLabelId}>{t(($) => $.execution_log.include_children)}</span>
+              </label>
+            </div>
+          )}
+          {isPending ? (
+            <div role="status" aria-label={t(($) => $.execution_log.loading)} className="space-y-2 px-2 py-1">
+              <Skeleton className="h-6 w-full" />
+              <Skeleton className="h-6 w-3/4" />
+            </div>
+          ) : isError ? (
+            <button type="button" onClick={() => void refetch()} className="px-2 py-1 text-caption text-destructive underline">
+              {t(($) => $.execution_log.load_failed_retry)}
+            </button>
+          ) : tasks.every((task) => task.status === "deferred") ? (
+            <p className="px-2 py-1 text-caption text-muted-foreground">{t(($) => $.execution_log.empty)}</p>
+          ) : latest.length > 0 && (
+            <div className="space-y-0.5">
+              {latest.map((task) => <PastRow key={task.id} task={task} issueId={task.issue_id || issueId} showIssue={includeDescendants} />)}
+            </div>
+          )}
         </div>
       )}
       <IssueRunsDialog
@@ -196,7 +236,8 @@ export function ExecutionLogSection({ issueId, identifier, issueTitle }: Executi
         issueId={issueId}
         identifier={identifier ?? ""}
         issueTitle={issueTitle}
-        tasks={tasks}
+        hasChildren={hasChildren}
+        includeDescendants={includeDescendants}
       />
     </div>
   );
@@ -208,10 +249,19 @@ export function ExecutionLogSection({ issueId, identifier, issueTitle }: Executi
 // run reported, never 0.
 function RunTotals({ timeline }: { timeline: RunTimeline }) {
   const { t } = useT("issues");
+  const formatSpend = useFormatSpend();
   const priced = timeline.pricedCount > 0;
   const stats = [
-    [t(($) => $.runs_timeline.stat_spent), priced ? formatUsd(timeline.totalCost) : "—"],
-    [t(($) => $.runs_timeline.stat_tokens), priced ? formatTokens(timeline.tokens.total) : "—"],
+    [
+      t(($) => $.runs_timeline.stat_spent),
+      priced ? formatSpend({ cost: timeline.totalCost, credits: timeline.totalCredits }) : "—",
+    ],
+    [
+      t(($) => $.runs_timeline.stat_tokens),
+      priced && hasTokenFigure({ tokens: timeline.tokens.total, credits: timeline.totalCredits })
+        ? formatTokens(timeline.tokens.total)
+        : "—",
+    ],
     [t(($) => $.runs_timeline.stat_agent_time), formatAgentTime(timeline.agentMs / 1000, "0s")],
   ] as const;
   return (
@@ -219,7 +269,7 @@ function RunTotals({ timeline }: { timeline: RunTimeline }) {
       {stats.map(([label, value]) => (
         <div key={label} className="flex min-w-0 flex-col-reverse">
           <dt className="truncate text-micro text-muted-foreground">{label}</dt>
-          <dd className="truncate text-label font-medium tabular-nums">{value}</dd>
+          <dd className="break-words text-label font-medium tabular-nums">{value}</dd>
         </div>
       ))}
     </dl>
@@ -316,6 +366,7 @@ function RunCostBars({ timeline, onOpen }: { timeline: RunTimeline; onOpen: () =
 
 function RunBarSummary({ run }: { run: TimelineRun }) {
   const { t } = useT("issues");
+  const formatSpend = useFormatSpend();
   const trigger = useTriggerText(run.task);
   const status = useStatusLabel(run.task.status);
   return (
@@ -325,9 +376,14 @@ function RunBarSummary({ run }: { run: TimelineRun }) {
       </RunTriggerLabel>
       <span className="text-micro text-muted-foreground">
         {[
+          run.task.issue_identifier,
           // A run still going has not reported usage yet — that is not "none".
-          run.usage ? formatUsd(run.usage.cost) : run.active ? null : t(($) => $.execution_log.strip_no_usage),
           run.usage
+            ? formatSpend(run.usage)
+            : run.active
+              ? null
+              : t(($) => $.execution_log.strip_no_usage),
+          run.usage && hasTokenFigure(run.usage)
             ? t(($) => $.runs_timeline.tokens_count, { tokens: formatTokens(run.usage.tokens) })
             : null,
           run.durationMs != null ? formatAgentTime(run.durationMs / 1000, "0s") : null,
@@ -367,6 +423,7 @@ export function IssueRunsTotal({
   onOpen: () => void;
 }) {
   const { t } = useT("issues");
+  const formatSpend = useFormatSpend();
   // Custom rates are read imperatively inside `estimateCost`, so a saved rate
   // change does not re-render this on its own — subscribe and make the memo
   // depend on the snapshot, or the header total keeps quoting the old price
@@ -398,7 +455,7 @@ export function IssueRunsTotal({
     <Tooltip>
       <TooltipTrigger
         render={<button type="button" onClick={onOpen} />}
-        className={`flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-caption tabular-nums transition-colors hover:bg-accent/70 ${
+        className={`flex min-w-0 max-w-full items-center gap-1 rounded-md px-1.5 py-0.5 text-caption tabular-nums transition-colors hover:bg-accent/70 ${
           alone ? "ml-auto" : ""
         }`}
       >
@@ -408,7 +465,7 @@ export function IssueRunsTotal({
         {total && (
           <>
             <span className={`text-faint-foreground ${narrowTier}`}>·</span>
-            <span className="font-medium">{formatUsd(total.cost)}</span>
+            <span className="min-w-0 break-words text-right font-medium">{formatSpend(total)}</span>
           </>
         )}
       </TooltipTrigger>
@@ -445,11 +502,13 @@ export function ActiveTaskRow({
   task,
   issueId,
   onTranscriptOpenChange,
+  showIssue = false,
   onJump,
 }: {
   task: AgentTask;
   issueId: string;
   onTranscriptOpenChange?: (open: boolean, fromKeyboard?: boolean) => void;
+  showIssue?: boolean;
   /** Turns the trigger into a button that takes the reader to this run's block. */
   onJump?: () => void;
 }) {
@@ -527,7 +586,7 @@ export function ActiveTaskRow({
         </>
       );
   return (
-    <RowShell task={task} multiline={waitText !== null}>
+    <RowShell task={task} showIssue={showIssue} multiline={waitText !== null}>
       {waitText !== null ? (
         <div className="min-w-0 flex-1" data-testid="task-wait-reason">
           <div className="flex min-w-0 items-center gap-2">{triggerLine}</div>
@@ -597,7 +656,7 @@ export function ActiveTaskRow({
 
 // Several queued runs as one row: who is waiting and how many. Expanding it
 // lists each run in place, with its cancel action.
-function QueuedTasksGroup({ tasks, issueId }: { tasks: AgentTask[]; issueId: string }) {
+function QueuedTasksGroup({ tasks, issueId, showIssue }: { tasks: AgentTask[]; issueId: string; showIssue: boolean }) {
   const { t } = useT("issues");
   const { getActorName } = useActorName();
   const [expanded, setExpanded] = useState(false);
@@ -624,15 +683,16 @@ function QueuedTasksGroup({ tasks, issueId }: { tasks: AgentTask[]; issueId: str
           <ChevronRight aria-hidden="true" className={cn("size-3 text-faint-foreground transition-transform motion-reduce:transition-none", expanded && "rotate-90")} />
         </span>
       </button>
-      {expanded && tasks.map((task) => <ActiveTaskRow key={task.id} task={task} issueId={issueId} />)}
+      {expanded && tasks.map((task) => <ActiveTaskRow key={task.id} task={task} issueId={task.issue_id || issueId} showIssue={showIssue} />)}
     </>
   );
 }
 
 // ─── Past row ──────────────────────────────────────────────────────────────
 
-function PastRow({ task, issueId }: { task: AgentTask; issueId: string }) {
+function PastRow({ task, issueId, showIssue = false }: { task: AgentTask; issueId: string; showIssue?: boolean }) {
   const { t } = useT("issues");
+  const formatSpend = useFormatSpend();
   const { t: tAgents } = useT("agents");
   const { getActorName } = useActorName();
   const timeAgo = useTimeAgo();
@@ -674,12 +734,14 @@ function PastRow({ task, issueId }: { task: AgentTask; issueId: string }) {
     agentName,
     reason ? null : duration,
     time,
-    usage ? t(($) => $.runs_timeline.tokens_count, { tokens: formatTokens(usage.tokens) }) : null,
+    usage && hasTokenFigure(usage)
+      ? t(($) => $.runs_timeline.tokens_count, { tokens: formatTokens(usage.tokens) })
+      : null,
     usage?.models.join(", "),
   ].filter(Boolean).join(" · ");
 
   return (
-    <RowShell task={task} title={rowTitle} multiline={Boolean(reason)}>
+    <RowShell task={task} title={rowTitle} multiline={Boolean(reason)} showIssue={showIssue}>
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-2">
           {task.wakeup_id ? (
@@ -688,11 +750,11 @@ function PastRow({ task, issueId }: { task: AgentTask; issueId: string }) {
             <TriggerText text={trigger} emphasis />
           )}
           <TaskCommentCoverage task={task} />
-          <RowStatus title={statusTitle}>
+          <RowStatus title={statusTitle} wrap={!!usage?.credits.size}>
             <TaskStatusIcon status={task.status} />
             <span className="sr-only">{[label, time].filter(Boolean).join(" · ")}</span>
             {usage ? (
-              <span className="tabular-nums">{formatUsd(usage.cost)}</span>
+              <span className="tabular-nums">{formatSpend(usage)}</span>
             ) : (
               <span className="text-faint-foreground">—</span>
             )}
@@ -725,6 +787,7 @@ function RowShell({
   title,
   multiline = false,
   children,
+  showIssue = false,
 }: {
   task: AgentTask;
   /** Carries the details the right column no longer has room for (time,
@@ -735,6 +798,7 @@ function RowShell({
   /** Top-aligns the avatar with the first of several lines. */
   multiline?: boolean;
   children: React.ReactNode;
+  showIssue?: boolean;
 }) {
   return (
     <div
@@ -756,6 +820,11 @@ function RowShell({
           <span className="inline-block h-5 w-5 rounded-full bg-muted" />
         )}
       </span>
+      {showIssue && (
+        <span className="max-w-20 shrink-0 truncate font-mono text-micro text-muted-foreground" title={task.issue_title}>
+          {task.issue_identifier || task.issue_id}
+        </span>
+      )}
       {children}
     </div>
   );
@@ -815,14 +884,19 @@ export function TaskCommentCoverage({ task }: { task: AgentTask }) {
 function RowStatus({
   children,
   title,
+  wrap = false,
 }: {
   children: React.ReactNode;
   title?: string;
+  wrap?: boolean;
 }) {
   return (
     <div
       title={title}
-      className="flex h-6 shrink-0 items-center justify-end gap-1 overflow-hidden whitespace-nowrap text-caption [@media(hover:hover)]:group-hover/execution-log-row:hidden"
+      className={cn(
+        "flex shrink-0 items-center justify-end gap-1 text-caption [@media(hover:hover)]:group-hover/execution-log-row:hidden",
+        wrap ? "min-h-6 max-w-[60%] break-words text-right" : "h-6 overflow-hidden whitespace-nowrap",
+      )}
     >
       {children}
     </div>

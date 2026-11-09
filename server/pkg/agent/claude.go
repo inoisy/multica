@@ -223,6 +223,20 @@ func (b *claudeBackend) Execute(ctx context.Context, prompt string, opts ExecOpt
 		terminalResult := make(chan struct{})
 		terminationDone := make(chan struct{})
 		var stoppedAfterResult atomic.Bool
+		var controlMu sync.Mutex
+		pendingControls := 0
+		closeRequested := false
+		closeAfterControls := func() {
+			if supplements != nil {
+				supplements.end()
+			}
+			controlMu.Lock()
+			defer controlMu.Unlock()
+			closeRequested = true
+			if pendingControls == 0 {
+				closeStdin()
+			}
+		}
 
 		// On cancellation, timeout or a CLI outliving its terminal result,
 		// terminate claude and its tool/MCP subprocesses BEFORE unblocking the scanner. EOF stdin
@@ -273,11 +287,6 @@ func (b *claudeBackend) Execute(ctx context.Context, prompt string, opts ExecOpt
 		scanner := newAgentStreamScanner(stdout)
 
 		for scanner.Scan() {
-			// Background completion notifications must not replace the answer,
-			// session or usage already handed in for this managed prompt.
-			if sawResult {
-				continue
-			}
 			line := strings.TrimSpace(scanner.Text())
 			if line == "" {
 				continue
@@ -286,6 +295,11 @@ func (b *claudeBackend) Execute(ctx context.Context, prompt string, opts ExecOpt
 			var msg claudeSDKMessage
 			if err := json.Unmarshal([]byte(line), &msg); err != nil {
 				invalidEventCount++
+				continue
+			}
+			// A later result (a background task's completion) must not replace the
+			// answer, session or usage already handed in for this managed prompt.
+			if sawResult && msg.Type == "result" {
 				continue
 			}
 			eventCount++
@@ -335,7 +349,11 @@ func (b *claudeBackend) Execute(ctx context.Context, prompt string, opts ExecOpt
 						usage = resultUsage
 					}
 				}
-				closeStdin()
+				// Keep draining stdout while accepted control replies finish writing.
+				// Once those replies drain, stdin closes; requests arriving after that
+				// cannot be answered. The terminal result still bounds the CLI's
+				// lifetime (claudeResultExitGrace).
+				closeAfterControls()
 				close(terminalResult)
 			case "log":
 				if msg.Log != nil {
@@ -350,9 +368,20 @@ func (b *claudeBackend) Execute(ctx context.Context, prompt string, opts ExecOpt
 				if supplements != nil {
 					reply, _ = supplements.prepareHook(msg)
 				}
+				controlMu.Lock()
+				pendingControls++
+				controlMu.Unlock()
 				controlWrites.Add(1)
 				go func(msg claudeSDKMessage, reply func(io.Writer) error) {
 					defer controlWrites.Done()
+					defer func() {
+						controlMu.Lock()
+						defer controlMu.Unlock()
+						pendingControls--
+						if closeRequested && pendingControls == 0 {
+							closeStdin()
+						}
+					}()
 					if reply == nil {
 						b.handleControlRequest(msg, inputWriter)
 						return
@@ -938,6 +967,12 @@ func (s *claudeUsageSnapshot) appendedCostStateUsage() (map[string]TokenUsage, b
 		return nil, false, errors.New("Claude session file shrank during execution")
 	}
 	return readLastClaudeCostStateUsage(f, s.offset, info.Size())
+}
+
+// ClaudeConfigDir resolves Claude's config directory using the same inherited
+// environment and task overrides as the backend's child process.
+func ClaudeConfigDir(extraEnv map[string]string, cwd string) (string, error) {
+	return claudeConfigDir(buildEnv(extraEnv), cwd)
 }
 
 func claudeConfigDir(env []string, cwd string) (string, error) {
@@ -1530,6 +1565,12 @@ var detectVersionTimeout = 10 * time.Second
 func detectCLIVersion(ctx context.Context, runtimeCmd Command) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, detectVersionTimeout)
 	defer cancel()
+	probeCmd, cleanup, err := runtimeCmd.withProbeDirectory()
+	if err != nil {
+		return "", fmt.Errorf("detect version for %s: %w", runtimeCmd, ExplainExecError(err))
+	}
+	defer cleanup()
+	runtimeCmd = probeCmd
 	if runtime.GOOS == "windows" {
 		if native := resolveCodeArtsNativeFromShim(runtimeCmd.Path, os.Stat); native != "" {
 			runtimeCmd.Path = native
@@ -1559,8 +1600,18 @@ func detectCLIVersion(ctx context.Context, runtimeCmd Command) (string, error) {
 	// present. See salvageProbeAnswer.
 	//
 	// Built through runtimeCmd.exec so a custom runtime's fixed_args prefix is
-	// still applied (MUL-6260).
-	cmd := runtimeCmd.exec(ctx, "--version")
+	// still applied (MUL-6260). Desktop ZCode ships as a Node .cjs/.mjs bundle;
+	// those must go through chooseZcodeInvocation (node + script) the same way
+	// Execute does, with a clear error when node is missing from PATH.
+	var cmd *exec.Cmd
+	if isNodeScriptPath(runtimeCmd.Path) {
+		if err := requireNodeForZcodeScript(runtimeCmd.Path); err != nil {
+			return "", err
+		}
+		cmd, _, _ = runtimeCmd.execVia(ctx, chooseZcodeInvocation, runtimeCmd.Path, []string{"--version"}, runtimeCmd.logger)
+	} else {
+		cmd = runtimeCmd.exec(ctx, "--version")
+	}
 	hideAgentWindow(cmd)
 	cmd.WaitDelay = probeWaitDelay
 	data, err := outputOwned(cmd, runtimeCmd.logger)

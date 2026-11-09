@@ -13,18 +13,17 @@ const pickers = vi.hoisted(() => ({
     canEdit?: boolean;
     onChange: (id: string) => void;
   },
+  model: null as null | { canEdit?: boolean; onChange: (model: string) => void },
 }));
 const activityRef = vi.hoisted(() => ({
   current: new Map<string, unknown>(),
 }));
 const mockInitiateListModels = vi.hoisted(() => vi.fn());
-const mockGetAgentModels = vi.hoisted(() => vi.fn());
 
 vi.mock("@multica/core/api", () => ({
   api: {
     initiateListModels: (...args: unknown[]) => mockInitiateListModels(...args),
     getListModelsResult: vi.fn(),
-    getAgentModels: (...args: unknown[]) => mockGetAgentModels(...args),
   },
 }));
 vi.mock("@multica/core/hooks", () => ({
@@ -44,6 +43,12 @@ vi.mock("./inspector/runtime-picker", () => ({
   RuntimePicker: (props: NonNullable<typeof pickers.runtime>) => {
     pickers.runtime = props;
     return <div data-testid="runtime-picker" />;
+  },
+}));
+vi.mock("./inspector/model-picker", () => ({
+  ModelPicker: (props: NonNullable<typeof pickers.model>) => {
+    pickers.model = props;
+    return <div data-testid="model-picker" />;
   },
 }));
 
@@ -92,10 +97,14 @@ function agentOn(bound: AgentRuntime, over: Partial<Agent> = {}): Agent {
 
 function renderPanel(
   bound: AgentRuntime,
-  { agent = agentOn(bound) }: { agent?: Agent } = {},
+  {
+    agent = agentOn(bound),
+    canEdit = true,
+  }: { agent?: Agent; canEdit?: boolean } = {},
 ) {
+  const onUpdate = vi.fn(async () => {});
   const onEditAccess = vi.fn();
-  const onOpenModels = vi.fn();
+  const onOpenSettings = vi.fn();
   renderWithI18n(
     <QueryClientProvider
       client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
@@ -108,12 +117,14 @@ function renderPanel(
         owner={owner}
         members={[owner]}
         currentUserId="user-1"
+        canEdit={canEdit}
+        onUpdate={onUpdate}
         onEditAccess={onEditAccess}
-        onOpenModels={onOpenModels}
+        onOpenSettings={onOpenSettings}
       />
     </QueryClientProvider>,
   );
-  return { onEditAccess, onOpenModels };
+  return { onUpdate, onEditAccess, onOpenSettings };
 }
 
 function activityToday(total: number, completed: number, failed: number): AgentActivity {
@@ -129,15 +140,7 @@ function activityToday(total: number, completed: number, failed: number): AgentA
 
 beforeEach(() => {
   pickers.runtime = null;
-  mockGetAgentModels.mockReset();
-  mockGetAgentModels.mockResolvedValue({
-    mode: "profile",
-    profile_rows: [
-      { position: 2, runtime_name: "codex", model: "gpt", effective_model: "gpt", thinking_level: "", model_at_run: false },
-      { position: 1, runtime_name: "claude", model: "opus", effective_model: "opus", thinking_level: "high", model_at_run: false },
-    ],
-    personal_rows: [],
-  });
+  pickers.model = null;
   activityRef.current = new Map();
   mockInitiateListModels.mockReset();
 });
@@ -164,19 +167,35 @@ describe("AgentPropertiesPanel", () => {
     expect(screen.getByText("Claude")).toBeInTheDocument();
   });
 
-  // Runtime and model belong to the agent's Models list (model profiles).
-  it("shows the runtime read-only", () => {
-    renderPanel(claude);
+  it("changes the runtime and clears the runtime-native model settings with it", () => {
+    const { onUpdate } = renderPanel(claude);
 
-    expect(pickers.runtime?.canEdit).toBe(false);
+    expect(pickers.runtime?.canEdit).toBe(true);
+    pickers.runtime?.onChange("rt-other");
+    expect(onUpdate).toHaveBeenCalledWith("agent-1", {
+      runtime_id: "rt-other",
+      model: "",
+      thinking_level: "",
+      service_tier: "",
+    });
   });
 
-  it("shows the saved first model row and opens the Models list from it", async () => {
-    const { onOpenModels } = renderPanel(claude);
+  it("changes the model in place", () => {
+    const { onUpdate } = renderPanel(claude);
 
-    const model = await screen.findByText("claude·opus·high");
-    fireEvent.click(model.closest("button")!);
-    expect(onOpenModels).toHaveBeenCalledTimes(1);
+    expect(pickers.model?.canEdit).toBe(true);
+    pickers.model?.onChange("sonnet");
+    expect(onUpdate).toHaveBeenCalledWith(
+      "agent-1",
+      expect.objectContaining({ model: "sonnet" }),
+    );
+  });
+
+  it("keeps runtime and model read-only for someone who cannot edit", () => {
+    renderPanel(claude, { canEdit: false });
+
+    expect(pickers.runtime?.canEdit).toBe(false);
+    expect(pickers.model?.canEdit).toBe(false);
   });
 
   it("does not offer the Qoder runtime to other agents", () => {
@@ -191,8 +210,8 @@ describe("AgentPropertiesPanel", () => {
     });
 
     expect(pickers.runtime?.canEdit).toBe(false);
+    expect(pickers.model).toBeNull();
     expect(screen.queryByText("Model")).not.toBeInTheDocument();
-    expect(mockGetAgentModels).not.toHaveBeenCalled();
     expect(screen.getByText("Remote agent")).toBeInTheDocument();
     expect(screen.getByText("qa-42")).toBeInTheDocument();
     expect(mockInitiateListModels).not.toHaveBeenCalled();
@@ -205,6 +224,13 @@ describe("AgentPropertiesPanel", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /^Access: .+\. Change access$/ }));
     expect(onEditAccess).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens the full settings from All settings", () => {
+    const { onOpenSettings } = renderPanel(claude);
+
+    fireEvent.click(screen.getByRole("button", { name: "All settings" }));
+    expect(onOpenSettings).toHaveBeenCalledTimes(1);
   });
 
   it("counts the last 7 days of runs with their success rate", () => {
