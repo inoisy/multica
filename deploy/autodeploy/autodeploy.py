@@ -8,8 +8,9 @@ to the previous images if it does not. When mcp_service is set, the multica-task
 MCP image pinned in the same commit (mcp_pin_path) is deployed, health-checked and
 rolled back together with them. The daemon binary is swapped only while
 the daemon is idle. Destructive migrations stop the run until an operator
-passes --allow-destructive, unless the PR that added each of them was merged
-with the approval label (approve_label).
+passes --allow-destructive, unless each of them is byte-identical to the
+trusted upstream (trusted_upstream) or the PR that added it was merged with the
+approval label (approve_label).
 
 Runs as root from systemd (timer, webhook trigger). Stdlib only.
 """
@@ -64,6 +65,10 @@ DEFAULTS = {
     # A destructive migration deploys on its own when the PR that added it was
     # merged into the branch with this label; empty turns that off.
     "approve_label": "allow-destructive",
+    # A migration byte-identical to this repository's branch is upstream code the
+    # sync already brought in: it deploys without a label. Empty turns that off.
+    "trusted_upstream": "multica-ai/multica",
+    "trusted_upstream_branch": "main",
     "dry_run": True,
 }
 
@@ -125,6 +130,42 @@ def destructive_path(problem):
     if not sep or not name.startswith("server/migrations/") or text.startswith("existing migration"):
         return None
     return name
+
+
+MIGRATIONS_DIR = "server/migrations/"
+
+
+def migration_changes(before, after):
+    """before/after: {path: blob sha} of server/migrations at two commits.
+    Returns compare-style entries for what changed between them."""
+    files = []
+    for name in sorted(after):
+        if name not in before:
+            files.append({"filename": name, "status": "added"})
+        elif before[name] != after[name]:
+            files.append({"filename": name, "status": "modified"})
+    files += [{"filename": name, "status": "removed"} for name in sorted(before) if name not in after]
+    return files
+
+
+def problem_path(problem):
+    """Migration path a problem is about, or None for range-wide problems."""
+    name, sep, _ = problem.partition(": ")
+    return name if sep and name.startswith(MIGRATIONS_DIR) else None
+
+
+def upstream_approved(problems, after, upstream):
+    """Splits off problems about migrations whose content at the target equals
+    the trusted upstream's (same blob sha): upstream code the sync brought in.
+    A migration removed at the target is never approved."""
+    left, approved = [], []
+    for problem in problems:
+        path = problem_path(problem)
+        if path and path in after and upstream.get(path) == after[path]:
+            approved.append(path)
+        else:
+            left.append(problem)
+    return left, approved
 
 
 def pr_approves(pr, branch, label):
@@ -353,22 +394,43 @@ class Deployer:
         text = self.raw_file(self.cfg["mcp_pin_path"], target)
         return parse_mcp_pin(self.cfg, text)
 
+    def migration_tree(self, repo, ref):
+        """{path: blob sha} of server/migrations at ref. The recursive tree has no
+        300-file cap like the compare API; a truncated tree is an error."""
+        tree = self.http_json(f"https://api.github.com/repos/{repo}/git/trees/{ref}?recursive=1")
+        if tree.get("truncated"):
+            raise ValueError(f"git tree of {repo}@{ref} is truncated")
+        return {e["path"]: e["sha"] for e in tree.get("tree", [])
+                if e.get("type") == "blob" and e["path"].startswith(MIGRATIONS_DIR)}
+
     def migration_check(self, current, target):
         cmp = self.gh(f"/compare/{current}...{target}")
         if cmp["status"] not in ("ahead", "identical"):
             return [f"target is {cmp['status']} relative to the running commit"], []
-        if len(cmp.get("files", [])) >= 300:
-            # The compare API truncates at 300 files; an unseen migration must not slip through.
-            return ["change too large to verify migrations (300+ files)"], []
-        files = []
-        for f in cmp.get("files", []):
-            if f["filename"].startswith("server/migrations/"):
-                entry = {"filename": f["filename"], "status": f["status"]}
-                if f["status"] == "added" and f["filename"].endswith(".up.sql"):
-                    with urllib.request.urlopen(f"https://raw.githubusercontent.com/{self.cfg['repo']}/{target}/{f['filename']}", timeout=20) as r:
-                        entry["content"] = r.read().decode()
-                files.append(entry)
+        try:
+            before = self.migration_tree(self.cfg["repo"], current)
+            self.target_migrations = self.migration_tree(self.cfg["repo"], target)
+        except (urllib.error.URLError, ValueError, KeyError) as exc:
+            self.log("migration_tree_failed", error=str(exc))
+            return [f"cannot list migrations: {exc}"], []
+        files = migration_changes(before, self.target_migrations)
+        for f in files:
+            if f["status"] == "added" and f["filename"].endswith(".up.sql"):
+                f["content"] = self.raw_file(f["filename"], target) or ""
         return classify_migrations(files)
+
+    def upstream_check(self, problems):
+        """Splits off the problems a trusted upstream migration explains."""
+        repo = self.cfg.get("trusted_upstream")
+        after = getattr(self, "target_migrations", None)
+        if not repo or not after or not problems:
+            return problems, []
+        try:
+            upstream = self.migration_tree(repo, self.cfg.get("trusted_upstream_branch") or "main")
+        except (urllib.error.URLError, ValueError, KeyError) as exc:
+            self.log("upstream_check_failed", repo=repo, error=str(exc))
+            return problems, []
+        return upstream_approved(problems, after, upstream)
 
     def approving_pr(self, path, target, label):
         """Number of the PR merged with the label that last touched path up to target, or None."""
@@ -510,6 +572,10 @@ class Deployer:
             self.log("noop", reason="already running", commit=current)
             return 0
         problems, added = self.migration_check(current, target)
+        if problems and self.allow_destructive != target:
+            problems, from_upstream = self.upstream_check(problems)
+            if from_upstream:
+                self.log("approved_by_upstream", commit=target, repo=self.cfg["trusted_upstream"], migrations=from_upstream)
         if problems and self.allow_destructive != target:
             problems, approved = self.label_approved(problems, target)
             if approved:
