@@ -73,6 +73,59 @@ class LabelApprovalTests(unittest.TestCase):
         self.assertFalse(ad.pr_approves(dict(pr, labels=[{"name": "other"}]), "main", "allow-destructive"))
 
 
+class MigrationTreeTests(unittest.TestCase):
+    def test_changes_between_trees(self):
+        before = {"server/migrations/1.up.sql": "a", "server/migrations/2.up.sql": "b", "server/migrations/3.up.sql": "c"}
+        after = {"server/migrations/1.up.sql": "a", "server/migrations/2.up.sql": "B", "server/migrations/4.up.sql": "d"}
+        self.assertEqual(ad.migration_changes(before, after), [
+            {"filename": "server/migrations/2.up.sql", "status": "modified"},
+            {"filename": "server/migrations/4.up.sql", "status": "added"},
+            {"filename": "server/migrations/3.up.sql", "status": "removed"},
+        ])
+
+    def test_upstream_identical_migrations_are_approved(self):
+        after = {"server/migrations/610_x.up.sql": "s1", "server/migrations/9004_fork.up.sql": "s2",
+                 "server/migrations/500_old.up.sql": "s3"}
+        upstream = {"server/migrations/610_x.up.sql": "s1", "server/migrations/9004_fork.up.sql": "other",
+                    "server/migrations/500_old.up.sql": "s3", "server/migrations/499_gone.up.sql": "s4"}
+        problems = [
+            "server/migrations/610_x.up.sql: ALTER TABLE",
+            "server/migrations/9004_fork.up.sql: DROP TABLE",
+            "server/migrations/500_old.up.sql: existing migration modified",
+            "server/migrations/499_gone.up.sql: existing migration removed",
+            "target is diverged relative to the running commit",
+        ]
+        left, approved = ad.upstream_approved(problems, after, upstream)
+        self.assertEqual(approved, ["server/migrations/610_x.up.sql", "server/migrations/500_old.up.sql"])
+        self.assertEqual(left, [problems[1], problems[3], problems[4]])
+
+    def tree_deployer(self, trees, truncated=False):
+        d = ad.Deployer(dict(ad.DEFAULTS, log_path="/dev/null"), dry_run=True)
+        d.gh = lambda path: {"status": "ahead"}
+        d.raw_file = lambda path, ref: "DROP TABLE x;" if "drop" in path else "CREATE TABLE y (id int);"
+        def http_json(url):
+            ref = url.split("/git/trees/")[1].split("?")[0]
+            return {"truncated": truncated, "tree": [{"path": p, "type": "blob", "sha": sha} for p, sha in trees[ref].items()]
+                    + [{"path": "server/migrations", "type": "tree", "sha": "t"}, {"path": "README.md", "type": "blob", "sha": "r"}]}
+        d.http_json = http_json
+        return d
+
+    def test_large_sync_is_checked_without_the_compare_cap(self):
+        old = {f"server/migrations/{n}_m.up.sql": str(n) for n in range(400)}
+        new = dict(old, **{f"server/migrations/{n}_m.up.sql": str(n) for n in range(400, 800)})
+        new["server/migrations/801_drop.up.sql"] = "x"
+        d = self.tree_deployer({"old": old, "new": new})
+        problems, added = d.migration_check("old", "new")
+        self.assertEqual(len(added), 401)
+        self.assertEqual(problems, ["server/migrations/801_drop.up.sql: DROP TABLE"])
+
+    def test_truncated_tree_blocks(self):
+        d = self.tree_deployer({"old": {}, "new": {}}, truncated=True)
+        problems, _ = d.migration_check("old", "new")
+        self.assertEqual(len(problems), 1)
+        self.assertIn("cannot list migrations", problems[0])
+
+
 class TargetTests(unittest.TestCase):
     def test_newest_green_commit_wins(self):
         commits = ["c3", "c2", "c1"]
@@ -199,6 +252,7 @@ class FakeDeployer(ad.Deployer):
         self.health_script, self.mcp_script = health_script, mcp_script
         self.compose_calls, self.overrides, self.running = [], [], dict(previous)
         self.problems, self.pulls, self.notes = [], [], []
+        self.upstream = {}
 
     def health(self, url=None):
         if url:
@@ -240,6 +294,10 @@ class FakeDeployer(ad.Deployer):
 
     def migration_check(self, current, target):
         return list(self.problems), []
+
+    def migration_tree(self, repo, ref):
+        assert repo == self.cfg["trusted_upstream"], repo
+        return self.upstream
 
     def gh(self, path):
         if path.startswith("/commits?"):
@@ -464,6 +522,32 @@ class LabelDeployTests(DeployCase):
             self.labelled_pr("allow-destructive")
         self.assertEqual(d.deploy(), 3)
         self.assertTrue(d.running["backend"].endswith(SHA_OLD))
+
+
+class UpstreamDeployTests(DeployCase):
+    DROP = "server/migrations/610_zcode.up.sql: ALTER TABLE"
+
+    def test_upstream_migration_deploys_without_label(self):
+        d = self.deployer()
+        d.problems, d.target_migrations = [self.DROP], {"server/migrations/610_zcode.up.sql": "s"}
+        d.upstream = {"server/migrations/610_zcode.up.sql": "s"}
+        self.assertEqual(d.deploy(), 0)
+        self.assertTrue(d.running["backend"].endswith(SHA_NEW))
+        approved = [e for e in d.events if e["event"] == "approved_by_upstream"]
+        self.assertEqual(approved[0]["migrations"], ["server/migrations/610_zcode.up.sql"])
+
+    def test_fork_change_to_upstream_migration_still_blocks(self):
+        d = self.deployer()
+        d.problems, d.target_migrations = [self.DROP], {"server/migrations/610_zcode.up.sql": "fork"}
+        d.upstream = {"server/migrations/610_zcode.up.sql": "s"}
+        self.assertEqual(d.deploy(), 3)
+        self.assertTrue(d.running["backend"].endswith(SHA_OLD))
+
+    def test_no_trusted_upstream_keeps_the_old_rules(self):
+        self.cfg["trusted_upstream"] = ""
+        d = self.deployer()
+        d.problems, d.target_migrations = [self.DROP], {"server/migrations/610_zcode.up.sql": "s"}
+        self.assertEqual(d.deploy(), 3)
 
 
 class HookTests(unittest.TestCase):
