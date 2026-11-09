@@ -298,9 +298,17 @@ func (p *Prober) probeCodex(ctx context.Context, raw string) ([]Window, error) {
 		return nil, fmt.Errorf("codex probe: %w", err)
 	}
 	rl := d.RateLimit
+	// limit_reached is account-wide: put it on the exhausted window only, or
+	// freeAt waits for the latest reset (the weekly one) while the 5h window
+	// frees the account hours earlier. With no window at 100% both keep it.
+	primaryLimit, secondaryLimit := rl.Limit, rl.Limit
+	if rl.Limit && (rl.Primary.UsedPercent >= 100 || rl.Secondary.UsedPercent >= 100) {
+		primaryLimit = rl.Primary.UsedPercent >= 100
+		secondaryLimit = rl.Secondary.UsedPercent >= 100
+	}
 	return []Window{
-		{Key: "5h", Used: rl.Primary.UsedPercent, ResetAt: epoch(rl.Primary.ResetAt), Limit: rl.Limit},
-		{Key: "week", Used: rl.Secondary.UsedPercent, ResetAt: epoch(rl.Secondary.ResetAt), Limit: rl.Limit},
+		{Key: "5h", Used: rl.Primary.UsedPercent, ResetAt: epoch(rl.Primary.ResetAt), Limit: primaryLimit},
+		{Key: "week", Used: rl.Secondary.UsedPercent, ResetAt: epoch(rl.Secondary.ResetAt), Limit: secondaryLimit},
 	}, nil
 }
 

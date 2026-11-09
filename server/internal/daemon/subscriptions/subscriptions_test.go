@@ -212,7 +212,8 @@ func TestProbes(t *testing.T) {
 			w.WriteHeader(http.StatusTooManyRequests)
 		case "/backend-api/wham/usage":
 			json.NewEncoder(w).Encode(map[string]any{"rate_limit": map[string]any{
-				"primary_window":   map[string]any{"used_percent": 12, "reset_at": 1792327200},
+				"limit_reached":    true,
+				"primary_window":   map[string]any{"used_percent": 100, "reset_at": 1792327200},
 				"secondary_window": map[string]any{"used_percent": 34, "reset_at": 1792332000}}})
 		case "/api/monitor/usage/quota/limit":
 			json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"limits": []any{
@@ -242,8 +243,16 @@ func TestProbes(t *testing.T) {
 		t.Fatalf("refused token: %+v", s)
 	}
 	s, err = p.Probe(ctx, Subscription{Auth: "codex_auth", CredentialPath: writeFile(t, filepath.Join(dir, "a.json"), `{"tokens":{"access_token":"x","account_id":"y"}}`)})
-	if err != nil || used(s, "5h") != 12 || used(s, "week") != 34 {
+	if err != nil || used(s, "5h") != 100 || used(s, "week") != 34 {
 		t.Fatalf("codex: %+v %v", s, err)
+	}
+	// Codex reports one account-wide limit_reached flag; it belongs to the
+	// exhausted window only, or the account looks blocked until the weekly reset.
+	if w, _ := s.window("5h"); !w.Limit {
+		t.Fatal("codex: exhausted 5h window carries the provider limit")
+	}
+	if w, _ := s.window("week"); w.Limit {
+		t.Fatal("codex: week at 34% is not the window that hit the limit")
 	}
 	s, err = p.Probe(ctx, Subscription{Auth: "api_key", Provider: "zai", CredentialPath: writeFile(t, filepath.Join(dir, "z"), "k")})
 	if err != nil || used(s, "5h") != 5 || used(s, "week") != 7 {
