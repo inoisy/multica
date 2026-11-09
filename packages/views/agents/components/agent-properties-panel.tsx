@@ -1,8 +1,8 @@
 "use client";
 
-import type { ReactNode } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Globe, Lock, Users } from "@multica/ui/icons";
+import { useCallback, type ReactNode } from "react";
+import { ChevronRight, Globe, Lock, Settings2, Users } from "@multica/ui/icons";
+import { Button } from "@multica/ui/components/ui/button";
 import type {
   Agent,
   AgentRuntime,
@@ -17,16 +17,16 @@ import {
 } from "@multica/core/agents";
 import { useWorkspaceId } from "@multica/core/hooks";
 import { providerDisplayName } from "@multica/core/runtimes";
-import { agentModelsOptions } from "@multica/core/model-profiles";
 import { ActorAvatar } from "../../common/actor-avatar";
 import { ObjectPanelSection, ObjectProperty } from "../../layout/object-page";
 import { ProviderLogo } from "../../runtimes/components/provider-logo";
 import { useLocale, useT } from "../../i18n";
 import { AgentPresenceIndicator } from "./agent-presence-indicator";
 import { CHIP_CLASS } from "./inspector/chip";
+import { ModelPicker } from "./inspector/model-picker";
 import { RuntimePicker } from "./inspector/runtime-picker";
-import { savedFirstRow } from "./inspector/saved-model-row";
-import { useModelText } from "../../model-profiles/model-text";
+import { ThinkingPropRow } from "./inspector/thinking-prop-row";
+import { useExecutionControls } from "./inspector/use-execution-controls";
 import { AgentPerformanceSummary, SuccessRate } from "./tabs/activity-tab";
 
 const ACCESS_ICONS = {
@@ -36,8 +36,8 @@ const ACCESS_ICONS = {
 } as const;
 
 /**
- * The agent page's right panel: what it is and where it runs. Runtime and
- * model are read from the agent's Models list, which is where they change.
+ * The agent page's right panel: what it is and where it runs, with the
+ * runtime, model, and thinking level editable in place.
  */
 export function AgentPropertiesPanel({
   agent,
@@ -47,8 +47,10 @@ export function AgentPropertiesPanel({
   owner,
   members,
   currentUserId,
+  canEdit,
+  onUpdate,
   onEditAccess,
-  onOpenModels,
+  onOpenSettings,
 }: {
   agent: Agent;
   runtime: AgentRuntime | null;
@@ -57,27 +59,28 @@ export function AgentPropertiesPanel({
   owner: MemberWithUser | null;
   members: MemberWithUser[];
   currentUserId: string | null;
+  canEdit: boolean;
+  onUpdate: (id: string, data: Record<string, unknown>) => Promise<void>;
   /** Opens the full access form; access is a draft-and-save choice. */
   onEditAccess: () => void;
-  /** Opens the agent's Models list, where the fork edits runtime and model. */
-  onOpenModels: () => void;
+  onOpenSettings: () => void;
 }) {
   const { t } = useT("agents");
   const { t: tl } = useT("layout");
   const { t: tr } = useT("runtimes");
   const locale = useLocale();
   const wsId = useWorkspaceId();
-  const modelText = useModelText();
-  // Runtime and model come from the agent's Models list (model profiles), so
-  // the panel shows the saved first row and links there instead of editing.
-  const qoderRuntime = runtime?.provider === "qoder_cloud";
-  const modelsOptions = agentModelsOptions(wsId, agent.id);
-  const { data: models } = useQuery({
-    ...modelsOptions,
-    enabled: modelsOptions.enabled !== false && !qoderRuntime,
-  });
-  const savedRow = savedFirstRow(models);
-  const modelLabel = savedRow ? modelText.rowLabel(savedRow) : agent.model ?? "";
+  const update = useCallback(
+    (data: Record<string, unknown>) => onUpdate(agent.id, data),
+    [agent.id, onUpdate],
+  );
+  const {
+    qoderRuntime,
+    canDiscoverRuntimeModels,
+    runtimeOptions,
+    changeModel,
+    changeRuntime,
+  } = useExecutionControls({ agent, runtime, runtimes, currentUserId, update });
 
   const { byAgent: activityMap } = useWorkspaceActivityMap(wsId);
   const week = summarizeActivityWindow(activityMap.get(agent.id), 7);
@@ -120,13 +123,11 @@ export function AgentPropertiesPanel({
         <ObjectProperty label={t(($) => $.inspector.prop_runtime)}>
           <RuntimePicker
             value={agent.runtime_id}
-            runtimes={
-              qoderRuntime ? runtimes : runtimes.filter((r) => r.provider !== "qoder_cloud")
-            }
+            runtimes={runtimeOptions}
             members={members}
             currentUserId={currentUserId}
-            canEdit={false}
-            onChange={() => undefined}
+            canEdit={canEdit && !qoderRuntime}
+            onChange={changeRuntime}
           />
         </ObjectProperty>
 
@@ -154,17 +155,26 @@ export function AgentPropertiesPanel({
             </Value>
           </ObjectProperty>
         ) : (
-          <ObjectProperty label={t(($) => $.inspector.prop_model)}>
-            <button
-              type="button"
-              className={CHIP_CLASS}
-              onClick={onOpenModels}
-              aria-label={t(($) => $.inspector.model_open_models)}
-              title={t(($) => $.inspector.model_saved_hint)}
-            >
-              <span className="truncate font-mono">{modelLabel || "—"}</span>
-            </button>
-          </ObjectProperty>
+          <>
+            <ObjectProperty label={t(($) => $.inspector.prop_model)}>
+              <ModelPicker
+                runtimeId={agent.runtime_id}
+                runtimeOnline={canDiscoverRuntimeModels}
+                value={agent.model ?? ""}
+                canEdit={canEdit}
+                onChange={changeModel}
+              />
+            </ObjectProperty>
+            <ThinkingPropRow
+              runtimeId={agent.runtime_id}
+              runtimeOnline={canDiscoverRuntimeModels}
+              provider={runtime?.provider ?? ""}
+              model={agent.model ?? ""}
+              value={agent.thinking_level ?? ""}
+              canEdit={canEdit}
+              onChange={(thinkingLevel) => update({ thinking_level: thinkingLevel })}
+            />
+          </>
         )}
 
         <ObjectProperty label={t(($) => $.columns.access)}>
@@ -203,6 +213,19 @@ export function AgentPropertiesPanel({
           </Value>
         </ObjectProperty>
       </ObjectPanelSection>
+
+      <div className="border-t pt-3">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="w-full justify-start gap-2 px-2"
+          onClick={onOpenSettings}
+        >
+          <Settings2 className="text-muted-foreground" />
+          {t(($) => $.panel.all_settings)}
+          <ChevronRight className="ml-auto text-faint-foreground" />
+        </Button>
+      </div>
 
       <ObjectPanelSection
         title={t(($) => $.tab_body.activity.section_last_30d)}
