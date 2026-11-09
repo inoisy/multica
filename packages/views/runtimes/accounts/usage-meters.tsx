@@ -35,6 +35,9 @@ export function UsageBar({ used, limit, blocked, label }: { used: number; limit:
   );
 }
 
+/** How old a usage snapshot may be and still describe now; matches the server's AccountUsageMaxAge. */
+export const USAGE_MAX_AGE_MS = 60 * 60 * 1000;
+
 /** Every window of an account: percent used, the agents' limit, the reset and when the figures were taken. */
 export function UsageMeters({
   account,
@@ -50,17 +53,20 @@ export function UsageMeters({
     return <p className="text-caption text-muted-foreground">{t(($) => $.subscriptions.no_usage)}</p>;
   }
   const oldest = Math.min(...account.usage.map((w) => Date.parse(w.observed_at) || Date.now()));
+  // The server ignores a snapshot older than this (AccountUsageMaxAge): an old
+  // one is shown dimmed and dated, never as the current load.
+  const stale = Date.now() - oldest > USAGE_MAX_AGE_MS;
   return (
     <div className="space-y-2">
-      {!compact ? (
+      {!compact || stale ? (
         <p className="text-caption text-muted-foreground" data-testid="usage-measured-at">
           {t(($) => $.subscriptions.usage_as_of, { time: formatModelTime(new Date(oldest).toISOString()) })}
         </p>
       ) : null}
-      <ul className="space-y-2">
+      <ul className={cn("space-y-2", stale && "opacity-50")} data-stale={stale || undefined}>
         {account.usage.map((w) => {
           const limit = accountLimit(account.subscriptions, w.window);
-          const blocked = windowBlocked(w, limit);
+          const blocked = !stale && windowBlocked(w, limit);
           return (
             <li key={w.window} className="space-y-1 text-caption">
               <div className="flex flex-wrap items-baseline justify-between gap-x-3">

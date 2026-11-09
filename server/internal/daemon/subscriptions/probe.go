@@ -330,7 +330,10 @@ func (p *Prober) getJSON(ctx context.Context, url, auth string, out any) error {
 
 func (p *Prober) probeZai(ctx context.Context, key string) ([]Window, error) {
 	var d struct {
-		Data struct {
+		Success *bool  `json:"success"`
+		Code    int    `json:"code"`
+		Msg     string `json:"msg"`
+		Data    struct {
 			Limits []struct {
 				Unit          int     `json:"unit"`
 				Percentage    float64 `json:"percentage"`
@@ -340,6 +343,11 @@ func (p *Prober) probeZai(ctx context.Context, key string) ([]Window, error) {
 	}
 	if err := p.getJSON(ctx, p.Endpoints.Zai+"/api/monitor/usage/quota/limit", key, &d); err != nil {
 		return nil, err
+	}
+	// z.ai answers a refusal (no Coding Plan, bad key) with HTTP 200 and
+	// success:false; read as an empty report it left the last snapshot standing.
+	if d.Success != nil && !*d.Success {
+		return nil, fmt.Errorf("z.ai quota probe: code %d: %s", d.Code, d.Msg)
 	}
 	names := map[int]string{3: "5h", 6: "week"}
 	var out []Window

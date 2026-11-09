@@ -388,3 +388,15 @@ func TestFreeAtUnknownWait(t *testing.T) {
 		t.Fatalf("held: %v", got)
 	}
 }
+
+func TestProbeZaiRefusal(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{"code": 500, "msg": "no coding plan", "success": false})
+	}))
+	defer srv.Close()
+	p := &Prober{HTTP: srv.Client(), Now: time.Now, Endpoints: Endpoints{Zai: srv.URL}}
+	s, err := p.Probe(context.Background(), Subscription{Auth: "api_key", Provider: "zai", CredentialPath: writeFile(t, filepath.Join(t.TempDir(), "z"), "k")})
+	if err == nil {
+		t.Fatalf("z.ai success:false is a failed probe, not an empty report: %+v", s)
+	}
+}

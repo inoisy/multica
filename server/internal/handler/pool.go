@@ -87,8 +87,11 @@ type PoolResponse struct {
 	UpdatedAt     string                    `json:"updated_at"`
 }
 
-func verdictUntil(until time.Time, blocked bool) *string {
-	if !blocked {
+// verdictUntil is the time a blocked verdict lifts. An unknown end (no sign-in,
+// no reported reset) has none: the service's stand-in, now plus an hour, moves
+// with every refresh and would read as a time that never comes.
+func verdictUntil(until time.Time, blocked, known bool) *string {
+	if !blocked || !known {
 		return nil
 	}
 	s := until.UTC().Format(time.RFC3339)
@@ -114,7 +117,7 @@ func (h *Handler) poolResponses(r *http.Request, d *poolDirectory, ids []string,
 			ID: id, Name: pool.Name, RuntimeType: pool.RuntimeType, Description: pool.Description, SpendOrder: pool.SpendOrder,
 			AllWorkspaces: pool.AllWorkspaces, Revision: pool.Revision, Subscriptions: []PoolAccountResponse{},
 			WorkspaceIDs: []string{}, Environments: []PoolEnvironmentResponse{},
-			Availability: PoolAvailabilityResponse{Blocked: v.Blocked, Usable: v.Usable, ReasonCode: v.Code, Until: verdictUntil(v.Until, v.Blocked), UntilEstimated: v.Blocked && !v.UntilKnown},
+			Availability: PoolAvailabilityResponse{Blocked: v.Blocked, Usable: v.Usable, ReasonCode: v.Code, Until: verdictUntil(v.Until, v.Blocked, v.UntilKnown), UntilEstimated: v.Blocked && !v.UntilKnown},
 			CreatedAt:    timestampToString(pool.CreatedAt), UpdatedAt: timestampToString(pool.UpdatedAt),
 		}
 		byAccount := map[string]service.AccountVerdict{}
@@ -129,7 +132,7 @@ func (h *Handler) poolResponses(r *http.Request, d *poolDirectory, ids []string,
 			av := byAccount[uuidToString(a.ID)]
 			resp.Subscriptions = append(resp.Subscriptions, PoolAccountResponse{
 				ID: uuidToString(a.ID), Key: a.Key, Title: a.Title, Provider: a.Provider, AccountGroup: a.AccountGroup, Position: int(m.Position),
-				Blocked: av.Blocked, Usable: av.Usable, ReasonCode: av.Code, Until: verdictUntil(av.Until, av.Blocked), UntilEstimate: av.Blocked && !av.UntilKnown,
+				Blocked: av.Blocked, Usable: av.Usable, ReasonCode: av.Code, Until: verdictUntil(av.Until, av.Blocked, av.UntilKnown), UntilEstimate: av.Blocked && !av.UntilKnown,
 			})
 		}
 		for _, g := range d.grants[id] {
