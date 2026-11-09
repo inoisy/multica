@@ -8,9 +8,10 @@ merge into main ─▶ GitHub Actions: CI + STT (images ghcr.io/inoisy/multica-{
                           ▼
 server: hook.py touches /run/multica-autodeploy/trigger ─▶ multica-autodeploy.service (root)
         1. newest commit on main with green CI and STT, ahead of /health commit
-        2. migrations in the range: only newly added files without DROP/RENAME/TRUNCATE/DELETE/type change
-           otherwise stop, unless each destructive one came from a PR merged with the label
-           `allow-destructive`; else wait for the label or `--allow-destructive <sha>`
+        2. migrations in the range (git trees of both commits, no file-count cap): only newly added
+           files without DROP/RENAME/TRUNCATE/DELETE/type change; otherwise stop, unless each problem
+           migration is byte-identical to upstream multica-ai/multica main or came from a PR merged
+           with the label `allow-destructive`; else wait for the label or `--allow-destructive <sha>`
         3. pg_dump to /var/backups/multica-autodeploy (last 5 kept)
         4. docker-compose.autodeploy.yml pins backend/web to the sha; pull; up -d
            (the backend runs `migrate up` itself on start)
@@ -58,9 +59,14 @@ code runs on the new schema. Removals (like STT-433 migration 617) ship separate
   finds the last commit touching that file up to the target and requires a merged PR into `main` with the label
   among that commit's PRs. A commit pushed straight to `main` has no such PR and stays blocked. A blocked
   commit is rechecked every run, so a label added later deploys on the next run without a new notice.
+- **Upstream.** A migration whose blob at the target equals the one on `trusted_upstream` /
+  `trusted_upstream_branch` (default `multica-ai/multica` / `main`; empty turns it off) is upstream code the
+  sync already brought in: it deploys without a label, edited old migrations included. A fork change to such a
+  file makes the blobs differ, so it blocks as before. Logged as `approved_by_upstream`.
 - **Operator.** `sudo multica-autodeploy run --allow-destructive <sha>`.
 
-The label never approves an edited existing migration or a 300+ file change that cannot be verified.
+The label never approves an edited existing migration. Migrations are listed from the git trees of the running and
+target commits, so an upstream sync of any size is checked file by file; a truncated tree blocks.
 Only accounts that can label PRs in the repo can approve; agents push with a deploy key and cannot.
 
 ## Install (root, once)
