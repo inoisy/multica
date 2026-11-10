@@ -133,3 +133,32 @@ func TestWorkflowArtifactRidesOnWakeupTask(t *testing.T) {
 	artifactForTest(t, issueID, agentID, wakeupTask).Want(http.StatusOK)
 	agentUpdateIssue(t, issueID, agentID, wakeupTask, map[string]any{"status": "done"}).Want(http.StatusOK)
 }
+
+// The reviewer updates the branch while it waits (base moved), pins the new
+// head with its own status change, and then hands the issue on. Its own pin
+// is the commit it judged: the later handoff of the same run goes through,
+// a member's replacement in between is still refused (STT-493).
+func TestWorkflowArtifactOwnRepinKeepsTheRunCurrent(t *testing.T) {
+	seedTestCatalog(t)
+	agentID := seededReadyAgentID(t)
+	projectID := deliveryProject(t, "Workflow artifact own repin project", agentID)
+	setColumnHandoff(t, projectID, "in_review", handToAgent(agentID, "Review the pinned commit.")).Want(http.StatusOK)
+	issueID := dbfx.Issue(t, "artifact own repin", testutil.Cols{"project_id": projectID, "status": "todo"})
+
+	updateIssueForTest(t, issueID, map[string]any{"status": "in_progress"}).Want(http.StatusOK)
+	devTask := runningTaskOf(t, issueID, agentID)
+	agentUpdateIssue(t, issueID, agentID, devTask, pinBody("in_review", testPinnedCommit)).Want(http.StatusOK)
+	dbfx.Exec(t, `UPDATE agent_task_queue SET status = 'completed', completed_at = now() WHERE id = $1`, devTask)
+	reviewTask := runningTaskOf(t, issueID, agentID)
+	dbfx.Exec(t, `UPDATE agent_task_queue SET workflow_step = 'in_review' WHERE id = $1`, reviewTask)
+
+	updatedHead := strings.Repeat("b", 40)
+	agentUpdateIssue(t, issueID, agentID, reviewTask, pinBody("blocked", updatedHead)).Want(http.StatusOK)
+	artifactForTest(t, issueID, agentID, reviewTask).Want(http.StatusOK)
+	agentUpdateIssue(t, issueID, agentID, reviewTask, map[string]any{"status": "in_review"}).Want(http.StatusOK)
+
+	// A member's replacement after the run's own pin is still a stale view.
+	updateIssueForTest(t, issueID, pinBody("blocked", strings.Repeat("c", 40))).Want(http.StatusOK)
+	updateIssueForTest(t, issueID, map[string]any{"status": "in_review", "assignee_type": "agent", "assignee_id": agentID}).Want(http.StatusOK)
+	agentUpdateIssue(t, issueID, agentID, reviewTask, map[string]any{"status": "done"}).Want(http.StatusConflict)
+}

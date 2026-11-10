@@ -69,3 +69,21 @@ func (q *Queries) PutIssueWorkflowArtifact(ctx context.Context, arg PutIssueWork
 	)
 	return err
 }
+
+const setTaskWorkflowArtifact = `-- name: SetTaskWorkflowArtifact :exec
+UPDATE agent_task_queue SET context = jsonb_set(
+    COALESCE(context, '{}'::jsonb), '{workflow_artifact}', $1::jsonb
+) WHERE id = $2
+`
+
+type SetTaskWorkflowArtifactParams struct {
+	Artifact []byte      `json:"artifact"`
+	TaskID   pgtype.UUID `json:"task_id"`
+}
+
+// The run that pins a commit has seen it: its snapshot follows its own pin,
+// so the run's next handoff is not refused as workflow_artifact_changed.
+func (q *Queries) SetTaskWorkflowArtifact(ctx context.Context, arg SetTaskWorkflowArtifactParams) error {
+	_, err := q.db.Exec(ctx, setTaskWorkflowArtifact, arg.Artifact, arg.TaskID)
+	return err
+}
