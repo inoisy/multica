@@ -40,7 +40,8 @@ var errWorkflowArtifactChanged = errors.New("the pinned commit changed after thi
 // writeWorkflowArtifact runs in the status write's transaction. A project
 // move drops the pin (it belongs to the old workflow); a status change by the
 // assignee's run is refused when the run saw a different pin than the one
-// stored, so a reviewer cannot pass a commit someone has since replaced.
+// stored, so a reviewer cannot pass a commit someone has since replaced. A pin
+// the run makes itself moves its own snapshot along.
 func writeWorkflowArtifact(ctx context.Context, q *db.Queries, issue db.Issue) error {
 	write, ok := ctx.Value(workflowArtifactWriteKey{}).(workflowArtifactWrite)
 	if !ok {
@@ -81,10 +82,19 @@ func writeWorkflowArtifact(ctx context.Context, q *db.Queries, issue db.Issue) e
 	if err != nil {
 		return err
 	}
-	return q.PutIssueWorkflowArtifact(ctx, db.PutIssueWorkflowArtifactParams{
+	if err := q.PutIssueWorkflowArtifact(ctx, db.PutIssueWorkflowArtifactParams{
 		IssueID: issue.ID, WorkspaceID: issue.WorkspaceID, ProjectID: issue.ProjectID,
 		WorkflowID: def.ID, Artifact: raw,
-	})
+	}); err != nil {
+		return err
+	}
+	// The pinning run has seen the commit it pinned. Without this its
+	// snapshot keeps the commit it started with, and its own next status
+	// change (done after an updated branch is merged) is refused (STT-493).
+	if write.Run != nil {
+		return q.SetTaskWorkflowArtifact(ctx, db.SetTaskWorkflowArtifactParams{TaskID: write.Run.ID, Artifact: raw})
+	}
+	return nil
 }
 
 // prepareWorkflowArtifact validates a status write against the project's
