@@ -4189,6 +4189,11 @@ func (h *Handler) UpdateIssue(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to update issue")
 		return
 	}
+	// The write pinned a commit (prepareWorkflowArtifact refuses a pin it
+	// would not store): link the PRs already open from the pinned branch.
+	if req.WorkflowArtifact != nil {
+		linkPinnedPullRequests(r.Context(), h.Queries, issue, *req.WorkflowArtifact)
+	}
 
 	// Determine actor identity: agent (via X-Agent-ID header) or member.
 	actorType, actorID := h.resolveActor(r, userID, workspaceID)

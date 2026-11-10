@@ -1619,6 +1619,14 @@ func (h *Handler) mirrorPullRequestForWorkspace(ctx context.Context, wsID pgtype
 					return h.Queries.ListAutoLinkedIssueIDsForPullRequest(ctx, pr.ID)
 				},
 			})
+			// Fork: a PR from the branch an issue pinned delivers that issue,
+			// whatever its title and branch name claim.
+			for _, issueID := range linkPullRequestByPins(ctx, h.Queries, pr) {
+				if id := uuidToString(issueID); !slices.Contains(linkedIssueIDs, id) {
+					linkedIssueIDs = append(linkedIssueIDs, id)
+				}
+				touched[issueID] = struct{}{}
+			}
 		}
 		// A merge is a PR event for every issue this PR is linked to, manual
 		// links included.
