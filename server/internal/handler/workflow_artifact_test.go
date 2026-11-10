@@ -1,12 +1,16 @@
 package handler
 
 import (
+	"context"
 	"net/http"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/multica-ai/multica/server/internal/testutil"
+	"github.com/multica-ai/multica/server/internal/util"
+	db "github.com/multica-ai/multica/server/pkg/db/generated"
 )
 
 const testPinnedCommit = "0123456789abcdef0123456789abcdef01234567"
@@ -84,4 +88,48 @@ func TestWorkflowArtifactGuards(t *testing.T) {
 		"issue_id": issueID, "runtime_id": runtimeID, "status": "running", "started_at": time.Now(), "workflow_step": "in_review",
 	})
 	agentUpdateIssue(t, issueID, other, observerTask, pinBody("done", testPinnedCommit)).Want(http.StatusForbidden)
+}
+
+// A wakeup the reviewer set while waiting (PR checks, merge) is the
+// assignee's run too: it carries the pin snapshot, so its handoff is not
+// refused as workflow_artifact_changed (STT-483, STT-497).
+func TestWorkflowArtifactRidesOnWakeupTask(t *testing.T) {
+	seedTestCatalog(t)
+	agentID := seededReadyAgentID(t)
+	projectID := deliveryProject(t, "Workflow artifact wakeup project", agentID)
+	setColumnHandoff(t, projectID, "in_review", handToAgent(agentID, "Review the pinned commit.")).Want(http.StatusOK)
+	issueID := dbfx.Issue(t, "artifact wakeup", testutil.Cols{"project_id": projectID, "status": "todo"})
+
+	updateIssueForTest(t, issueID, map[string]any{"status": "in_progress"}).Want(http.StatusOK)
+	devTask := runningTaskOf(t, issueID, agentID)
+	agentUpdateIssue(t, issueID, agentID, devTask, pinBody("in_review", testPinnedCommit)).Want(http.StatusOK)
+	dbfx.Exec(t, `UPDATE agent_task_queue SET status = 'completed', completed_at = now() WHERE id = $1`, devTask)
+	reviewTask := runningTaskOf(t, issueID, agentID)
+	// The review parks and registers a wakeup; its run ends.
+	dbfx.Exec(t, `UPDATE agent_task_queue SET status = 'completed', completed_at = now() WHERE id = $1`, reviewTask)
+
+	var runtimeID string
+	dbfx.QueryRow(t, `SELECT runtime_id::text FROM agent WHERE id = $1`, agentID).Scan(&runtimeID)
+	wakeup, err := testHandler.Queries.CreateWakeupTask(context.Background(), db.CreateWakeupTaskParams{
+		AgentID: util.MustParseUUID(agentID), RuntimeID: util.MustParseUUID(runtimeID), IssueID: util.MustParseUUID(issueID),
+		TriggerSummary:      pgtype.Text{String: "Wakeup: PR checks finished", Valid: true},
+		DelegatedFromTaskID: util.MustParseUUID(reviewTask),
+		WakeupContext:       []byte(`{"wakeup_id":"00000000-0000-0000-0000-000000000001"}`),
+	})
+	if err != nil {
+		t.Fatalf("CreateWakeupTask: %v", err)
+	}
+	var same bool
+	var snapshot, wakeupID string
+	dbfx.QueryRow(t, `SELECT COALESCE(t.context->'workflow_artifact' = a.artifact, false),
+		COALESCE(t.context->>'workflow_artifact', ''), COALESCE(t.context->>'wakeup_id', '')
+		FROM agent_task_queue t JOIN issue_workflow_artifact a ON a.issue_id = t.issue_id WHERE t.id = $1`,
+		util.UUIDToString(wakeup.ID)).Scan(&same, &snapshot, &wakeupID)
+	if !same || wakeupID == "" {
+		t.Fatalf("wakeup context artifact = %q wakeup_id = %q, want the stored pin and the wakeup keys", snapshot, wakeupID)
+	}
+
+	wakeupTask := runningTaskOf(t, issueID, agentID)
+	artifactForTest(t, issueID, agentID, wakeupTask).Want(http.StatusOK)
+	agentUpdateIssue(t, issueID, agentID, wakeupTask, map[string]any{"status": "done"}).Want(http.StatusOK)
 }
