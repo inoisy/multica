@@ -372,6 +372,41 @@ func (q *Queries) LinkIssueToPullRequest(ctx context.Context, arg LinkIssueToPul
 	return result.RowsAffected(), nil
 }
 
+const linkIssueToPullRequestByPin = `-- name: LinkIssueToPullRequestByPin :execrows
+
+INSERT INTO issue_pull_request (
+    issue_id, pull_request_id, linked_by_type, linked_by_id
+)
+SELECT $1::uuid, $2::uuid, 'pin', NULL
+WHERE NOT EXISTS (
+    SELECT 1 FROM issue_pull_request_exclusion
+    WHERE issue_id = $1::uuid AND pull_request_id = $2::uuid
+)
+ON CONFLICT (issue_id, pull_request_id) DO UPDATE SET
+    linked_by_type = 'pin'
+WHERE COALESCE(issue_pull_request.linked_by_type, 'system') = 'system'
+`
+
+type LinkIssueToPullRequestByPinParams struct {
+	IssueID       pgtype.UUID `json:"issue_id"`
+	PullRequestID pgtype.UUID `json:"pull_request_id"`
+}
+
+// =====================
+// Link by workflow pin (fork)
+// =====================
+// Automatic link from the issue's workflow pin: the PR's head branch is the
+// branch the issue pinned. Never overrides a person's removal (exclusion) or a
+// manual link; an automatic title/branch link becomes a pin link so a later
+// title edit does not drop it. Returns 1 when the row was inserted or converted.
+func (q *Queries) LinkIssueToPullRequestByPin(ctx context.Context, arg LinkIssueToPullRequestByPinParams) (int64, error) {
+	result, err := q.db.Exec(ctx, linkIssueToPullRequestByPin, arg.IssueID, arg.PullRequestID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const linkIssueToPullRequestManually = `-- name: LinkIssueToPullRequestManually :execrows
 INSERT INTO issue_pull_request (
     issue_id, pull_request_id, linked_by_type, linked_by_id
@@ -404,11 +439,13 @@ func (q *Queries) LinkIssueToPullRequestManually(ctx context.Context, arg LinkIs
 const listAutoLinkedIssueIDsForPullRequest = `-- name: ListAutoLinkedIssueIDsForPullRequest :many
 SELECT issue_id FROM issue_pull_request
 WHERE pull_request_id = $1
-  AND COALESCE(linked_by_type, 'system') <> 'member'
+  AND COALESCE(linked_by_type, 'system') NOT IN ('member', 'pin')
 `
 
 // Issues this PR is linked to automatically. Manual links are not listed: the
 // webhook reconciles only what it created itself.
+// Links made by the issue's workflow pin ('pin') are not listed either: the
+// PR's title and branch never claimed them, so reconciling would drop them.
 func (q *Queries) ListAutoLinkedIssueIDsForPullRequest(ctx context.Context, pullRequestID pgtype.UUID) ([]pgtype.UUID, error) {
 	rows, err := q.db.Query(ctx, listAutoLinkedIssueIDsForPullRequest, pullRequestID)
 	if err != nil {
@@ -508,6 +545,78 @@ func (q *Queries) ListGitHubInstallationsByWorkspace(ctx context.Context, worksp
 	return items, nil
 }
 
+const listGitHubPullRequestsByBranch = `-- name: ListGitHubPullRequestsByBranch :many
+SELECT id, workspace_id, installation_id, repo_owner, repo_name, pr_number, title, state, html_url, branch, author_login, author_avatar_url, merged_at, closed_at, pr_created_at, pr_updated_at, created_at, updated_at, head_sha, mergeable_state, additions, deletions, changed_files, api_mergeable, api_merge_state_status, checks_rollup_state, snapshot_head_sha, snapshot_fetched_at FROM github_pull_request
+WHERE workspace_id = $1
+  AND lower(repo_owner) = lower($2::text)
+  AND lower(repo_name) = lower($3::text)
+  AND branch = $4::text
+ORDER BY (state IN ('open', 'draft')) DESC, pr_updated_at DESC
+`
+
+type ListGitHubPullRequestsByBranchParams struct {
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+	RepoOwner   string      `json:"repo_owner"`
+	RepoName    string      `json:"repo_name"`
+	Branch      string      `json:"branch"`
+}
+
+// Mirrored PRs of the workspace with this repo and head branch, open ones
+// first, then the most recently updated.
+func (q *Queries) ListGitHubPullRequestsByBranch(ctx context.Context, arg ListGitHubPullRequestsByBranchParams) ([]GithubPullRequest, error) {
+	rows, err := q.db.Query(ctx, listGitHubPullRequestsByBranch,
+		arg.WorkspaceID,
+		arg.RepoOwner,
+		arg.RepoName,
+		arg.Branch,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GithubPullRequest{}
+	for rows.Next() {
+		var i GithubPullRequest
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.InstallationID,
+			&i.RepoOwner,
+			&i.RepoName,
+			&i.PrNumber,
+			&i.Title,
+			&i.State,
+			&i.HtmlUrl,
+			&i.Branch,
+			&i.AuthorLogin,
+			&i.AuthorAvatarUrl,
+			&i.MergedAt,
+			&i.ClosedAt,
+			&i.PrCreatedAt,
+			&i.PrUpdatedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.HeadSha,
+			&i.MergeableState,
+			&i.Additions,
+			&i.Deletions,
+			&i.ChangedFiles,
+			&i.ApiMergeable,
+			&i.ApiMergeStateStatus,
+			&i.ChecksRollupState,
+			&i.SnapshotHeadSha,
+			&i.SnapshotFetchedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listIssueIDsForPullRequest = `-- name: ListIssueIDsForPullRequest :many
 SELECT issue_id FROM issue_pull_request
 WHERE pull_request_id = $1
@@ -526,6 +635,49 @@ func (q *Queries) ListIssueIDsForPullRequest(ctx context.Context, pullRequestID 
 			return nil, err
 		}
 		items = append(items, issue_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listIssuePinsByBranch = `-- name: ListIssuePinsByBranch :many
+SELECT a.issue_id, COALESCE(a.artifact->>'repo', '')::text AS repo
+FROM issue_workflow_artifact a
+JOIN issue i ON i.id = a.issue_id AND i.project_id = a.project_id AND i.workspace_id = a.workspace_id
+JOIN project p ON p.id = i.project_id
+WHERE a.workspace_id = $1
+  AND a.artifact->>'branch' = $2::text
+  AND a.workflow_id = COALESCE(p.workflow_id, (SELECT w.id FROM issue_workflow w
+      WHERE w.workspace_id = i.workspace_id AND w.is_default))
+`
+
+type ListIssuePinsByBranchParams struct {
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+	Branch      string      `json:"branch"`
+}
+
+type ListIssuePinsByBranchRow struct {
+	IssueID pgtype.UUID `json:"issue_id"`
+	Repo    string      `json:"repo"`
+}
+
+// Issues of the workspace whose pin for their current workflow names this
+// branch. The repo is returned raw; the caller normalizes and compares it.
+func (q *Queries) ListIssuePinsByBranch(ctx context.Context, arg ListIssuePinsByBranchParams) ([]ListIssuePinsByBranchRow, error) {
+	rows, err := q.db.Query(ctx, listIssuePinsByBranch, arg.WorkspaceID, arg.Branch)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListIssuePinsByBranchRow{}
+	for rows.Next() {
+		var i ListIssuePinsByBranchRow
+		if err := rows.Scan(&i.IssueID, &i.Repo); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

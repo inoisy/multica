@@ -260,9 +260,11 @@ WHERE issue_pull_request.linked_by_type IS DISTINCT FROM 'member';
 -- name: ListAutoLinkedIssueIDsForPullRequest :many
 -- Issues this PR is linked to automatically. Manual links are not listed: the
 -- webhook reconciles only what it created itself.
+-- Links made by the issue's workflow pin ('pin') are not listed either: the
+-- PR's title and branch never claimed them, so reconciling would drop them.
 SELECT issue_id FROM issue_pull_request
 WHERE pull_request_id = $1
-  AND COALESCE(linked_by_type, 'system') <> 'member';
+  AND COALESCE(linked_by_type, 'system') NOT IN ('member', 'pin');
 
 -- name: UnlinkIssueFromPullRequest :execrows
 DELETE FROM issue_pull_request
@@ -280,3 +282,47 @@ WHERE workspace_id = $1
   AND lower(rtrim(html_url, '/')) = lower(sqlc.arg('html_url')::text)
 ORDER BY pr_updated_at DESC
 LIMIT 1;
+
+
+-- =====================
+-- Link by workflow pin (fork)
+-- =====================
+
+-- name: LinkIssueToPullRequestByPin :execrows
+-- Automatic link from the issue's workflow pin: the PR's head branch is the
+-- branch the issue pinned. Never overrides a person's removal (exclusion) or a
+-- manual link; an automatic title/branch link becomes a pin link so a later
+-- title edit does not drop it. Returns 1 when the row was inserted or converted.
+INSERT INTO issue_pull_request (
+    issue_id, pull_request_id, linked_by_type, linked_by_id
+)
+SELECT sqlc.arg('issue_id')::uuid, sqlc.arg('pull_request_id')::uuid, 'pin', NULL
+WHERE NOT EXISTS (
+    SELECT 1 FROM issue_pull_request_exclusion
+    WHERE issue_id = sqlc.arg('issue_id')::uuid AND pull_request_id = sqlc.arg('pull_request_id')::uuid
+)
+ON CONFLICT (issue_id, pull_request_id) DO UPDATE SET
+    linked_by_type = 'pin'
+WHERE COALESCE(issue_pull_request.linked_by_type, 'system') = 'system';
+
+-- name: ListIssuePinsByBranch :many
+-- Issues of the workspace whose pin for their current workflow names this
+-- branch. The repo is returned raw; the caller normalizes and compares it.
+SELECT a.issue_id, COALESCE(a.artifact->>'repo', '')::text AS repo
+FROM issue_workflow_artifact a
+JOIN issue i ON i.id = a.issue_id AND i.project_id = a.project_id AND i.workspace_id = a.workspace_id
+JOIN project p ON p.id = i.project_id
+WHERE a.workspace_id = $1
+  AND a.artifact->>'branch' = sqlc.arg('branch')::text
+  AND a.workflow_id = COALESCE(p.workflow_id, (SELECT w.id FROM issue_workflow w
+      WHERE w.workspace_id = i.workspace_id AND w.is_default));
+
+-- name: ListGitHubPullRequestsByBranch :many
+-- Mirrored PRs of the workspace with this repo and head branch, open ones
+-- first, then the most recently updated.
+SELECT * FROM github_pull_request
+WHERE workspace_id = $1
+  AND lower(repo_owner) = lower(sqlc.arg('repo_owner')::text)
+  AND lower(repo_name) = lower(sqlc.arg('repo_name')::text)
+  AND branch = sqlc.arg('branch')::text
+ORDER BY (state IN ('open', 'draft')) DESC, pr_updated_at DESC;
