@@ -2,12 +2,12 @@
   "page": {
     "title": "Agentes",
     "new_agent": "Nuevo agente",
-    "search": "Buscar agentes",
     "show_archived": "Mostrar archivados ({{count}}) →",
     "of_total": "{{visible}} de {{total}}",
     "list_load_failed": "No se han podido cargar los agentes",
     "list_load_failed_default": "Algo ha ido mal al obtener la lista de agentes.",
     "try_again": "Reintentar",
+    "search": "Buscar agentes",
     "scope_title": {
       "mine": "Mis agentes",
       "all": "Todos los agentes",
@@ -57,22 +57,13 @@
   },
   "no_matches": {
     "title": "Sin resultados",
+    "search_archived": "Ningún agente archivado coincide con \"{{query}}\".",
+    "no_archived": "Todavía no hay agentes archivados.",
     "search_active": "Ningún agente coincide con \"{{query}}\".",
     "search_active_filtered": "Ningún agente coincide con \"{{query}}\" en este filtro.",
-    "no_archived": "Todavía no hay agentes archivados.",
-    "search_archived": "Ningún agente archivado coincide con \"{{query}}\".",
     "no_filter_match": "Ningún agente coincide con este filtro.",
     "search_runtime_filtered": "Ningún agente en \"{{machine}}\" coincide con \"{{query}}\".",
     "runtime_filtered": "No hay agentes en \"{{machine}}\"."
-  },
-  "runtime_filter": {
-    "all": "Todos los runtimes",
-    "section_local": "Local",
-    "section_remote": "Remoto",
-    "section_cloud": "Nube",
-    "agent_count_one": "{{count}} agente",
-    "agent_count_other": "{{count}} agentes",
-    "empty": "Todavía no hay máquinas"
   },
   "columns": {
     "agent": "Agente",
@@ -183,7 +174,6 @@
   "inspector": {
     "section_profile": "Perfil",
     "section_execution": "Ejecución",
-    "qoder_execution_note": "El modelo, las herramientas y las skills se configuran en el agente desde Qoder Cloud Agents.",
     "section_access": "Acceso",
     "section_properties": "Propiedades",
     "section_details": "Detalles",
@@ -209,8 +199,8 @@
     "rename_required": "El nombre es obligatorio",
     "edit_description_title": "Editar descripción",
     "description_placeholder": "¿Qué hace este agente?",
-    "save": "Guardar",
     "cancel": "Cancelar",
+    "qoder_execution_note": "El modelo, las herramientas y las skills se configuran en el agente desde Qoder Cloud Agents.",
     "model_saved_hint": "Fila 1 de la lista guardada. La próxima ejecución puede tomar otra fila y la cuenta se elige al iniciar: la previsión y la última ejecución están en Modelos, más abajo.",
     "model_open_models": "Cambiar en Modelos"
   },
@@ -219,30 +209,7 @@
     "attention_queued_one": "{{count}} ejecución está en cola mientras el runtime no está disponible.",
     "attention_queued_other": "{{count}} ejecuciones están en cola mientras el runtime no está disponible."
   },
-  "sections": {
-    "runs_count_one": "{{count}} ejecución",
-    "runs_count_other": "{{count}} ejecuciones",
-    "recent_this_week_one": "{{count}} esta semana",
-    "recent_this_week_other": "{{count}} esta semana",
-    "view_all": "Ver todo",
-    "open": "Abrir",
-    "edit": "Editar",
-    "add": "Añadir",
-    "manage": "Gestionar",
-    "instructions_empty": "Aún no hay instrucciones."
-  },
-  "panel": {
-    "status": "Estado",
-    "runs_7d": "Ejecuciones (7 d)",
-    "edit_access_aria": "Acceso: {{value}}. Cambiar acceso",
-    "all_settings": "Todos los ajustes"
-  },
-  "skill_attach": {
-    "trigger_aria": "Adjuntar una skill del espacio de trabajo",
-    "trigger_label": "Adjuntar"
-  },
   "pickers": {
-    "concurrency_tooltip": "Concurrencia · {{value}} ejecuciones simultáneas máx.",
     "concurrency_range": "Ejecuciones simultáneas máx. ({{min}}-{{max}})",
     "runtime_none": "Sin runtime",
     "runtime_tooltip": "Runtime · {{name}} · {{status}}",
@@ -303,14 +270,14 @@
     "environment": "Entorno",
     "custom_args": "Argumentos personalizados",
     "mcp_config": "MCP",
-    "composio_mcp": "Apps MCP",
+    "composio_mcp": "Aplicaciones",
     "integrations": "Integraciones",
     "runtime_config": "Enrutado",
-    "qoder_agent": "Qoder Cloud Agents",
     "discard_dialog_title": "¿Descartar los cambios sin guardar?",
     "discard_dialog_description": "Hay cambios sin guardar en esta pestaña. Si sales ahora, se descartarán.",
     "discard_keep": "Seguir editando",
-    "discard_confirm": "Descartar cambios"
+    "discard_confirm": "Descartar cambios",
+    "qoder_agent": "Qoder Cloud Agents"
   },
   "creation_studio": {
     "title": "Crear un agente",
@@ -318,13 +285,8 @@
     "duplicate_title": "Duplicar {{name}}",
     "step_ai": "Crear conversando",
     "modes": {
-      "template": {
-        "title": "Usar una plantilla",
-        "description": "Parte de instrucciones y skills seleccionadas, y adapta cada detalle a tu espacio de trabajo."
-      },
       "ai": {
-        "title": "Crear con IA",
-        "description": "Crea una configuración editable conversando."
+        "title": "Crear con IA"
       }
     },
     "sections": {
@@ -352,18 +314,12 @@
       }
     },
     "builder": {
-      "setup_title": "Elige un runtime para Agent Builder",
-      "setup_description": "Este runtime alimenta la configuración y es el predeterminado para el nuevo agente.",
-      "start": "Iniciar conversación",
-      "connect_runtime": "Conectar un runtime",
-      "draft_parse_failed": "Esta respuesta no pudo rellenar el formulario. Pide al asistente que vuelva a generar el borrador o rellénalo a mano.",
       "start_failed": "No se ha podido iniciar Agent Builder.",
       "send_failed": "No se ha podido enviar tu mensaje.",
       "stop_failed": "No se ha podido detener la generación actual.",
       "switch_runtime_failed": "No se ha podido cambiar de runtime. La conversación sigue ejecutándose en el anterior.",
       "switch_runtime_pending": "Detén la respuesta actual para cambiar de runtime.",
       "switch_runtime_success": "Runtime cambiado. Tu borrador se conserva y la conversación continúa en el nuevo runtime con una sesión de modelo nueva.",
-      "conversation_tab": "Conversación",
       "chat_title": "Agent Builder",
       "runtime_online": "Runtime en línea",
       "runtime_offline": "Runtime desconectado",
@@ -374,13 +330,14 @@
       "prompt_assistant": "Ayudar a nuestro equipo a planificar y escribir proyectos",
       "thinking": "Actualizando el borrador…",
       "placeholder": "Describe el agente que necesitas…",
-      "send": "Enviar mensaje"
+      "send": "Enviar mensaje",
+      "draft_parse_failed": "Esta respuesta no pudo rellenar el formulario. Pide al asistente que vuelva a generar el borrador o rellénalo a mano.",
+      "conversation_tab": "Conversación"
     },
     "live_draft": "Configuración del agente",
     "live_draft_hint": "Puedes editar el borrador directamente.",
     "duplicate_env_notice": "Se copian las instrucciones, las skills y los argumentos de comando. Las variables de entorno, los servidores MCP y la config de runtime local de la máquina no.",
     "duplicate_runtime_reset_notice": "El runtime original no está disponible, así que esta copia se ejecuta en otro. El modelo, el nivel de razonamiento y la velocidad se limpiaron porque solo se aplican al runtime en el que se eligieron.",
-    "create_agent": "Crear agente",
     "create_and_add": "Crear y añadir al squad",
     "creating": "Creando agente…",
     "create_failed": "No se ha podido crear el agente.",
@@ -395,6 +352,7 @@
       "banner": "Tienes {{count}} borradores sin terminar",
       "pick_hint": "Elige uno para continuar."
     },
+    "create_agent": "Crear agente",
     "close": "Cerrar",
     "steps": {
       "runtime": "Elige runtime",
@@ -466,23 +424,17 @@
     }
   },
   "create_dialog": {
-    "title_create": "Crear agente",
-    "title_duplicate": "Duplicar agente",
-    "description_duplicate": "Crea un agente nuevo basado en \"{{name}}\". Se copian las instrucciones, el entorno y las skills.",
     "name_label": "Nombre",
     "name_placeholder": "p. ej., Agente de investigación profunda",
     "description_label": "Descripción",
     "description_placeholder": "¿Qué hace este agente?",
-    "visibility_label": "Visibilidad",
     "access": {
-      "label": "Acceso",
       "private_title": "Privado",
       "private_desc": "Solo tú puedes ejecutar este agente",
       "public_title": "Público",
       "public_desc": "Elige quién puede ejecutar este agente",
       "public_workspace_option": "Todos en este espacio de trabajo",
       "public_members_group": "Personas concretas",
-      "public_members_empty": "No hay miembros del espacio de trabajo para elegir",
       "public_targets_empty_hint": "Elige al menos una opción abajo; si no, el agente seguirá siendo privado."
     },
     "runtime_label": "Runtime",
@@ -497,17 +449,10 @@
     "runtime_no_results": "No hay máquinas coincidentes",
     "runtime_group_online": "{{online}}/{{total}} en línea",
     "duplicate_copy_suffix": " (Copia)",
-    "create": "Crear",
-    "creating": "Creando...",
-    "cancel": "Cancelar",
-    "create_failed_toast": "No se ha podido crear el agente",
     "skill_attach_failed_toast": "Agente creado, pero falló al adjuntar las skills: {{error}}",
     "squad_join_failed_toast": "El agente \"{{name}}\" se creó pero no pudo unirse al squad: {{error}}. Puedes añadirlo manualmente desde Miembros.",
     "instructions": {
       "label": "Instrucciones",
-      "placeholder_blank": "Haz clic para escribir las instrucciones…",
-      "placeholder_duplicate": "Haz clic para ver o editar las instrucciones duplicadas",
-      "collapse": "Contraer",
       "editor_placeholder": "Escribe qué debe hacer este agente, en qué centrarse, qué evitar…"
     },
     "skills_section": {
@@ -587,6 +532,7 @@
       "bulk_placeholder": "API_KEY=value\nBASE_URL=https://example.com",
       "bulk_plaintext_notice": "Los valores se muestran en texto plano durante la edición masiva.",
       "bulk_unsupported_toast": "\"{{key}}\" no se puede mostrar como texto: edítala como fila",
+      "bulk_invalid_key_toast": "La edición masiva solo admite nombres como API_KEY: edita \"{{key}}\" como fila",
       "parse_error_malformed": "La línea {{line}} no es una asignación CLAVE=valor",
       "parse_error_duplicate": "Clave duplicada \"{{key}}\" en la línea {{line}}",
       "paste_invalid_toast": "No se han podido analizar las variables de entorno pegadas",
@@ -725,29 +671,10 @@
       "redacted_hint": "Solo el propietario del agente o un administrador del espacio de trabajo pueden leer esta configuración.",
       "dialog_json_help": "Edita la configuración completa del servidor como JSON."
     },
-    "composio_mcp": {
-      "subtitle": "Marca un toolkit para que este agente lo monte como servidor MCP, pero solo cuando quien dispara la ejecución eres tú (su creador), directamente o a través de una cadena de subagentes.",
-      "loading": "Cargando tus conexiones…",
-      "load_failed": "No se han podido cargar tus apps conectadas. Inténtalo de nuevo en un momento.",
-      "empty_title": "Todavía no hay apps conectadas",
-      "empty_link_to_settings": "Conecta una en Ajustes → Integraciones",
-      "open_settings": "Abrir ajustes",
-      "connected": "Conectada",
-      "toggle_aria": "Permitir {{toolkit}} para este agente",
-      "saving": "Guardando…",
-      "save_failed_toast": "No se ha podido guardar: inténtalo de nuevo",
-      "redacted_title": "Configurado: oculto a tu vista",
-      "redacted_hint": "Solo el creador del agente puede ver o cambiar las apps que puede usar.",
-      "shared_warning": "Este agente está compartido. Las personas que puedan ejecutarlo podrán usar las apps de Composio que actives aquí. Usa Privado o reduce la lista de acceso si estas apps exponen datos sensibles.",
-      "workspace_warning": "Público para el espacio de trabajo: cualquier miembro puede usar estas apps de Composio a través de este agente."
-    },
     "runtime_config": {
       "mode_label": "Modo de enrutado",
       "mode_local": "Local",
       "mode_gateway": "Gateway",
-      "model_override_label": "Sobrescritura del modelo subyacente",
-      "model_override_hint": "Se aplica a todas las ejecuciones que reclame este agente hasta que se cambie o se limpie. Al limpiarla se usa el modelo vinculado al agente OpenClaw seleccionado, y su identidad no cambia.",
-      "model_override_placeholder": "openrouter/@preset/agent-reasoning",
       "mode_local_hint": "Se ejecuta en este ordenador.",
       "mode_gateway_hint": "El daemon marca a un OpenClaw Gateway. Deja los campos de endpoint en blanco para heredarlos del `~/.openclaw/openclaw.json` del host del daemon.",
       "gateway_legend": "Endpoint del gateway",
@@ -761,7 +688,10 @@
       "tls_label": "Usar TLS",
       "tls_hint": "Usa https:// en lugar de http://",
       "saved_toast": "Configuración de enrutado guardada",
-      "save_failed_toast": "No se ha podido guardar la configuración de enrutado"
+      "save_failed_toast": "No se ha podido guardar la configuración de enrutado",
+      "model_override_label": "Sobrescritura del modelo subyacente",
+      "model_override_hint": "Se aplica a todas las ejecuciones que reclame este agente hasta que se cambie o se limpie. Al limpiarla se usa el modelo vinculado al agente OpenClaw seleccionado, y su identidad no cambia.",
+      "model_override_placeholder": "openrouter/@preset/agent-reasoning"
     },
     "skills": {
       "assigned_title": "Asignadas al agente",
@@ -807,7 +737,7 @@
       "add_failed_toast": "No se ha podido añadir la skill"
     },
     "integrations": {
-      "members_note": "Solo los propietarios y administradores del espacio de trabajo pueden gestionar esta conexión. Puedes ver los bots conectados en Ajustes → Integraciones."
+      "members_note": "Consulta y gestiona los canales de mensajería en la página del agente."
     },
     "activity": {
       "status": {
@@ -855,6 +785,27 @@
       "started_prefix": "Iniciada {{when}}",
       "dispatched_prefix": "Enviada {{when}}",
       "queued_prefix": "En cola {{when}}"
+    },
+    "connected_apps": {
+      "loading": "Cargando aplicaciones…",
+      "load_failed": "No se pudieron cargar las aplicaciones de este agente.",
+      "empty": "No hay apps conectadas disponibles.",
+      "level": "Nivel",
+      "team_connected": "Cuenta del equipo conectada",
+      "team_missing": "Cuenta del equipo sin conectar",
+      "personal_connected": "Tu cuenta está conectada",
+      "personal_missing": "No has conectado esta aplicación",
+      "team_admin_only": "Solo los administradores del espacio de trabajo pueden dar a un agente acceso a una cuenta del equipo.",
+      "team_shared_warning": "Cualquiera que pueda ejecutar este agente podrá usar esta cuenta de equipo a través de él.",
+      "manage_link": "Gestionar cuentas en Ajustes → Aplicaciones conectadas",
+      "save_failed_toast": "No se pudo guardar. Inténtalo de nuevo",
+      "team_help": "Cuenta compartida del espacio de trabajo, conectada por administradores.",
+      "personal_help": "Cada ejecución usa la cuenta de quien la inicia. Cada persona debe conectar su propia cuenta.",
+      "available_accounts": "Disponible: {{accounts}}",
+      "enable": "Activar {{app}}",
+      "account_for": "Cuenta de {{app}}",
+      "connect_hint": "¿No encuentras la app que necesitas? Conecta una cuenta en Ajustes.",
+      "available_personal": "Tu cuenta"
     }
   },
   "char_counter": {
@@ -988,7 +939,6 @@
     "search_placeholder": "Buscar en esta ejecución…",
     "no_matches": "Ningún paso coincide con esta búsqueda.",
     "more_actions": "Más",
-    "kind_text": "Agente",
     "kind_tool": "Herramienta",
     "kind_thinking": "Razonamiento",
     "kind_error": "Error",
@@ -1011,6 +961,7 @@
     "tool_kind_read": "Lecturas",
     "tool_kind_misc": "Otros",
     "trigger_wakeup": "Activación",
+    "kind_text": "Agente",
     "details_model": "Modelo",
     "details_selection": "Elección",
     "details_account": "Cuenta"
@@ -1072,6 +1023,24 @@
     "section_model": "Modelo"
   },
   "actions": {},
+  "sections": {
+    "runs_count_one": "{{count}} ejecución",
+    "runs_count_other": "{{count}} ejecuciones",
+    "recent_this_week_one": "{{count}} esta semana",
+    "recent_this_week_other": "{{count}} esta semana",
+    "view_all": "Ver todo",
+    "open": "Abrir",
+    "edit": "Editar",
+    "add": "Añadir",
+    "manage": "Gestionar",
+    "instructions_empty": "Aún no hay instrucciones."
+  },
+  "panel": {
+    "status": "Estado",
+    "runs_7d": "Ejecuciones (7 d)",
+    "edit_access_aria": "Acceso: {{value}}. Cambiar acceso",
+    "all_settings": "Todos los ajustes"
+  },
   "intro": {
     "title": "Incorpora a tu primer compañero de IA",
     "description": "Los agentes se encargan de las tareas como un compañero: trabajan en tu runtime con herramientas como Claude Code y Codex y entregan el resultado en los comentarios.",

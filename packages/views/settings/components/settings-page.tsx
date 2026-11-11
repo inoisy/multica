@@ -2,7 +2,6 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
-  AlarmClock,
   Bell,
   Blocks,
   ChevronDown,
@@ -13,6 +12,7 @@ import {
   ListPlus,
   Lock,
   MessagesSquare,
+  Palette,
   Plug,
   Search,
   Server,
@@ -26,7 +26,7 @@ import {
   Zap,
   AppWindow,
 } from "@multica/ui/icons";
-import { useCurrentWorkspace } from "@multica/core/paths";
+import { useCurrentWorkspace, useWorkspacePaths } from "@multica/core/paths";
 import { useFeatureEnabled } from "@multica/core/config";
 import { useCurrentMember } from "@multica/core/permissions";
 import {
@@ -39,6 +39,7 @@ import { resolveSettingsLocation, settingsHref } from "./settings-navigation";
 import { AppLink, useNavigation } from "../../navigation";
 import { AccountTab } from "./account-tab";
 import { PreferencesTab } from "./preferences-tab";
+import { AppearanceTab } from "./appearance-tab";
 import { TokensTab } from "./tokens-tab";
 import { WorkspaceTab } from "./workspace-tab";
 import { MembersTab } from "./members-tab";
@@ -63,7 +64,7 @@ import {
 import { searchSettings } from "./settings-search";
 import { HighlightText } from "../../search/highlight-text";
 import { useSettingsSearchIndex } from "./use-settings-search-index";
-import { WakeupsTab } from "./wakeups-tab";
+import { wakeupsHref } from "../../autopilots/components/wakeups-tab";
 import { CollapsedNavTrigger, PageHeader } from "../../layout/page-header";
 import { PanelHeader } from "../../layout/panel-nav";
 import { useListColumnCollapsed } from "../../layout/app-shell-context";
@@ -130,6 +131,7 @@ export function SettingsPage({ extraDeviceTabs = [] }: SettingsPageProps = {}) {
   const { role } = useCurrentMember(workspace?.id ?? "");
   const isMember = role === "member";
   const navigation = useNavigation();
+  const paths = useWorkspacePaths();
   const listCollapsed = useListColumnCollapsed();
   const pluginsEnabled = useFeatureEnabled(PLUGINS_V1_FLAG, false);
   const billingEnabled = useFeatureEnabled(
@@ -161,6 +163,12 @@ export function SettingsPage({ extraDeviceTabs = [] }: SettingsPageProps = {}) {
               <PreferencesTab />,
             ),
             entry(
+              "appearance",
+              t(($) => $.page.tabs.appearance),
+              Palette,
+              <AppearanceTab />,
+            ),
+            entry(
               "notifications",
               t(($) => $.page.tabs.notifications),
               Bell,
@@ -172,9 +180,6 @@ export function SettingsPage({ extraDeviceTabs = [] }: SettingsPageProps = {}) {
               Keyboard,
               <KeyboardShortcutsTab />,
             ),
-            ...(appsAvailable
-              ? [entry("apps", t(($) => $.page.tabs.apps), Plug, <ConnectedAppsTab />)]
-              : []),
             entry("tokens", t(($) => $.page.tabs.tokens), KeyRound, <TokensTab />),
           ],
         },
@@ -216,10 +221,6 @@ export function SettingsPage({ extraDeviceTabs = [] }: SettingsPageProps = {}) {
             entry("workflows", t(($) => $.page.tabs.workflows), Workflow, <WorkflowsTab />, {
               wide: true,
             }),
-            entry("wakeups", t(($) => $.page.tabs.wakeups), AlarmClock, <WakeupsTab />, {
-              wide: true,
-              adminOnly: true,
-            }),
             entry("labels", t(($) => $.page.tabs.labels), Tags, <LabelsTab />, {
               wide: true,
             }),
@@ -252,6 +253,9 @@ export function SettingsPage({ extraDeviceTabs = [] }: SettingsPageProps = {}) {
               MessagesSquare,
               <ChannelsTab />,
             ),
+            ...(appsAvailable
+              ? [entry("apps", t(($) => $.page.tabs.apps), Plug, <ConnectedAppsTab />)]
+              : []),
             entry("mcp", t(($) => $.page.tabs.mcp), Server, <McpTab />, {
               adminOnly: true,
             }),
@@ -280,6 +284,13 @@ export function SettingsPage({ extraDeviceTabs = [] }: SettingsPageProps = {}) {
     group.subgroups.flatMap((subgroup) => subgroup.entries),
   );
   const location = resolveSettingsLocation(navigation.searchParams);
+  // Wakeup defaults moved to the issue wakeups list; old links land there.
+  const wakeupsMoved = location.tab === "wakeups";
+  const wakeupsTarget = wakeupsHref(paths.autopilots());
+  const { replace } = navigation;
+  useEffect(() => {
+    if (wakeupsMoved) replace(wakeupsTarget);
+  }, [wakeupsMoved, wakeupsTarget, replace]);
   const candidate =
     location.tab === "billing" && !billingEnabled ? "workspace" : location.tab;
   const active =
@@ -445,7 +456,7 @@ export function SettingsPage({ extraDeviceTabs = [] }: SettingsPageProps = {}) {
   );
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background md:flex-row">
+    <div data-mc="settings-page" className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background md:flex-row">
       <ListColumn
         collapsed={listCollapsed}
         // Below md the navigation stacks above the content as a select.

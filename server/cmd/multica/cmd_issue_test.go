@@ -567,6 +567,56 @@ func newIssueCommentAddTestCmd() *cobra.Command {
 	return cmd
 }
 
+func TestRunIssueCommentAddUploadsAttachmentWithoutIssueID(t *testing.T) {
+	const issueRef = "MUL-1"
+	t.Chdir(t.TempDir())
+	attachmentPath := "comment.txt"
+	if err := os.WriteFile(attachmentPath, []byte("comment attachment"), 0o644); err != nil {
+		t.Fatalf("write attachment: %v", err)
+	}
+
+	var uploadedIssueID string
+	var commentBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/issues/"+issueRef:
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": "issue-1", "identifier": issueRef})
+		case r.Method == http.MethodPost && r.URL.Path == "/api/upload-file":
+			if err := r.ParseMultipartForm(1 << 20); err != nil {
+				t.Fatalf("parse upload: %v", err)
+			}
+			uploadedIssueID = r.FormValue("issue_id")
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": "attachment-1"})
+		case r.Method == http.MethodPost && r.URL.Path == "/api/issues/issue-1/comments":
+			if err := json.NewDecoder(r.Body).Decode(&commentBody); err != nil {
+				t.Fatalf("decode comment body: %v", err)
+			}
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": "comment-1", "content": "with attachment"})
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	setCLITestServerEnv(t, srv.URL)
+	t.Setenv("MULTICA_TOKEN", "mat_test-token")
+
+	cmd := newIssueCommentAddTestCmd()
+	_ = cmd.Flags().Set("content", "with attachment")
+	_ = cmd.Flags().Set("attachment", attachmentPath)
+	if err := runIssueCommentAdd(cmd, []string{issueRef}); err != nil {
+		t.Fatalf("runIssueCommentAdd: %v", err)
+	}
+	if uploadedIssueID != "" {
+		t.Fatalf("upload issue_id = %q, want empty for a comment attachment", uploadedIssueID)
+	}
+	attachmentIDs, ok := commentBody["attachment_ids"].([]any)
+	if !ok || len(attachmentIDs) != 1 || attachmentIDs[0] != "attachment-1" {
+		t.Fatalf("comment attachment_ids = %#v, want [attachment-1]", commentBody["attachment_ids"])
+	}
+}
+
 func TestRunIssueCommentAddSteering(t *testing.T) {
 	const (
 		issueID   = "11111111-1111-4111-8111-111111111111"
@@ -4601,6 +4651,52 @@ func TestRunIssueListFieldsFiltersJSONOutput(t *testing.T) {
 				if _, ok := got[f]; !ok {
 					t.Fatalf("issue missing field %q; got keys %v", f, keysOf(got))
 				}
+			}
+		})
+	}
+}
+
+func TestRunIssueListRequesterFieldProjection(t *testing.T) {
+	requesterID := "user-requester"
+	for _, tc := range []struct {
+		name string
+		id   *string
+	}{
+		{"attributed", &requesterID},
+		{"unattributed", nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			issue := sampleIssueResponse()
+			issue.CreatorType = "agent"
+			issue.RequesterID = tc.id
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				json.NewEncoder(w).Encode(map[string]any{"issues": []any{issue}, "total": 1})
+			}))
+			defer srv.Close()
+			setCLITestServerEnv(t, srv.URL)
+			t.Setenv("MULTICA_WORKSPACE_ID", "ws-1")
+			t.Setenv("MULTICA_TOKEN", "test-token")
+
+			cmd := newIssueListTestCmd()
+			_ = cmd.Flags().Set("output", "json")
+			_ = cmd.Flags().Set("fields", "id,requester_id")
+			out, err := captureStdout(t, func() error { return runIssueList(cmd, nil) })
+			if err != nil {
+				t.Fatalf("runIssueList: %v", err)
+			}
+			var resp struct {
+				Issues []map[string]any `json:"issues"`
+			}
+			if err := json.Unmarshal([]byte(out), &resp); err != nil {
+				t.Fatalf("unmarshal output: %v", err)
+			}
+			var wantRequester any
+			if tc.id != nil {
+				wantRequester = *tc.id
+			}
+			want := []map[string]any{{"id": issue.ID, "requester_id": wantRequester}}
+			if !reflect.DeepEqual(resp.Issues, want) {
+				t.Fatalf("issues = %#v, want %#v", resp.Issues, want)
 			}
 		})
 	}
