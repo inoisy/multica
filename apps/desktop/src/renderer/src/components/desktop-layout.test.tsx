@@ -66,6 +66,7 @@ vi.mock("@multica/views/platform", () => ({
 }));
 
 vi.mock("@multica/views/layout", () => ({
+  AppBottomBar: () => null,
   AppRail: () => null,
   AppShellProvider: ({ children }: { children: ReactNode }) => <>{children}</>,
   CompactNavSheet: () => null,
@@ -86,6 +87,7 @@ vi.mock("@multica/views/search", () => ({
   SearchCommand: () => null,
 }));
 vi.mock("@multica/views/chat", () => ({ FloatingChat: () => null }));
+vi.mock("@multica/views/star-prompt", () => ({ StarPrompt: () => null }));
 vi.mock("./tab-bar", () => ({ TabBar: () => null }));
 vi.mock("./window-overlay", () => ({ WindowOverlay: () => null }));
 

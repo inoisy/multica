@@ -17,6 +17,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/multica-ai/multica/server/internal/projectaccess"
 	"github.com/multica-ai/multica/server/internal/util"
 	db "github.com/multica-ai/multica/server/pkg/db/generated"
 )
@@ -183,6 +184,19 @@ type issueTableSQL struct {
 	args        []any
 	fingerprint string
 	workspaceID pgtype.UUID
+	hidden      projectaccess.Hidden
+	// hiddenProjectsRef is the placeholder holding the viewer's hidden project
+	// ids, empty when the viewer sees every project.
+	hiddenProjectsRef string
+}
+
+// parentVisible is a predicate on a parent issue aliased p: true unless the
+// parent sits in a project the viewer cannot see.
+func (s issueTableSQL) parentVisible() string {
+	if s.hiddenProjectsRef == "" {
+		return "TRUE"
+	}
+	return hiddenProjectPredicate("p.project_id", s.hiddenProjectsRef)
 }
 
 type issueTableCursor struct {
@@ -430,13 +444,17 @@ var issueTableNegatableFilters = []string{
 	"project_ids", "project_statuses", "label_ids", "relations", "due_dates",
 }
 
+func issueCreatedByUserPredicate(userRef string) string {
+	return fmt.Sprintf("((i.creator_type = 'member' AND i.creator_id = %[1]s::uuid) OR i.requester_user_id = %[1]s::uuid)", userRef)
+}
+
 // issueTableRelationPredicate matches issues related to the user one way.
 func issueTableRelationPredicate(relation string, userRef string) string {
 	switch relation {
 	case "assigned":
 		return fmt.Sprintf("(i.assignee_type = 'member' AND i.assignee_id = %s::uuid)", userRef)
 	case "created":
-		return fmt.Sprintf("(i.creator_type = 'member' AND i.creator_id = %s::uuid)", userRef)
+		return issueCreatedByUserPredicate(userRef)
 	case "subscribed":
 		return fmt.Sprintf(`EXISTS (
     SELECT 1 FROM issue_subscriber isub
@@ -445,18 +463,20 @@ func issueTableRelationPredicate(relation string, userRef string) string {
        AND isub.user_id   = %s::uuid
        AND isub.unsubscribed_at IS NULL
   )`, userRef)
-	default: // my_agents
-		return fmt.Sprintf(`(i.assignee_type = 'agent' AND i.assignee_id IN (
-       SELECT a.id FROM agent a
-        WHERE a.workspace_id = $1
-          AND a.owner_id     = %s::uuid
-    ))`, userRef)
+	default: // my_agents — the same issues as the "involved" scope
+		return issueTableInvolvedPredicate(userRef)
 	}
 }
 
 func appendIssueTableInvolvedPredicate(where []string, addArg func(any) string, userID pgtype.UUID) []string {
-	ref := addArg(userID)
-	return append(where, fmt.Sprintf(`(
+	return append(where, issueTableInvolvedPredicate(addArg(userID)))
+}
+
+// issueTableInvolvedPredicate matches issues assigned to an agent the user
+// owns, or to a squad the user belongs to or one of their agents leads or
+// belongs to.
+func issueTableInvolvedPredicate(userRef string) string {
+	return fmt.Sprintf(`(
     (i.assignee_type = 'agent' AND i.assignee_id IN (
        SELECT a.id FROM agent a
         WHERE a.workspace_id = $1
@@ -486,7 +506,7 @@ func appendIssueTableInvolvedPredicate(where []string, addArg func(any) string, 
           AND a.workspace_id = $1
           AND a.owner_id     = %[1]s::uuid
     ))
-)`, ref))
+)`, userRef)
 }
 
 func (h *Handler) compileIssueTableQuery(w http.ResponseWriter, r *http.Request, spec issueTableQuerySpec) (issueTableSQL, bool) {
@@ -506,6 +526,15 @@ func (h *Handler) compileIssueTableQuery(w http.ResponseWriter, r *http.Request,
 	addArg := func(value any) string {
 		args = append(args, value)
 		return "$" + strconv.Itoa(len(args))
+	}
+	hidden, ok := h.requestHiddenProjects(w, r, util.UUIDToString(workspaceUUID))
+	if !ok {
+		return issueTableSQL{}, false
+	}
+	hiddenProjectsRef := ""
+	if ids := hidden.Param(); ids != nil {
+		hiddenProjectsRef = addArg(ids)
+		where = append(where, hiddenProjectPredicate("i.project_id", hiddenProjectsRef))
 	}
 
 	negated := make(map[string]bool, len(spec.Filters.Negate))
@@ -619,14 +648,14 @@ func (h *Handler) compileIssueTableQuery(w http.ResponseWriter, r *http.Request,
 		case "assigned":
 			where = append(where, fmt.Sprintf("i.assignee_type = 'member' AND i.assignee_id = %s::uuid", addArg(userUUID)))
 		case "created":
-			where = append(where, fmt.Sprintf("i.creator_type = 'member' AND i.creator_id = %s::uuid", addArg(userUUID)))
+			where = append(where, issueCreatedByUserPredicate(addArg(userUUID)))
 		case "involved":
 			where = appendIssueTableInvolvedPredicate(where, addArg, userUUID)
 		case "any":
 			assignedRef := addArg(userUUID)
 			createdRef := addArg(userUUID)
 			involved := appendIssueTableInvolvedPredicate(nil, addArg, userUUID)[0]
-			where = append(where, fmt.Sprintf("((i.assignee_type = 'member' AND i.assignee_id = %s::uuid) OR (i.creator_type = 'member' AND i.creator_id = %s::uuid) OR %s)", assignedRef, createdRef, involved))
+			where = append(where, fmt.Sprintf("((i.assignee_type = 'member' AND i.assignee_id = %s::uuid) OR %s OR %s)", assignedRef, issueCreatedByUserPredicate(createdRef), involved))
 		default:
 			writeError(w, http.StatusBadRequest, "invalid scope.relation")
 			return issueTableSQL{}, false
@@ -869,9 +898,11 @@ func (h *Handler) compileIssueTableQuery(w http.ResponseWriter, r *http.Request,
 	where = appendIssueTableSearchFilter(where, addArg, spec.Search)
 
 	return issueTableSQL{
-		where:       strings.Join(where, " AND "),
-		args:        args,
-		fingerprint: fingerprint,
-		workspaceID: workspaceUUID,
+		where:             strings.Join(where, " AND "),
+		args:              args,
+		fingerprint:       fingerprint,
+		workspaceID:       workspaceUUID,
+		hidden:            hidden,
+		hiddenProjectsRef: hiddenProjectsRef,
 	}, true
 }
