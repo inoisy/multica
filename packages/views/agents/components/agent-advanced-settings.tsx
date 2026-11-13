@@ -12,6 +12,7 @@ import { slackInstallationsOptions } from "@multica/core/slack";
 import { dingtalkInstallationsOptions } from "@multica/core/dingtalk";
 import { wecomInstallationsOptions } from "@multica/core/wecom";
 import { telegramInstallationsOptions } from "@multica/core/telegram";
+import { expressInstallationsOptions } from "@multica/core/express";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -151,13 +152,18 @@ export function AgentAdvancedSettings({
     ...telegramInstallationsOptions(wsId),
     enabled: !!wsId,
   });
+  const { data: expressListing } = useQuery({
+    ...expressInstallationsOptions(wsId),
+    enabled: !!wsId,
+  });
 
   const integrationsConfigured =
     larkListing?.configured === true ||
     slackListing?.configured === true ||
     dingtalkListing?.configured === true ||
     wecomListing?.configured === true ||
-    telegramListing?.configured === true;
+    telegramListing?.configured === true ||
+    expressListing?.configured === true;
 
   // The Qoder bridge fails every task carrying skills, MCP, connected apps,
   // env, args or a model override. Those editors are not offered; the agent
