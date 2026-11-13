@@ -113,6 +113,11 @@ export const RESERVED_SLUGS: ReadonlySet<string> = new Set([
   // DingTalk identity. Reserve the prefix so a workspace slug cannot shadow it.
   "dingtalk",
 
+  // eXpress account-bind route
+  // `/express/bind` is a global pre-workspace route where a member links their
+  // eXpress identity. Reserve the prefix so a workspace slug cannot shadow it.
+  "express",
+
   // Backend ops / observability
   // `/health`, `/readyz`, `/healthz`, and `/ws` exist on the backend host;
   // reserving them on the workspace slug space prevents naming confusion if/when

@@ -250,6 +250,10 @@ import type {
   ListTelegramInstallationsResponse,
   RegisterTelegramRequest,
   RedeemTelegramBindingTokenResponse,
+  ExpressInstallation,
+  ListExpressInstallationsResponse,
+  RegisterExpressRequest,
+  RedeemExpressBindingTokenResponse,
   Squad,
   SquadMember,
   SquadMemberStatusListResponse,
@@ -439,6 +443,12 @@ import {
   EMPTY_TELEGRAM_INSTALLATION,
   EMPTY_LIST_TELEGRAM_INSTALLATIONS_RESPONSE,
   EMPTY_REDEEM_TELEGRAM_BINDING_TOKEN_RESPONSE,
+  ExpressInstallationSchema,
+  ListExpressInstallationsResponseSchema,
+  RedeemExpressBindingTokenResponseSchema,
+  EMPTY_EXPRESS_INSTALLATION,
+  EMPTY_LIST_EXPRESS_INSTALLATIONS_RESPONSE,
+  EMPTY_REDEEM_EXPRESS_BINDING_TOKEN_RESPONSE,
   EMPTY_BILLING_BALANCE,
   EMPTY_BILLING_TRANSACTIONS_PAGE,
   EMPTY_BILLING_BATCHES_PAGE,
@@ -5956,6 +5966,50 @@ export class ApiClient {
       RedeemTelegramBindingTokenResponseSchema,
       EMPTY_REDEEM_TELEGRAM_BINDING_TOKEN_RESPONSE,
       { endpoint: "POST /api/telegram/binding/redeem" },
+    );
+  }
+
+  async listExpressInstallations(workspaceId: string): Promise<ListExpressInstallationsResponse> {
+    const raw = await this.fetch<unknown>(`/api/workspaces/${workspaceId}/express/installations`);
+    return parseWithFallback(
+      raw,
+      ListExpressInstallationsResponseSchema,
+      EMPTY_LIST_EXPRESS_INSTALLATIONS_RESPONSE,
+      { endpoint: "GET /api/workspaces/:id/express/installations" },
+    );
+  }
+
+  async registerExpressBot(
+    workspaceId: string,
+    agentId: string,
+    body: RegisterExpressRequest,
+  ): Promise<ExpressInstallation> {
+    const search = new URLSearchParams({ agent_id: agentId });
+    const raw = await this.fetch<unknown>(
+      `/api/workspaces/${workspaceId}/express/install?${search.toString()}`,
+      { method: "POST", body: JSON.stringify(body) },
+    );
+    return parseWithFallback(raw, ExpressInstallationSchema, EMPTY_EXPRESS_INSTALLATION, {
+      endpoint: "POST /api/workspaces/:id/express/install",
+    });
+  }
+
+  async deleteExpressInstallation(workspaceId: string, installationId: string): Promise<void> {
+    await this.fetch(`/api/workspaces/${workspaceId}/express/installations/${installationId}`, {
+      method: "DELETE",
+    });
+  }
+
+  async redeemExpressBindingToken(token: string): Promise<RedeemExpressBindingTokenResponse> {
+    const raw = await this.fetch<unknown>(`/api/express/binding/redeem`, {
+      method: "POST",
+      body: JSON.stringify({ token }),
+    });
+    return parseWithFallback(
+      raw,
+      RedeemExpressBindingTokenResponseSchema,
+      EMPTY_REDEEM_EXPRESS_BINDING_TOKEN_RESPONSE,
+      { endpoint: "POST /api/express/binding/redeem" },
     );
   }
 }

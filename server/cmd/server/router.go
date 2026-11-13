@@ -34,6 +34,7 @@ import (
 	"github.com/multica-ai/multica/server/internal/integrations/channel/engine"
 	composiointeg "github.com/multica-ai/multica/server/internal/integrations/composio"
 	"github.com/multica-ai/multica/server/internal/integrations/dingtalk"
+	"github.com/multica-ai/multica/server/internal/integrations/express"
 	"github.com/multica-ai/multica/server/internal/integrations/lark"
 	"github.com/multica-ai/multica/server/internal/integrations/slack"
 	"github.com/multica-ai/multica/server/internal/integrations/telegram"
@@ -1304,6 +1305,46 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 		slog.Info("telegram integration disabled (MULTICA_TELEGRAM_SECRET_KEY not set)")
 	}
 
+	// eXpress (BotX) integration. BYO bot: the CTS administrator registers a
+	// bot whose URL is <API>/api/express, a workspace admin pastes its CTS
+	// address, bot_id and secret_key. BotX is push-only, so inbound is the
+	// public webhook below (JWT-verified per bot), handed straight to the
+	// engine's inbound handler; replies go out on chat:done like DingTalk.
+	// Gated by MULTICA_EXPRESS_SECRET_KEY (at-rest encryption of the secret).
+	if expressKey, err := secretbox.LoadKey("MULTICA_EXPRESS_SECRET_KEY"); err == nil {
+		box, err := secretbox.New(expressKey)
+		if err != nil {
+			slog.Error("express: secretbox.New failed; express integration disabled", "error", err)
+		} else {
+			expressBindingSvc := express.NewBindingTokenService(queries, pool)
+			h.ExpressBindingTokens = expressBindingSvc
+			expressReplier := express.NewOutboundReplier(express.OutboundReplierConfig{
+				Binding: expressBindingSvc,
+				Decrypt: box.Open,
+				AppURL:  appURLFromEnv(),
+				Logger:  slog.Default(),
+			})
+			channelRouter.Register(express.TypeExpress, express.NewExpressResolverSet(queries, pool, expressReplier))
+			express.NewOutbound(queries, box.Open, nil, slog.Default()).Register(bus)
+			express.RegisterExpress(channelRegistry, express.ChannelDeps{Decrypt: box.Open, Logger: slog.Default()})
+			h.ExpressWebhook = express.NewWebhook(express.WebhookConfig{
+				Queries: queries,
+				Decrypt: box.Open,
+				Handler: channelRouter.Handle,
+				Logger:  slog.Default(),
+			})
+			installSvc, ierr := express.NewInstallService(queries, pool, box, slog.Default())
+			if ierr != nil {
+				slog.Error("express: InstallService init failed; install disabled", "error", ierr)
+			} else {
+				h.ExpressInstall = installSvc
+			}
+			slog.Info("express integration enabled (BotX webhook)")
+		}
+	} else {
+		slog.Info("express integration disabled (MULTICA_EXPRESS_SECRET_KEY not set)")
+	}
+
 	// Composio integration (MUL-3720). Gated by COMPOSIO_API_KEY plus the
 	// composio_mcp_apps feature flag. The env var is the project-scoped key the
 	// standalone SDK authenticates Composio with (sent as x-api-key; the project
@@ -1592,6 +1633,12 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 	// GitHub App webhook (no Multica auth — requests are authenticated via
 	// HMAC-SHA256 signature in the handler) and post-install setup callback.
 	r.Post("/api/webhooks/github", h.HandleGitHubWebhook)
+	// eXpress (BotX) bot endpoints. No Multica auth: CTS signs every request
+	// with a JWT made from the bot's secret key, verified in the handler.
+	// The CTS administrator registers <API>/api/express as the bot URL.
+	r.Post("/api/express/command", h.ExpressCommand)
+	r.Get("/api/express/status", h.ExpressStatus)
+	r.Post("/api/express/notification/callback", h.ExpressNotificationCallback)
 	r.Get("/api/github/setup", h.GitHubSetupCallback)
 	// Slack OAuth callback (no Multica auth in the path — it is hit by Slack's
 	// browser redirect; the workspace/agent/initiator are recovered from the
@@ -1994,6 +2041,17 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 					r.Delete("/telegram/installations/{installationId}", h.RevokeTelegramInstallation)
 					r.Post("/telegram/install", h.RegisterTelegramBot)
 				})
+
+				// eXpress integration. Same admin/member split as Telegram.
+				r.Group(func(r chi.Router) {
+					r.Use(middleware.RequireWorkspaceMemberFromURL(queries, "id"))
+					r.Get("/express/installations", h.ListExpressInstallations)
+				})
+				r.Group(func(r chi.Router) {
+					r.Use(middleware.RequireWorkspaceRoleFromURL(queries, "id", "owner", "admin"))
+					r.Delete("/express/installations/{installationId}", h.RevokeExpressInstallation)
+					r.Post("/express/install", h.RegisterExpressBot)
+				})
 			})
 		})
 
@@ -2021,6 +2079,8 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 		// workspace-scoped, identity from the session, token proves only
 		// "this Telegram user id requested binding".
 		r.Post("/api/telegram/binding/redeem", h.RedeemTelegramBindingToken)
+		// eXpress binding-token redemption. Same rationale as Telegram.
+		r.Post("/api/express/binding/redeem", h.RedeemExpressBindingToken)
 
 		// Composio integration (MUL-3720). User-scoped (no workspace context):
 		// a connection belongs to a user. These four require a logged-in

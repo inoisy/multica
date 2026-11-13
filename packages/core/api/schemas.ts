@@ -52,6 +52,9 @@ import type {
   TelegramInstallation,
   ListTelegramInstallationsResponse,
   RedeemTelegramBindingTokenResponse,
+  ExpressInstallation,
+  ListExpressInstallationsResponse,
+  RedeemExpressBindingTokenResponse,
   GroupedIssuesResponse,
   GitHubConnectResponse,
   IssuePullRequestsResponse,
@@ -3720,6 +3723,57 @@ export const EMPTY_REDEEM_TELEGRAM_BINDING_TOKEN_RESPONSE: RedeemTelegramBinding
   workspace_id: "",
   installation_id: "",
   telegram_user_id: "",
+};
+
+export const ExpressInstallationSchema = z.object({
+  id: z.string(),
+  workspace_id: z.string().default(""),
+  agent_id: z.string().default(""),
+  bot_id: z.string().default(""),
+  cts_url: z.string().default(""),
+  bot_name: z.string().default(""),
+  installer_user_id: z.string().default(""),
+  status: z.string().default("revoked"),
+  installed_at: z.string().default(""),
+  created_at: z.string().default(""),
+  updated_at: z.string().default(""),
+}).loose();
+
+export const EMPTY_EXPRESS_INSTALLATION: ExpressInstallation = {
+  id: "",
+  workspace_id: "",
+  agent_id: "",
+  bot_id: "",
+  cts_url: "",
+  bot_name: "",
+  installer_user_id: "",
+  status: "revoked",
+  installed_at: "",
+  created_at: "",
+  updated_at: "",
+};
+
+export const ListExpressInstallationsResponseSchema = z.object({
+  installations: z.array(ExpressInstallationSchema).default([]),
+  configured: z.boolean().default(false),
+  install_supported: z.boolean().optional(),
+}).loose();
+
+export const EMPTY_LIST_EXPRESS_INSTALLATIONS_RESPONSE: ListExpressInstallationsResponse = {
+  installations: [],
+  configured: false,
+};
+
+export const RedeemExpressBindingTokenResponseSchema = z.object({
+  workspace_id: z.string().default(""),
+  installation_id: z.string().default(""),
+  express_user_id: z.string().default(""),
+}).loose();
+
+export const EMPTY_REDEEM_EXPRESS_BINDING_TOKEN_RESPONSE: RedeemExpressBindingTokenResponse = {
+  workspace_id: "",
+  installation_id: "",
+  express_user_id: "",
 };
 
 // Skills. Introduced for `POST /api/skills/:id/refresh` (update a skill from

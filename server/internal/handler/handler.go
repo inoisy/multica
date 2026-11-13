@@ -28,6 +28,7 @@ import (
 	"github.com/multica-ai/multica/server/internal/integrations/channel/engine"
 	composio "github.com/multica-ai/multica/server/internal/integrations/composio"
 	"github.com/multica-ai/multica/server/internal/integrations/dingtalk"
+	"github.com/multica-ai/multica/server/internal/integrations/express"
 	"github.com/multica-ai/multica/server/internal/integrations/ghsnapshot"
 	"github.com/multica-ai/multica/server/internal/integrations/lark"
 	"github.com/multica-ai/multica/server/internal/integrations/slack"
@@ -398,6 +399,14 @@ type Handler struct {
 	// The process owner starts and joins it; the synchronous event bus only
 	// enqueues EventChatDone work.
 	TelegramOutbound *telegram.Outbound
+
+	// ExpressInstall owns the eXpress (BotX) bot install lifecycle and the
+	// at-rest encryption of each bot's secret key. ExpressBindingTokens backs
+	// the "link your eXpress account" prompt; ExpressWebhook is the public
+	// endpoint CTS calls. All nil unless MULTICA_EXPRESS_SECRET_KEY is set.
+	ExpressInstall       *express.InstallService
+	ExpressBindingTokens *express.BindingTokenService
+	ExpressWebhook       *express.Webhook
 
 	// channelFileDelivery names the channel types that can, IN THIS
 	// DEPLOYMENT, carry a file the agent produced the last hop into the

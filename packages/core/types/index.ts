@@ -282,6 +282,12 @@ export type {
   RedeemTelegramBindingTokenResponse,
 } from "./telegram";
 export type {
+  ExpressInstallation,
+  ListExpressInstallationsResponse,
+  RegisterExpressRequest,
+  RedeemExpressBindingTokenResponse,
+} from "./express";
+export type {
   Autopilot,
   AutopilotStatus,
   AutopilotExecutionMode,

@@ -94,6 +94,13 @@ vi.mock("@multica/core/telegram", () => ({
   }),
 }));
 
+vi.mock("@multica/core/express", () => ({
+  expressInstallationsOptions: () => ({
+    queryKey: ["express", "installations"],
+    queryFn: vi.fn(),
+  }),
+}));
+
 vi.mock("@multica/core/dingtalk", () => ({
   dingtalkInstallationsOptions: () => ({
     queryKey: ["dingtalk", "installations"],
@@ -166,6 +173,12 @@ vi.mock("../../../settings/components/wecom-tab", () => ({
 vi.mock("../../../settings/components/telegram-tab", () => ({
   TelegramAgentBindButton: ({ agentId }: { agentId: string }) => (
     <div data-testid="telegram-bind-button" data-agent-id={agentId} />
+  ),
+}));
+
+vi.mock("../../../settings/components/express-tab", () => ({
+  ExpressAgentBindButton: ({ agentId }: { agentId: string }) => (
+    <div data-testid="express-bind-button" data-agent-id={agentId} />
   ),
 }));
 
@@ -278,6 +291,10 @@ describe("IntegrationsTab", () => {
     expect(screen.getByTestId("lark-bind-button").getAttribute("data-agent-id")).toBe("agent-1");
     expect(screen.getByTestId("slack-bind-button").getAttribute("data-agent-id")).toBe("agent-1");
     expect(screen.getByTestId("telegram-bind-button").getAttribute("data-agent-id")).toBe(
+      "agent-1",
+    );
+    expect(screen.getByText("eXpress")).toBeTruthy();
+    expect(screen.getByTestId("express-bind-button").getAttribute("data-agent-id")).toBe(
       "agent-1",
     );
   });
@@ -568,10 +585,11 @@ describe("IntegrationsTab", () => {
     expect(screen.queryByTestId("slack-bind-button")).toBeNull();
     expect(screen.queryByTestId("wecom-bind-button")).toBeNull();
     expect(screen.queryByTestId("telegram-bind-button")).toBeNull();
-    // The Slack, WeCom and Telegram sections fall back to the shared members note.
+    expect(screen.queryByTestId("express-bind-button")).toBeNull();
+    // The Slack, WeCom, Telegram and eXpress sections fall back to the shared members note.
     expect(
       screen.getAllByText(/Only workspace owners and admins can manage this connection/i),
-    ).toHaveLength(3);
+    ).toHaveLength(4);
   });
 
   it("renders the bind entry (not coming-soon) when installs are unavailable but the agent is already bound", () => {

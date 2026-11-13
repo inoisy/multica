@@ -109,6 +109,13 @@
       ]
     },
     {
+      "label": "eXpress account-bind route",
+      "description": "`/express/bind` is a global pre-workspace route where a member links their eXpress identity. Reserve the prefix so a workspace slug cannot shadow it.",
+      "slugs": [
+        "express"
+      ]
+    },
+    {
       "label": "Backend ops / observability",
       "description": "`/health`, `/readyz`, `/healthz`, and `/ws` exist on the backend host; reserving them on the workspace slug space prevents naming confusion if/when these paths are ever proxied through the web origin.",
       "slugs": [

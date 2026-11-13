@@ -810,6 +810,44 @@ describe("ApiClient schema fallback", () => {
     });
   });
 
+  describe("eXpress integration", () => {
+    it("falls back to a safe empty installation list when the response is malformed", async () => {
+      stubFetchJson({ installations: "not-an-array", configured: true });
+      const client = new ApiClient("https://api.example.test");
+      await expect(client.listExpressInstallations("ws-1")).resolves.toEqual({
+        installations: [],
+        configured: false,
+      });
+    });
+
+    it("defaults fields omitted by an older server", async () => {
+      stubFetchJson({ installations: [{ id: "ex-1", status: "active" }], configured: true });
+      const client = new ApiClient("https://api.example.test");
+      const res = await client.listExpressInstallations("ws-1");
+      expect(res.installations[0]).toMatchObject({
+        id: "ex-1",
+        bot_id: "",
+        cts_url: "",
+        bot_name: "",
+      });
+    });
+
+    it("falls back safely when register and redeem responses are malformed", async () => {
+      stubFetchJson({ id: 123 });
+      const client = new ApiClient("https://api.example.test");
+      await expect(
+        client.registerExpressBot("ws-1", "agent-1", { cts_url: "cts", bot_id: "b", secret_key: "s" }),
+      ).resolves.toMatchObject({ id: "", status: "revoked" });
+
+      stubFetchJson({ workspace_id: 123 });
+      await expect(client.redeemExpressBindingToken("bind-token")).resolves.toEqual({
+        workspace_id: "",
+        installation_id: "",
+        express_user_id: "",
+      });
+    });
+  });
+
   describe("listDingTalkGroups", () => {
     it("preserves bot activity metadata for each group relationship", async () => {
       stubFetchJson({
