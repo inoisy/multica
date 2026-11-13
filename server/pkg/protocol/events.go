@@ -235,4 +235,9 @@ const (
 	// front-ends invalidate the Telegram installations query on either.
 	EventTelegramInstallationCreated = "telegram_installation:created"
 	EventTelegramInstallationRevoked = "telegram_installation:revoked"
+
+	// eXpress (BotX) installation lifecycle. Same contract as the Telegram
+	// pair: front-ends invalidate the eXpress installations query on either.
+	EventExpressInstallationCreated = "express_installation:created"
+	EventExpressInstallationRevoked = "express_installation:revoked"
 )
