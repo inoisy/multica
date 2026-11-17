@@ -446,6 +446,9 @@ type DaemonHeartbeatAckPayload struct {
 	// PendingSubscriptionLogin asks the daemon to sign a subscription in and
 	// write its credential file. Token is set only for pasted secrets.
 	PendingSubscriptionLogin *DaemonHeartbeatPendingSubscriptionLogin `json:"pending_subscription_login,omitempty"`
+	// PendingSubscriptionProbe asks the daemon to measure one subscription now
+	// and report the snapshot tagged with the probe id.
+	PendingSubscriptionProbe *DaemonHeartbeatPendingSubscriptionProbe `json:"pending_subscription_probe,omitempty"`
 	PendingLocalSkills       *DaemonHeartbeatPendingLocalSkills       `json:"pending_local_skills,omitempty"`
 	PendingLocalSkillImport  *DaemonHeartbeatPendingLocalSkillImport  `json:"pending_local_skill_import,omitempty"`
 	// PendingLocalSkillImports carries multiple import requests in a single
@@ -476,6 +479,14 @@ type DaemonHeartbeatPendingSubscriptionLogin struct {
 	Auth           string `json:"auth"`
 	CredentialPath string `json:"credential_path"`
 	Token          string `json:"token,omitempty"`
+}
+
+// DaemonHeartbeatPendingSubscriptionProbe is a forced measurement of one
+// subscription in the workspace that asked for it.
+type DaemonHeartbeatPendingSubscriptionProbe struct {
+	ID          string `json:"id"`
+	Key         string `json:"key"`
+	WorkspaceID string `json:"workspace_id"`
 }
 
 // DaemonHeartbeatPendingModelList describes a request for the daemon to

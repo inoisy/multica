@@ -1577,6 +1577,9 @@ func (h *Handler) DaemonHeartbeat(w http.ResponseWriter, r *http.Request) {
 	if ack.PendingSubscriptionLogin != nil {
 		resp["pending_subscription_login"] = ack.PendingSubscriptionLogin
 	}
+	if ack.PendingSubscriptionProbe != nil {
+		resp["pending_subscription_probe"] = ack.PendingSubscriptionProbe
+	}
 	if ack.PendingLocalSkills != nil {
 		resp["pending_local_skills"] = ack.PendingLocalSkills
 	}
@@ -1818,6 +1821,7 @@ func (h *Handler) processHeartbeat(ctx context.Context, runtimeID string, suppor
 	// A pending subscription sign-in rides the same ack. In-memory only: the
 	// pasted token must never reach a shared store.
 	ack.PendingSubscriptionLogin = h.pendingSubscriptionLoginFor(ctx, runtimeID)
+	ack.PendingSubscriptionProbe = h.pendingSubscriptionProbeFor(ctx, runtimeID)
 
 	// Probe then claim the local-skill list queue. The probe is bounded so a
 	// slow shared store cannot stall the heartbeat on empty-queue ticks; the

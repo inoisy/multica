@@ -294,3 +294,10 @@ FROM agent_task_queue t
 LEFT JOIN issue i ON i.id = t.issue_id
 WHERE t.agent_id = $1 AND t.status = 'queued' AND t.model_choice->>'reason' = 'all_unavailable'
 ORDER BY t.created_at;
+
+-- name: DeleteProviderLimitRefusalsBySubscription :many
+-- A probe the provider answered without a limit frees the refusals pinned to
+-- that account; other accounts' refusals stay.
+DELETE FROM runtime_unavailable
+WHERE subscription_id = @subscription_id AND reason_code = 'provider_limit'
+RETURNING *;

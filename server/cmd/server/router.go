@@ -1828,6 +1828,10 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 			r.Post("/{key}/login", h.StartSubscriptionLogin)
 			r.Get("/{key}/login", h.GetSubscriptionLogin)
 			r.Delete("/{key}/login", h.CancelSubscriptionLogin)
+			// Forced re-check of the provider limit; owner or admin of a
+			// workspace spending the account, like the recheck of refusals.
+			r.Post("/{key}/probe", h.StartSubscriptionProbe)
+			r.Get("/{key}/probe/{probeId}", h.GetSubscriptionProbe)
 			// Journal of the commands an instance admin ran by hand.
 			r.Get("/{key}/manual-runs", h.ListSubscriptionManualRuns)
 			r.Post("/{key}/manual-runs", h.OpenSubscriptionManualRun)
