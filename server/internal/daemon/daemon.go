@@ -4593,6 +4593,9 @@ func (d *Daemon) handleHeartbeatActions(ctx context.Context, runtimeID string, r
 	if resp.PendingSubscriptionLogin != nil {
 		go d.handleSubscriptionLogin(ctx, runtimeID, resp.PendingSubscriptionLogin)
 	}
+	if resp.PendingSubscriptionProbe != nil {
+		go d.handleSubscriptionProbe(resp.PendingSubscriptionProbe)
+	}
 	if resp.PendingLocalSkills != nil {
 		if rt := d.findRuntime(runtimeID); rt != nil {
 			go d.handleLocalSkillList(ctx, *rt, resp.PendingLocalSkills.ID)

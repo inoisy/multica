@@ -256,6 +256,44 @@ func (q *Queries) DeleteModelProfileOptions(ctx context.Context, profileID pgtyp
 	return err
 }
 
+const deleteProviderLimitRefusalsBySubscription = `-- name: DeleteProviderLimitRefusalsBySubscription :many
+DELETE FROM runtime_unavailable
+WHERE subscription_id = $1 AND reason_code = 'provider_limit'
+RETURNING id, workspace_id, runtime_id, until, reason, task_id, created_at, reason_code, subscription_id
+`
+
+// A probe the provider answered without a limit frees the refusals pinned to
+// that account; other accounts' refusals stay.
+func (q *Queries) DeleteProviderLimitRefusalsBySubscription(ctx context.Context, subscriptionID pgtype.UUID) ([]RuntimeUnavailable, error) {
+	rows, err := q.db.Query(ctx, deleteProviderLimitRefusalsBySubscription, subscriptionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []RuntimeUnavailable{}
+	for rows.Next() {
+		var i RuntimeUnavailable
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.RuntimeID,
+			&i.Until,
+			&i.Reason,
+			&i.TaskID,
+			&i.CreatedAt,
+			&i.ReasonCode,
+			&i.SubscriptionID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const deleteRuntimeModelReferences = `-- name: DeleteRuntimeModelReferences :exec
 WITH deleted_profile_rows AS (
  DELETE FROM model_profile_option WHERE model_profile_option.runtime_id = $1

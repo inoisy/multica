@@ -158,7 +158,35 @@ func (d *Daemon) probeAfterRun(workspaceID string, sub subscriptions.Subscriptio
 	d.sendSubscriptionReports(ctx, workspaceID, []subscriptions.Report{rep})
 }
 
+// handleSubscriptionProbe measures the subscription the server asked about and
+// reports the snapshot tagged with the probe id. It is the same minimal probe
+// as the loop's, not a run.
+func (d *Daemon) handleSubscriptionProbe(p *PendingSubscriptionProbe) {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	subs, err := d.client.GetWorkspaceSubscriptions(ctx, p.WorkspaceID)
+	if err != nil {
+		d.logger.Warn("subscription probe: list subscriptions failed", "key", p.Key, "error", err)
+		return
+	}
+	for _, sub := range subs {
+		if sub.Key != p.Key {
+			continue
+		}
+		rep := d.subscriptionSelector().ProbeNow(ctx, sub)
+		d.sendSubscriptionReportsFor(ctx, p.WorkspaceID, []subscriptions.Report{rep}, p.ID)
+		return
+	}
+	d.logger.Warn("subscription probe: subscription not found on this host", "key", p.Key, "workspace_id", p.WorkspaceID)
+}
+
 func (d *Daemon) sendSubscriptionReports(ctx context.Context, workspaceID string, reports []subscriptions.Report) {
+	d.sendSubscriptionReportsFor(ctx, workspaceID, reports, "")
+}
+
+// sendSubscriptionReportsFor sends reports; a non-empty probeID tags each as the
+// answer to that forced probe.
+func (d *Daemon) sendSubscriptionReportsFor(ctx context.Context, workspaceID string, reports []subscriptions.Report, probeID string) {
 	if len(reports) == 0 {
 		return
 	}
@@ -166,6 +194,9 @@ func (d *Daemon) sendSubscriptionReports(ctx context.Context, workspaceID string
 	items := make([]map[string]any, 0, len(reports))
 	for _, r := range reports {
 		item := map[string]any{"key": r.Key, "credential_state": string(r.Credential)}
+		if probeID != "" {
+			item["probe_id"] = probeID
+		}
 		if r.Err != nil {
 			item["error"] = r.Err.Error()
 		}

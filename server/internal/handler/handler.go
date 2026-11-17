@@ -247,6 +247,7 @@ type Handler struct {
 	ModelListStore     ModelListStore
 	// SubscriptionLogins holds pending subscription sign-ins in memory only.
 	SubscriptionLogins    *SubscriptionLoginStore
+	SubscriptionProbes    *SubscriptionProbeStore
 	LocalSkillListStore   LocalSkillListStore
 	LocalSkillImportStore LocalSkillImportStore
 	FeatureFlags          *featureflag.Service
@@ -539,6 +540,7 @@ func New(queries *db.Queries, txStarter txStarter, hub *realtime.Hub, bus *event
 		UpdateStore:                  NewInMemoryUpdateStore(),
 		ModelListStore:               NewInMemoryModelListStore(),
 		SubscriptionLogins:           NewSubscriptionLoginStore(),
+		SubscriptionProbes:           NewSubscriptionProbeStore(),
 		ModelCatalogCache:            NewInMemoryModelCatalogCache(),
 		LocalSkillListStore:          NewInMemoryLocalSkillListStore(),
 		LocalSkillImportStore:        NewInMemoryLocalSkillImportStore(),

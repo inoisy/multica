@@ -172,7 +172,9 @@ type daemonUsageReport struct {
 	DaemonID   string `json:"daemon_id"`
 	DeviceName string `json:"device_name"`
 	Reports    []struct {
-		Key        string `json:"key"`
+		Key string `json:"key"`
+		// ProbeID tags the report as the answer to a forced probe.
+		ProbeID    string `json:"probe_id"`
 		Credential string `json:"credential_state"`
 		Error      string `json:"error"`
 		Windows    []struct {
@@ -217,6 +219,7 @@ func (h *Handler) DaemonReportSubscriptionUsage(w http.ResponseWriter, r *http.R
 	}
 	accepted := []string{}
 	changed := []string{}
+	probeFreed := false
 	for _, rep := range req.Reports {
 		sub, ok := byKey[rep.Key]
 		if !ok {
@@ -236,6 +239,7 @@ func (h *Handler) DaemonReportSubscriptionUsage(w http.ResponseWriter, r *http.R
 		}); err != nil {
 			slog.Warn("subscription host state upsert failed", "error", err, "key", rep.Key)
 		}
+		var measured []probeWindow
 		for _, win := range rep.Windows {
 			if !subscriptionWindowRe.MatchString(win.Window) || win.UsedPercent == nil {
 				continue
@@ -253,11 +257,25 @@ func (h *Handler) DaemonReportSubscriptionUsage(w http.ResponseWriter, r *http.R
 				continue
 			}
 			changed = append(changed, rep.Key)
+			measured = append(measured, probeWindow{limit: win.LimitReached || *win.UsedPercent >= 100, resetsAt: resets.Time})
+		}
+		if rep.ProbeID != "" && h.SubscriptionProbes != nil {
+			sub, err := h.Queries.GetSubscriptionByKey(r.Context(), rep.Key)
+			if err == nil {
+				if h.settleProbe(r.Context(), rep.ProbeID, sub, rep.Error, measured) {
+					probeFreed = true
+				}
+			}
 		}
 		accepted = append(accepted, rep.Key)
 	}
-	if len(changed) > 0 {
+	if len(changed) > 0 || probeFreed {
 		h.afterAccountChange(r.Context())
+	}
+	if probeFreed && h.TaskService != nil {
+		if _, err := h.TaskService.SweepModelRouting(r.Context()); err != nil {
+			slog.Warn("subscription probe: model routing sweep", "error", err)
+		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"accepted": accepted})
 }
@@ -438,13 +456,12 @@ func (h *Handler) pendingSubscriptionLoginFor(ctx context.Context, runtimeID str
 	}
 }
 
-// pickLoginRuntime chooses the daemon that signs in: an online runtime of a
-// profile spending the subscription, else an online runtime of the admin's
-// workspaces with the subscription's CLI family.
-func (h *Handler) pickLoginRuntime(ctx context.Context, sub db.Subscription, userID string) (string, error) {
+// onlinePoolRuntimes lists the online runtimes of the profiles whose pools
+// spend the subscription.
+func (h *Handler) onlinePoolRuntimes(ctx context.Context, sub db.Subscription) ([]db.AgentRuntime, error) {
 	pools, err := h.Queries.ListSubscriptionPoolMembersBySubscription(ctx, sub.ID)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	poolIDs := make([]pgtype.UUID, len(pools))
 	for i, m := range pools {
@@ -452,22 +469,35 @@ func (h *Handler) pickLoginRuntime(ctx context.Context, sub db.Subscription, use
 	}
 	profiles, err := h.Queries.ListRuntimeProfilesByPools(ctx, poolIDs)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	ids := make([]pgtype.UUID, len(profiles))
 	for i, p := range profiles {
 		ids[i] = p.ID
 	}
-	family := SubscriptionFamily(sub.Provider)
-	if len(ids) > 0 {
-		rts, err := h.Queries.ListAgentRuntimesByProfiles(ctx, ids)
-		if err == nil {
-			for _, rt := range rts {
-				if full, err := h.Queries.GetAgentRuntime(ctx, rt.ID); err == nil && full.Status == "online" {
-					return uuidToString(rt.ID), nil
-				}
-			}
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	rts, err := h.Queries.ListAgentRuntimesByProfiles(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	var online []db.AgentRuntime
+	for _, rt := range rts {
+		if full, err := h.Queries.GetAgentRuntime(ctx, rt.ID); err == nil && full.Status == "online" {
+			online = append(online, full)
 		}
+	}
+	return online, nil
+}
+
+// pickLoginRuntime chooses the daemon that signs in: an online runtime of a
+// profile spending the subscription, else an online runtime of the admin's
+// workspaces with the subscription's CLI family.
+func (h *Handler) pickLoginRuntime(ctx context.Context, sub db.Subscription, userID string) (string, error) {
+	family := SubscriptionFamily(sub.Provider)
+	if online, err := h.onlinePoolRuntimes(ctx, sub); err == nil && len(online) > 0 {
+		return uuidToString(online[0].ID), nil
 	}
 	uid, ok := parseUUIDSafe(userID)
 	if !ok {

@@ -816,6 +816,7 @@ type (
 	PendingUpdate            = protocol.DaemonHeartbeatPendingUpdate
 	PendingModelList         = protocol.DaemonHeartbeatPendingModelList
 	PendingSubscriptionLogin = protocol.DaemonHeartbeatPendingSubscriptionLogin
+	PendingSubscriptionProbe = protocol.DaemonHeartbeatPendingSubscriptionProbe
 	PendingLocalSkills       = protocol.DaemonHeartbeatPendingLocalSkills
 	PendingLocalSkillImport  = protocol.DaemonHeartbeatPendingLocalSkillImport
 )
