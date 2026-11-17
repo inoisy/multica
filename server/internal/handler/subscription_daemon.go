@@ -219,7 +219,7 @@ func (h *Handler) DaemonReportSubscriptionUsage(w http.ResponseWriter, r *http.R
 	}
 	accepted := []string{}
 	changed := []string{}
-	liftedByProbe := 0
+	probeFreed := false
 	for _, rep := range req.Reports {
 		sub, ok := byKey[rep.Key]
 		if !ok {
@@ -262,15 +262,17 @@ func (h *Handler) DaemonReportSubscriptionUsage(w http.ResponseWriter, r *http.R
 		if rep.ProbeID != "" && h.SubscriptionProbes != nil {
 			sub, err := h.Queries.GetSubscriptionByKey(r.Context(), rep.Key)
 			if err == nil {
-				liftedByProbe += h.settleProbe(r.Context(), rep.ProbeID, sub, rep.Error, measured)
+				if h.settleProbe(r.Context(), rep.ProbeID, sub, rep.Error, measured) {
+					probeFreed = true
+				}
 			}
 		}
 		accepted = append(accepted, rep.Key)
 	}
-	if len(changed) > 0 || liftedByProbe > 0 {
+	if len(changed) > 0 || probeFreed {
 		h.afterAccountChange(r.Context())
 	}
-	if liftedByProbe > 0 && h.TaskService != nil {
+	if probeFreed && h.TaskService != nil {
 		if _, err := h.TaskService.SweepModelRouting(r.Context()); err != nil {
 			slog.Warn("subscription probe: model routing sweep", "error", err)
 		}

@@ -261,9 +261,10 @@ type probeWindow struct {
 }
 
 // settleProbe closes a probe with the daemon's report. A free answer deletes
-// the account's provider_limit refusals; the caller then lets the waiting runs
-// out. It returns how many refusals were lifted.
-func (h *Handler) settleProbe(ctx context.Context, probeID string, sub db.Subscription, errText string, windows []probeWindow) int {
+// the account's provider_limit refusals and reports freed, so the caller lets
+// the waiting runs out at once — also when the block was only the old
+// snapshot and no refusal row existed.
+func (h *Handler) settleProbe(ctx context.Context, probeID string, sub db.Subscription, errText string, windows []probeWindow) (freed bool) {
 	state, message, resetsAt := probeVerdict(errText, windows)
 	lifted := 0
 	if state == probeDone {
@@ -274,9 +275,10 @@ func (h *Handler) settleProbe(ctx context.Context, probeID string, sub db.Subscr
 		}
 		lifted = len(rows)
 	}
+	freed = state == probeDone
 	if !h.SubscriptionProbes.answer(probeID, sub.Key, state, message, lifted, resetsAt) {
-		return 0
+		return freed
 	}
 	slog.Info("subscription probe answered", "key", sub.Key, "probe_id", probeID, "state", state, "lifted", lifted)
-	return lifted
+	return freed
 }
