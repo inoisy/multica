@@ -147,6 +147,7 @@ export interface EditorExtensionsOptions {
   placeholder?: string | (() => string);
   queryClient?: import("@tanstack/react-query").QueryClient;
   onSubmitRef?: RefObject<(() => void) | undefined>;
+  onEnterRef?: RefObject<(() => void) | undefined>;
   onUploadFileRef?: RefObject<
     ((file: File, uploadId: string) => Promise<UploadResult | null>) | undefined
   >;
@@ -173,14 +174,13 @@ export interface EditorExtensionsOptions {
   /**
    * Which `/` menu to attach when enableSlashCommands is true:
    * - "skill" (default) — the chat picker listing the active agent's skills.
-   * - "command" — the fixed built-in command menu (issue comments), e.g. /note.
+   * - "command" — Issue quick actions, skills matching a nonempty query, and /note.
    */
   slashCommandMode?: "skill" | "command";
   /**
-   * Quick actions offered in the "command" `/` menu, plus the resolver that
-   * turns a pick into the text it would post (MUL-5465). Both are functions so
-   * the editor is created once while still reading live data; the setup layer
-   * owns React Query access. Omit on composers with no issue context.
+   * Quick actions and Issue target-agent skills offered in the "command" `/`
+   * menu, plus the resolver that turns a quick-action pick into draft text.
+   * Functions keep the editor mounted while reading live React Query data.
    */
   quickActionMenu?: BuiltinCommandSuggestionOptions;
   /**
@@ -309,7 +309,7 @@ export function createEditorExtensions(
       if (!fn) return false;
       fn();
       return true;
-    }),
+    }, () => options.onEnterRef?.current),
     createBlurShortcutExtension(),
     createFileUploadExtension(options.onUploadFileRef!, options.pasteAsFileThresholdRef),
   ];

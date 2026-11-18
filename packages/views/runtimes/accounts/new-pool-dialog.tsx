@@ -66,7 +66,7 @@ export function NewPoolDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
+      <DialogContent className="max-h-[90%] overflow-y-auto sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>{t(($) => $.subscriptions.new_pool.title)}</DialogTitle>
         </DialogHeader>

@@ -17,7 +17,7 @@ INSERT INTO runtime_profile (
     fixed_args, visibility, created_by, enabled, runtime_type, pool_id
 ) VALUES ($1, $2, $3, $3, $4, '[]'::jsonb, 'workspace', $5, true, $3, $6)
 ON CONFLICT DO NOTHING
-RETURNING id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, pool_id
+RETURNING id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, daemon_id, pool_id
 `
 
 type CreatePoolRuntimeProfileParams struct {
@@ -54,6 +54,7 @@ func (q *Queries) CreatePoolRuntimeProfile(ctx context.Context, arg CreatePoolRu
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.RuntimeType,
+		&i.DaemonID,
 		&i.PoolID,
 	)
 	return i, err
@@ -164,7 +165,7 @@ const disablePoolRuntimeProfileInWorkspace = `-- name: DisablePoolRuntimeProfile
 UPDATE runtime_profile
 SET enabled = false, updated_at = now()
 WHERE pool_id = $1 AND workspace_id = $2 AND enabled
-RETURNING id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, pool_id
+RETURNING id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, daemon_id, pool_id
 `
 
 type DisablePoolRuntimeProfileInWorkspaceParams struct {
@@ -196,6 +197,7 @@ func (q *Queries) DisablePoolRuntimeProfileInWorkspace(ctx context.Context, arg 
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.RuntimeType,
+			&i.DaemonID,
 			&i.PoolID,
 		); err != nil {
 			return nil, err
@@ -209,7 +211,7 @@ func (q *Queries) DisablePoolRuntimeProfileInWorkspace(ctx context.Context, arg 
 }
 
 const getPoolRuntimeProfileInWorkspace = `-- name: GetPoolRuntimeProfileInWorkspace :one
-SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, pool_id FROM runtime_profile WHERE pool_id = $1 AND workspace_id = $2
+SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, daemon_id, pool_id FROM runtime_profile WHERE pool_id = $1 AND workspace_id = $2
 `
 
 type GetPoolRuntimeProfileInWorkspaceParams struct {
@@ -234,6 +236,7 @@ func (q *Queries) GetPoolRuntimeProfileInWorkspace(ctx context.Context, arg GetP
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.RuntimeType,
+		&i.DaemonID,
 		&i.PoolID,
 	)
 	return i, err
@@ -370,7 +373,7 @@ func (q *Queries) ListAllWorkspacePools(ctx context.Context) ([]SubscriptionPool
 }
 
 const listEnabledPoolRuntimeProfilesForWorkspace = `-- name: ListEnabledPoolRuntimeProfilesForWorkspace :many
-SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, pool_id FROM runtime_profile
+SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, daemon_id, pool_id FROM runtime_profile
 WHERE workspace_id = $1 AND enabled AND pool_id IS NOT NULL
 ORDER BY created_at
 `
@@ -399,6 +402,7 @@ func (q *Queries) ListEnabledPoolRuntimeProfilesForWorkspace(ctx context.Context
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.RuntimeType,
+			&i.DaemonID,
 			&i.PoolID,
 		); err != nil {
 			return nil, err
@@ -448,7 +452,7 @@ func (q *Queries) ListLatestSubscriptionUsageBySubscriptions(ctx context.Context
 }
 
 const listPoolRuntimeProfiles = `-- name: ListPoolRuntimeProfiles :many
-SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, pool_id FROM runtime_profile WHERE pool_id = $1 ORDER BY created_at, id
+SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, daemon_id, pool_id FROM runtime_profile WHERE pool_id = $1 ORDER BY created_at, id
 `
 
 // The environments of a pool, one per workspace it reaches.
@@ -475,6 +479,7 @@ func (q *Queries) ListPoolRuntimeProfiles(ctx context.Context, poolID pgtype.UUI
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.RuntimeType,
+			&i.DaemonID,
 			&i.PoolID,
 		); err != nil {
 			return nil, err
@@ -488,7 +493,7 @@ func (q *Queries) ListPoolRuntimeProfiles(ctx context.Context, poolID pgtype.UUI
 }
 
 const listPoolRuntimeProfilesAll = `-- name: ListPoolRuntimeProfilesAll :many
-SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, pool_id FROM runtime_profile WHERE pool_id IS NOT NULL ORDER BY workspace_id, created_at, id
+SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, daemon_id, pool_id FROM runtime_profile WHERE pool_id IS NOT NULL ORDER BY workspace_id, created_at, id
 `
 
 // Every environment that spends a pool, in every workspace.
@@ -515,6 +520,7 @@ func (q *Queries) ListPoolRuntimeProfilesAll(ctx context.Context) ([]RuntimeProf
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.RuntimeType,
+			&i.DaemonID,
 			&i.PoolID,
 		); err != nil {
 			return nil, err
@@ -528,7 +534,7 @@ func (q *Queries) ListPoolRuntimeProfilesAll(ctx context.Context) ([]RuntimeProf
 }
 
 const listRuntimeProfilesByPools = `-- name: ListRuntimeProfilesByPools :many
-SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, pool_id FROM runtime_profile WHERE pool_id = ANY($1::uuid[]) ORDER BY created_at, id
+SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, daemon_id, pool_id FROM runtime_profile WHERE pool_id = ANY($1::uuid[]) ORDER BY created_at, id
 `
 
 func (q *Queries) ListRuntimeProfilesByPools(ctx context.Context, poolIds []pgtype.UUID) ([]RuntimeProfile, error) {
@@ -554,6 +560,7 @@ func (q *Queries) ListRuntimeProfilesByPools(ctx context.Context, poolIds []pgty
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.RuntimeType,
+			&i.DaemonID,
 			&i.PoolID,
 		); err != nil {
 			return nil, err
@@ -953,7 +960,7 @@ WHERE rp.pool_id = $2
   AND ($1::bool = false OR rp.workspace_id IN (
         SELECT g.workspace_id FROM subscription_pool_grant g WHERE g.pool_id = $2
         UNION SELECT w.id FROM workspace w WHERE EXISTS (SELECT 1 FROM subscription_pool p WHERE p.id = $2 AND p.all_workspaces)))
-RETURNING id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, pool_id
+RETURNING id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, daemon_id, pool_id
 `
 
 type SetPoolRuntimeProfilesEnabledParams struct {
@@ -986,6 +993,7 @@ func (q *Queries) SetPoolRuntimeProfilesEnabled(ctx context.Context, arg SetPool
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.RuntimeType,
+			&i.DaemonID,
 			&i.PoolID,
 		); err != nil {
 			return nil, err
@@ -1019,7 +1027,7 @@ SET display_name = $1,
     updated_at = now()
 WHERE pool_id = $3
   AND (display_name <> $1 OR description IS DISTINCT FROM $2)
-RETURNING id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, pool_id
+RETURNING id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, daemon_id, pool_id
 `
 
 type SyncPoolRuntimeProfilesParams struct {
@@ -1052,6 +1060,7 @@ func (q *Queries) SyncPoolRuntimeProfiles(ctx context.Context, arg SyncPoolRunti
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.RuntimeType,
+			&i.DaemonID,
 			&i.PoolID,
 		); err != nil {
 			return nil, err

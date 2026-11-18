@@ -32,6 +32,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Loader2 } from "@multica/ui/icons";
 import { api } from "@multica/core/api";
 import { paths, useWorkspaceSlug } from "@multica/core/paths";
+import { getPreviewKind } from "../editor/utils/preview";
 import { useT } from "../i18n";
 import { useBackOrReplace } from "../navigation";
 import { useRestoredViewState, useViewStateWriter } from "../platform";
@@ -64,14 +65,19 @@ export function AttachmentPreviewPage({
   const query = useQuery({
     queryKey: ["attachment-preview-page", attachmentId] as const,
     queryFn: () => api.getAttachment(attachmentId),
-    // The record carries signed media URLs. Refetching would re-sign them and
-    // reload a playing video or an open PDF under the reader; one fetch per
-    // page view is enough.
+    // Images authenticate once per page open; loaded streams stay stable.
     staleTime: Infinity,
+    refetchOnMount: (query) =>
+      query.state.data && getPreviewKind(
+        query.state.data.content_type, query.state.data.filename,
+      ) === "image" ? "always" : false,
     refetchOnWindowFocus: false,
     retry: false,
   });
-  const attachment = query.data?.id ? query.data : null;
+  const attachment = query.data?.id === attachmentId ? query.data : null;
+  const isImage = attachment &&
+    getPreviewKind(attachment.content_type, attachment.filename) === "image";
+  const imagePending = isImage && query.fetchStatus !== "idle";
 
   // Set document.title so desktop's MutationObserver-based tab title picks
   // up the filename. Web shows the same string in the browser tab.
@@ -100,10 +106,11 @@ export function AttachmentPreviewPage({
     [writeViewState],
   );
 
-  if (attachment) {
+  if (attachment && !(isImage && (imagePending || query.isError))) {
     return (
       <AttachmentPreviewStandalone
         attachment={attachment}
+        currentImageMetadata={isImage ? attachment : undefined}
         renderHtmlFrame={renderPageHtmlFrame}
         initialHtmlAddress={normalizeHtmlPreviewAddress(
           restoredAddress ?? initialAddress ?? "",
@@ -116,7 +123,7 @@ export function AttachmentPreviewPage({
 
   return (
     <div className="dark flex h-full w-full items-center justify-center gap-2 bg-black/95 px-4 text-body text-muted-foreground">
-      {query.isLoading ? (
+      {query.isPending || imagePending ? (
         <>
           <Loader2 className="size-4 animate-spin" />
           {t(($) => $.attachment.preview_loading)}
