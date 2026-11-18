@@ -25,6 +25,7 @@ import {
   runtimeDisplayName,
   runtimeProfileListOptions,
 } from "@multica/core/runtimes";
+import { runtimeReportsRateLimits } from "@multica/core/runtimes/rate-limits";
 import {
   type AgentPresenceDetail,
   useWorkspacePresenceMap,
@@ -55,6 +56,7 @@ import { availabilityConfig, workloadConfig } from "../../agents/presence";
 import { HealthBadge, HealthIcon, shortDaemonId, useHealthLabel } from "./shared";
 import { ProviderLogo } from "./provider-logo";
 import { UsageSection } from "./usage-section";
+import { RateLimitSection } from "./rate-limit-section";
 import { DeleteRuntimeDialog } from "./delete-runtime-dialog";
 import { RuntimeAccessEditor, RuntimeAccessReadout } from "./runtime-access-editor";
 import { RuntimeConcurrencyField } from "./runtime-concurrency-field";
@@ -174,6 +176,7 @@ export function RuntimeDetail({
   return (
     <>
       <ObjectPage
+        type="runtime"
         layoutId="multica_runtime_detail_layout"
         segments={[
           { href: paths.runtimes(), label: t(($) => $.page.title) },
@@ -240,6 +243,12 @@ export function RuntimeDetail({
               agentHref={(id) => paths.agentDetail(id)}
             />
           </ObjectSection>
+
+          {canReadRuntime && runtimeReportsRateLimits(runtime.provider) && (
+            <ObjectSection title={t(($) => $.rate_limits.title)}>
+              <RateLimitSection runtime={runtime} />
+            </ObjectSection>
+          )}
 
           {canReadRuntime && (
             <ObjectSection title={t(($) => $.detail.usage_title)}>

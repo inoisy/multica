@@ -26,7 +26,7 @@ export function ResetPersonalDialog({
   const { t } = useT("agents");
   return (
     <AlertDialog open={open} onOpenChange={(next) => (busy ? undefined : onOpenChange(next))}>
-      <AlertDialogContent className="w-[calc(100vw-2rem)] !max-w-[440px] gap-0 overflow-hidden p-0">
+      <AlertDialogContent className="w-[calc(100%-2rem)] !max-w-[440px] gap-0 overflow-hidden p-0">
         <div className="px-5 pb-4 pt-5">
           <AlertDialogTitle className="font-sans text-title-sm font-semibold">
             {t(($) => $.models.reset_title, { name: baseName })}

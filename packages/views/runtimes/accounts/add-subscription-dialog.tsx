@@ -192,7 +192,7 @@ export function AddSubscriptionDialog({
 
   return (
     <Dialog open={open} onOpenChange={(next) => (busy ? undefined : onOpenChange(next))}>
-      <DialogContent className="max-h-[90vh] grid-cols-[minmax(0,1fr)] overflow-y-auto sm:max-w-xl">
+      <DialogContent className="max-h-[90%] grid-cols-[minmax(0,1fr)] overflow-y-auto sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>{t(($) => $.subscriptions.add.title)}</DialogTitle>
           <DialogDescription>{t(($) => $.subscriptions.add.no_pool_note)}</DialogDescription>

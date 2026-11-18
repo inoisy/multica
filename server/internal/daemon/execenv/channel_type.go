@@ -18,6 +18,7 @@ const (
 	ChannelTypeWecom    = "wecom"
 	ChannelTypeDingtalk = "dingtalk"
 	ChannelTypeTelegram = "telegram"
+	ChannelTypeWeixin   = "weixin"
 	ChannelTypeExpress  = "express"
 )
 
@@ -31,7 +32,7 @@ const (
 // so a future non-persisting channel is never told "read it back".
 func SurfacePersistsTranscript(channelType string) bool {
 	switch channelType {
-	case "", ChannelTypeFeishu, ChannelTypeWecom, ChannelTypeDingtalk, ChannelTypeExpress:
+	case "", ChannelTypeFeishu, ChannelTypeWecom, ChannelTypeDingtalk, ChannelTypeWeixin, ChannelTypeExpress:
 		return true
 	default:
 		return false
@@ -130,6 +131,8 @@ func ChannelDisplayName(channelType string) string {
 		return "WeCom"
 	case ChannelTypeDingtalk:
 		return "DingTalk"
+	case ChannelTypeWeixin:
+		return "WeChat"
 	case ChannelTypeTelegram:
 		return "Telegram"
 	case ChannelTypeExpress:

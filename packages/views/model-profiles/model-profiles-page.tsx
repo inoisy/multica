@@ -456,7 +456,7 @@ export function ModelProfilesPage() {
 
       <Dialog open={editor !== null} onOpenChange={(next) => !next && !busy && setEditor(null)}>
         {editor ? (
-          <DialogContent className="max-h-[90vh] grid-cols-[minmax(0,1fr)] overflow-y-auto sm:max-w-2xl">
+          <DialogContent className="max-h-[90%] grid-cols-[minmax(0,1fr)] overflow-y-auto sm:max-w-2xl">
             <DialogHeader>
               <DialogTitle>
                 {editor.id ? t(($) => $.model_profiles.edit_title) : t(($) => $.model_profiles.create_title)}
