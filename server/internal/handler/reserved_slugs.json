@@ -290,6 +290,7 @@
         "usage",
         "runtimes",
         "skills",
+        "apps",
         "settings",
         "conveyor",
         "subscriptions",
@@ -343,6 +344,7 @@
         "readyz",
         "healthz",
         "ws",
+        "collab",
         "metrics",
         "ping"
       ]

@@ -15,8 +15,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/multica-ai/multica/server/internal/daemon/subscriptions"
 	"github.com/multica-ai/multica/server/internal/daemon/localenv"
+	"github.com/multica-ai/multica/server/internal/daemon/subscriptions"
 	"github.com/multica-ai/multica/server/pkg/agent"
 	"github.com/multica-ai/multica/server/pkg/httptransport"
 	"github.com/multica-ai/multica/server/pkg/protocol"
@@ -215,6 +215,7 @@ func daemonCommonCapabilities() []string {
 		protocol.DaemonCapabilityCheckoutKeepsWorkV1,
 		protocol.DaemonCapabilityJoinedWakeupsV1,
 		protocol.DaemonCapabilityWorkflowStatusRulesV1,
+		protocol.DaemonCapabilityWorkflowStatusMapV1,
 		protocol.DaemonCapabilityCLICommentSteerV1,
 	}
 }
@@ -956,8 +957,9 @@ type (
 func (c *Client) SendHeartbeat(ctx context.Context, runtimeID string) (*HeartbeatResponse, error) {
 	var resp HeartbeatResponse
 	if err := c.postJSON(ctx, "/api/daemon/heartbeat", map[string]any{
-		"runtime_id":            runtimeID,
-		"supports_batch_import": true,
+		"runtime_id":             runtimeID,
+		"supports_batch_import":  true,
+		"supports_queued_update": true,
 	}, &resp); err != nil {
 		return nil, err
 	}

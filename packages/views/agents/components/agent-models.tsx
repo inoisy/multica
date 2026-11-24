@@ -13,7 +13,7 @@ import type {
   ModelRowState,
 } from "@multica/core/types";
 import { useWorkspaceId } from "@multica/core/hooks";
-import { useWorkspacePaths } from "@multica/core/paths";
+import { issueRouteRef, useWorkspacePaths } from "@multica/core/paths";
 import {
   agentModelsOptions,
   modelProfileListOptions,
@@ -583,7 +583,7 @@ export function AgentModels({
             <ul className="w-full space-y-1 text-body">
               {data.issues.map((issue) => (
                 <li key={issue.id} className="flex gap-2">
-                  <AppLink href={paths.issueDetail(issue.id)} className="shrink-0 font-medium hover:underline">
+                  <AppLink href={paths.issueDetail(issueRouteRef(issue))} className="shrink-0 font-medium hover:underline">
                     {issue.identifier}
                   </AppLink>
                   <span className="min-w-0 flex-1 truncate text-muted-foreground">{issue.name}</span>

@@ -6,7 +6,7 @@ import { Layers, Pencil, Trash2 } from "@multica/ui/icons";
 import { toast } from "sonner";
 import type { ModelProfile, ModelProfileChange, ModelProfileInput, ModelProfileKind } from "@multica/core/types";
 import { useWorkspaceId } from "@multica/core/hooks";
-import { useWorkspacePaths } from "@multica/core/paths";
+import { issueRouteRef, useWorkspacePaths } from "@multica/core/paths";
 import { useCurrentMember } from "@multica/core/permissions";
 import { agentListOptions, memberListOptions } from "@multica/core/workspace/queries";
 import { runtimeListOptions } from "@multica/core/runtimes";
@@ -247,7 +247,7 @@ export function ModelProfilesPage() {
       ? profile.open_issues.map((issue, i) => (
           <span key={issue.id}>
             {i ? ", " : ""}
-            <AppLink href={paths.issueDetail(issue.id)} className="hover:underline">{issue.identifier}</AppLink>
+            <AppLink href={paths.issueDetail(issueRouteRef(issue))} className="hover:underline">{issue.identifier}</AppLink>
           </span>
         ))
       : "—";

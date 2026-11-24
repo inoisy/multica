@@ -37,6 +37,7 @@ export type RouteIconName =
   | "Monitor"
   | "Server"
   | "BookOpenText"
+  | "Plug"
   | "Settings"
   | "File"
   | "FileText"
@@ -63,7 +64,9 @@ export type NavLabelKey =
   | "pages"
   | "model_profiles"
   | "runtimes"
+  | "docs"
   | "skills"
+  | "apps"
   | "settings";
 
 /** Stable identifier for each workspace navigation page. */
@@ -82,7 +85,9 @@ export type WorkspacePageKey =
   | "pages"
   | "modelProfiles"
   | "runtimes"
+  | "docs"
   | "skills"
+  | "apps"
   | "settings";
 
 export interface WorkspacePage {
@@ -113,7 +118,9 @@ export const WORKSPACE_PAGES: Record<WorkspacePageKey, WorkspacePage> = {
   pages: { segment: "pages", icon: "AppWindow", navKey: "pages" },
   modelProfiles: { segment: "profiles", icon: "Layers", navKey: "model_profiles" },
   runtimes: { segment: "runtimes", icon: "Monitor", navKey: "runtimes" },
+  docs: { segment: "docs", icon: "FileText", navKey: "docs" },
   skills: { segment: "skills", icon: "BookOpenText", navKey: "skills" },
+  apps: { segment: "apps", icon: "Plug", navKey: "apps" },
   settings: { segment: "settings", icon: "Settings", navKey: "settings" },
 };
 
