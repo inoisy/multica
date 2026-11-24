@@ -31,6 +31,7 @@ const queryClient = vi.hoisted(() => ({ setQueryData: vi.fn(), getQueryData: vi.
 vi.mock("@tanstack/react-query", () => ({
   queryOptions: (options: unknown) => options,
   useQueryClient: () => queryClient,
+  useQueries: () => [],
   useQuery: (options: { queryKey: readonly unknown[]; enabled?: boolean }) => {
     queryCalls.push(options);
     return ({

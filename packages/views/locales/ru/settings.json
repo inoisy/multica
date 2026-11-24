@@ -84,8 +84,7 @@
     "workflow_usage_other": "Используется в {{count}} рабочего процесса",
     "workflow_usage_none": "Не используется в рабочих процессах",
     "workflow_usage_few": "Используется в {{count}} рабочих процессах",
-    "workflow_usage_many": "Используется в {{count}} рабочих процессах",
-    "built_in_dialog": {}
+    "workflow_usage_many": "Используется в {{count}} рабочих процессах"
   },
   "quick_actions": {
     "title": "Быстрые действия",

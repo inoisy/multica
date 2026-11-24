@@ -120,7 +120,7 @@
   },
   "express_bind": {
     "page_title": "绑定你的 eXpress 账号",
-    "redeeming": "正在绑定…",
+    "redeeming": "正在绑定...",
     "needs_auth_description": "请先登录 Multica 完成绑定。链接中的 token 会把你的 eXpress 账号绑定到当前登录的 Multica 用户，因此需要先登录。",
     "sign_in": "登录",
     "done_title": "绑定成功。",

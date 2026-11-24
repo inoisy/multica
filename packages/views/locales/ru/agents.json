@@ -1205,7 +1205,6 @@
     "adds_app_note": "Ответ добавит {{app}} агенту {{agent}} для будущих запусков.",
     "add_to_agent": "Добавить {{app}} агенту {{agent}}"
   },
-  "actions": {},
   "models": {
     "title": "Модели",
     "profile_label": "Профиль",

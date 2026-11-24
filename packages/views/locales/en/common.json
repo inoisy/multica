@@ -120,7 +120,7 @@
   },
   "express_bind": {
     "page_title": "Link your eXpress account",
-    "redeeming": "Linking your account…",
+    "redeeming": "Linking your account...",
     "needs_auth_description": "Sign in to Multica to complete the link. The token in the link binds your eXpress account to this Multica user, so you must be logged in first.",
     "sign_in": "Sign in",
     "done_title": "You're linked.",
