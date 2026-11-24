@@ -31,7 +31,7 @@ import { useCallback, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Loader2 } from "@multica/ui/icons";
 import { api } from "@multica/core/api";
-import { paths, useWorkspaceSlug } from "@multica/core/paths";
+import { issueRouteRef, paths, useWorkspaceSlug } from "@multica/core/paths";
 import { getPreviewKind } from "../editor/utils/preview";
 import { useT } from "../i18n";
 import { useBackOrReplace } from "../navigation";
@@ -79,8 +79,8 @@ export function AttachmentPreviewPage({
     getPreviewKind(attachment.content_type, attachment.filename) === "image";
   const imagePending = isImage && query.fetchStatus !== "idle";
 
-  // Set document.title so desktop's MutationObserver-based tab title picks
-  // up the filename. Web shows the same string in the browser tab.
+  // Web shows this in the browser tab; on desktop it refines the window title
+  // when the URL carries no `?name=` filename.
   const title = attachment?.filename || filename;
   useEffect(() => {
     if (title) document.title = title;
@@ -96,7 +96,7 @@ export function AttachmentPreviewPage({
   const leave = useCallback(() => {
     if (!slug) return;
     const workspace = paths.workspace(slug);
-    backOrReplace(issueId ? workspace.issueDetail(issueId) : workspace.issues());
+    backOrReplace(issueId ? workspace.issueDetail(issueRouteRef({ id: issueId, identifier: null })) : workspace.issues());
   }, [slug, issueId, backOrReplace]);
 
   const restoredAddress = useRestoredViewState(HTML_PREVIEW_ADDRESS_KEY);

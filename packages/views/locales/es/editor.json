@@ -17,7 +17,7 @@
     },
     "heading_dropdown": {
       "text": "Texto",
-      "normal_text": "Texto normal",
+      "normal_text": "Texto",
       "heading_1": "Encabezado 1",
       "heading_2": "Encabezado 2",
       "heading_3": "Encabezado 3"
@@ -44,7 +44,7 @@
     "image_copied": "Imagen copiada",
     "copy_image_failed": "No se ha podido copiar la imagen",
     "canvas_label": "Lienzo de imagen. Arrastra para desplazar, rueda para hacer zoom, doble clic para alternar el tamaño real.",
-    "unavailable": "Esa imagen ya no está disponible: se omitió."
+    "unavailable": "Esta imagen ya no está disponible y se ha omitido."
   },
   "canvas": {
     "zoom_in": "Acercar",
@@ -64,7 +64,6 @@
     "preview_too_large": "El archivo es demasiado grande para previsualizar. Descárgalo.",
     "preview_unsupported": "Este tipo de archivo no se puede previsualizar.",
     "close": "Cerrar",
-    "back": "Atrás",
     "open_in_new_tab": "Abrir en una pestaña nueva",
     "remove": "Quitar adjunto",
     "previous": "Anterior",
@@ -96,7 +95,8 @@
     "table_columns_other": "{{count}} columnas",
     "address": "Dirección",
     "address_hint": "?query",
-    "reload": "Recargar"
+    "reload": "Recargar",
+    "back": "Atrás"
   },
   "link_hover": {
     "copy_link": "Copiar enlace",
@@ -105,9 +105,10 @@
     "copy_failed": "No se ha podido copiar"
   },
   "mention": {
-    "group_users": "Usuarios",
+    "group_users": "Miembros",
     "group_issues": "Tareas",
     "group_projects": "Proyectos",
+    "group_docs": "Documentos",
     "all_members": "Todos los miembros",
     "agent_badge": "Agente",
     "squad_badge": "Squad",
@@ -127,24 +128,9 @@
   },
   "code_block": {
     "html_preview": "Vista previa HTML",
-    "close_preview": "Cerrar",
     "copy_code": "Copiar código",
-    "show_preview": "Mostrar vista previa",
-    "show_source": "Mostrar código fuente",
-    "fullscreen": "Pantalla completa"
-  },
-  "dynamic_block": {
-    "preview": "Vista previa",
-    "source": "Fuente",
-    "view": "Ver",
-    "copy_source": "Copiar fuente",
-    "show_all": "Mostrar todo",
-    "rendering": "Renderizando...",
-    "error_html": "La vista previa encontró un error de script",
-    "error_mermaid": "No se ha podido dibujar este diagrama",
-    "error_at_line": "{{message}} (línea {{line}})",
-    "view_source": "Ver fuente",
-    "copy_error": "Copiar error"
+    "fullscreen": "Pantalla completa",
+    "close_preview": "Cerrar"
   },
   "file_card": {
     "uploading": "Subiendo {{filename}}"
@@ -175,6 +161,22 @@
     "export_png": "Descargar PNG",
     "export_svg": "Descargar SVG",
     "export_source": "Descargar .mmd"
+  },
+  "dynamic_block": {
+    "preview": "Vista previa",
+    "source": "Fuente",
+    "view": "Ver",
+    "copy_source": "Copiar fuente",
+    "show_all": "Mostrar todo",
+    "rendering": "Renderizando...",
+    "error_html": "La vista previa encontró un error de script",
+    "error_mermaid": "No se ha podido dibujar este diagrama",
+    "error_at_line": "{{message}} (línea {{line}})",
+    "view_source": "Ver fuente",
+    "copy_error": "Copiar error",
+    "title": "Título",
+    "rename": "Cambiar nombre",
+    "add_title": "Añadir título"
   },
   "table": {
     "reset_widths": "Restablecer anchos",
@@ -232,5 +234,31 @@
       "later": "Ahora no",
       "start": "Empezar a dictar"
     }
+  },
+  "block_menu": {
+    "label": "Insertar bloque",
+    "blocks": {
+      "paragraph": "Texto",
+      "heading1": "Encabezado 1",
+      "heading2": "Encabezado 2",
+      "heading3": "Encabezado 3",
+      "bulletList": "Lista con viñetas",
+      "orderedList": "Lista numerada",
+      "taskList": "Lista de tareas",
+      "blockquote": "Cita",
+      "codeBlock": "Bloque de código",
+      "mermaid": "Diagrama Mermaid",
+      "table": "Tabla",
+      "divider": "Separador",
+      "image": "Imagen",
+      "file": "Archivo"
+    }
+  },
+  "block_handle": {
+    "add": "Añadir debajo",
+    "options": "Arrastra para mover, haz clic para ver opciones",
+    "turn_into": "Convertir en",
+    "duplicate": "Duplicar",
+    "delete": "Eliminar"
   }
 }
