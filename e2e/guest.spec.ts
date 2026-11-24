@@ -104,6 +104,8 @@ function watch(page: Page, { notFound = [] as string[] } = {}): PageWatch {
     // The server shedding load ("busy, retry shortly"); the client retries.
     if (response.status() === 503 && response.headers()["retry-after"]) return;
     const url = response.url();
+    // The Pages service is a separate process behind the production proxy; this stack has none.
+    if (response.status() === 404 && new URL(url).pathname.startsWith("/pages-api/")) return;
     if (response.status() === 404 && notFound.some((fragment) => url.includes(fragment))) return;
     problems.push(`${response.status()} ${response.request().method()} ${url}`);
   });
