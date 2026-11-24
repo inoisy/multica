@@ -90,7 +90,7 @@ describe("SubscriptionLoginStatus", () => {
     // The daemon reports the outcome on the next poll.
     api.getSubscriptionLogin.mockResolvedValue(session("done"));
     fireEvent.click(send);
-    expect(await screen.findByText("Waiting for the daemon to write the credential…")).toBeTruthy();
+    expect(await screen.findByText("Waiting for the daemon to write the credential...")).toBeTruthy();
     expect(api.startSubscriptionLogin).toHaveBeenCalledWith("acc-a", { token: "sk-ant-oat01-x" });
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull(), { timeout: 4000 });
   });

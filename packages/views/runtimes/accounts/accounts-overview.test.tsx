@@ -145,7 +145,7 @@ describe("Environments → Accounts", () => {
     api.updateSubscription.mockResolvedValue(sub("acc-a"));
     renderTab("account=acc-a");
     fireEvent.click(await screen.findByRole("button", { name: "Actions for “Plan A”" }));
-    fireEvent.click(await screen.findByRole("menuitem", { name: "Agents' limits…" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Agents' limits..." }));
     const week = screen.getByLabelText("Agents' limit, week, %");
     fireEvent.change(week, { target: { value: "101" } });
     expect(screen.getByText("Enter a whole number from 0 to 100")).toBeTruthy();
@@ -161,7 +161,7 @@ describe("Environments → Accounts", () => {
     api.updateSubscription.mockResolvedValue(sub("acc-a"));
     renderTab("account=acc-a");
     fireEvent.click(await screen.findByRole("button", { name: "Actions for “Plan A”" }));
-    fireEvent.click(await screen.findByRole("menuitem", { name: "Agents' limits…" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Agents' limits..." }));
     fireEvent.change(screen.getByLabelText("Agents' limit, 5 hours, %"), { target: { value: "0" } });
     fireEvent.change(screen.getByLabelText("Agents' limit, week, %"), { target: { value: "100" } });
     expect(screen.getByText("People keep 100%")).toBeTruthy();
@@ -180,7 +180,7 @@ describe("Environments → Accounts", () => {
       pools: [pool("claude", [entry("acc-a", 1), entry("acc-b", 2)])],
     });
     fireEvent.click(await screen.findByRole("button", { name: "Actions for “Plan A”" }));
-    fireEvent.click(await screen.findByRole("menuitem", { name: "Agents' limits…" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Agents' limits..." }));
     fireEvent.change(screen.getByLabelText("Agents' limit, 5 hours, %"), { target: { value: "80" } });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(api.listPools.mock.calls.length).toBeGreaterThan(before));
@@ -193,7 +193,7 @@ describe("Environments → Accounts", () => {
     api.deleteSubscription.mockResolvedValue({ deleted: true, detached_runtime_profile_ids: ["env-claude"] });
     renderTab("account=acc-a");
     fireEvent.click(await screen.findByRole("button", { name: "Actions for “Plan A”" }));
-    fireEvent.click(await screen.findByRole("menuitem", { name: "Delete subscription…" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Delete subscription..." }));
     await waitFor(() => expect(api.deleteSubscription).toHaveBeenCalledWith("acc-a"));
     expect(api.updatePool).not.toHaveBeenCalled();
   });
