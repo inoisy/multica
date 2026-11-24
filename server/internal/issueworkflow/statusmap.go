@@ -62,7 +62,7 @@ func statusMapBrief(in BriefInput) string {
 	for _, s := range in.Workflow.Steps {
 		writeStatusMapEntry(&b, in, s)
 	}
-	if !stepMoved && !in.Observer && (!terminal || terminalMoves) {
+	if !stepMoved && !in.Observer && (!terminal || terminalMoves) && in.Workflow.HandsOffAnywhere() {
 		writeArtifactRules(&b, in)
 	}
 	if in.Observer && !stepMoved {

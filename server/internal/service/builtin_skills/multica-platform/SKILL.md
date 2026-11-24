@@ -1,6 +1,6 @@
 ---
 name: multica-platform
-description: "Use for Multica actions the runtime brief does not fully cover: issue and PR contracts, sub-issues, batch changes, saved views, comment charts and files, steering, mentions, inbox, docs, agents, squads, autopilots, projects, runtimes, local environments, skill import, themes. Not for product code you edit."
+description: "Use for Multica actions the runtime brief does not fully cover: issue and PR contracts, sub-issues, batch changes, saved views, charts and files, steering, mentions, inbox, docs, agents, squads, autopilots, projects, runtimes, local environments, skill import, themes. Not for product code you edit."
 user-invocable: false
 allowed-tools: Bash(multica *), Bash(git *), Bash(gh *)
 ---

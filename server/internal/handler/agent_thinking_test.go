@@ -1204,6 +1204,11 @@ func TestAgentSaveWithPartialHermesEffortCatalog(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { testPool.Exec(ctx, "DELETE FROM agent WHERE id = $1", result.ID) })
+	// The profile a create assigns would own the model and refuse the PATCH below
+	// before the thinking level is looked at.
+	if _, err := testPool.Exec(ctx, "UPDATE agent SET model_profile_id = NULL WHERE id = $1", result.ID); err != nil {
+		t.Fatal(err)
+	}
 
 	for _, tc := range []struct {
 		model, level string
