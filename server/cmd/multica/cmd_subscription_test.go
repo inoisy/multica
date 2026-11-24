@@ -11,7 +11,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-type recordedRequest struct {
+type subscriptionRequest struct {
 	Method string
 	Path   string
 	Query  string
@@ -20,14 +20,14 @@ type recordedRequest struct {
 
 // subscriptionTestServer answers every request with the reply for its
 // "METHOD /path" and records what it received.
-func subscriptionTestServer(t *testing.T, replies map[string]any) *[]recordedRequest {
+func subscriptionTestServer(t *testing.T, replies map[string]any) *[]subscriptionRequest {
 	t.Helper()
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("MULTICA_TOKEN", "test-token")
 	t.Setenv("MULTICA_WORKSPACE_ID", "ws-123")
-	got := &[]recordedRequest{}
+	got := &[]subscriptionRequest{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		rec := recordedRequest{Method: r.Method, Path: r.URL.Path, Query: r.URL.RawQuery}
+		rec := subscriptionRequest{Method: r.Method, Path: r.URL.Path, Query: r.URL.RawQuery}
 		_ = json.NewDecoder(r.Body).Decode(&rec.Body)
 		*got = append(*got, rec)
 		reply, ok := replies[r.Method+" "+r.URL.Path]
