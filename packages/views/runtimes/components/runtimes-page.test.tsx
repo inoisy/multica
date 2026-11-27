@@ -19,15 +19,10 @@ import {
   agentListOptions,
   memberListOptions,
 } from "@multica/core/workspace/queries";
-import enCommon from "../../locales/en/common.json";
-import enLayout from "../../locales/en/layout.json";
-import enRuntimes from "../../locales/en/runtimes.json";
-import enAgents from "../../locales/en/agents.json";
+import enResources from "../../locales/en";
 import { RuntimesPage } from "./runtimes-page";
 
-const TEST_RESOURCES = {
-  en: { common: enCommon, layout: enLayout, runtimes: enRuntimes, agents: enAgents },
-};
+const TEST_RESOURCES = { en: enResources };
 const WS = "ws-test";
 
 const navigationState = vi.hoisted(() => ({ search: "", replace: vi.fn() }));
