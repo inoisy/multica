@@ -723,7 +723,7 @@ func (q *Queries) ListActiveRuntimeUnavailableForRuntimes(ctx context.Context, r
 
 const listAgentModelChoices = `-- name: ListAgentModelChoices :many
 SELECT t.id, t.issue_id, t.status, t.runtime_id, t.model_position, t.model_choice, t.account_fact, t.created_at, t.dispatched_at,
-       i.number AS issue_number, i.title AS issue_title
+       i.number AS issue_number, i.title AS issue_title, i.project_id AS issue_project_id
 FROM agent_task_queue t
 LEFT JOIN issue i ON i.id = t.issue_id
 WHERE t.agent_id = $1 AND t.model_position IS NOT NULL
@@ -737,17 +737,18 @@ type ListAgentModelChoicesParams struct {
 }
 
 type ListAgentModelChoicesRow struct {
-	ID            pgtype.UUID        `json:"id"`
-	IssueID       pgtype.UUID        `json:"issue_id"`
-	Status        string             `json:"status"`
-	RuntimeID     pgtype.UUID        `json:"runtime_id"`
-	ModelPosition pgtype.Int4        `json:"model_position"`
-	ModelChoice   []byte             `json:"model_choice"`
-	AccountFact   []byte             `json:"account_fact"`
-	CreatedAt     pgtype.Timestamptz `json:"created_at"`
-	DispatchedAt  pgtype.Timestamptz `json:"dispatched_at"`
-	IssueNumber   pgtype.Int4        `json:"issue_number"`
-	IssueTitle    pgtype.Text        `json:"issue_title"`
+	ID             pgtype.UUID        `json:"id"`
+	IssueID        pgtype.UUID        `json:"issue_id"`
+	Status         string             `json:"status"`
+	RuntimeID      pgtype.UUID        `json:"runtime_id"`
+	ModelPosition  pgtype.Int4        `json:"model_position"`
+	ModelChoice    []byte             `json:"model_choice"`
+	AccountFact    []byte             `json:"account_fact"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	DispatchedAt   pgtype.Timestamptz `json:"dispatched_at"`
+	IssueNumber    pgtype.Int4        `json:"issue_number"`
+	IssueTitle     pgtype.Text        `json:"issue_title"`
+	IssueProjectID pgtype.UUID        `json:"issue_project_id"`
 }
 
 // The agent's latest model choices, newest first: the journal of the Models
@@ -773,6 +774,7 @@ func (q *Queries) ListAgentModelChoices(ctx context.Context, arg ListAgentModelC
 			&i.DispatchedAt,
 			&i.IssueNumber,
 			&i.IssueTitle,
+			&i.IssueProjectID,
 		); err != nil {
 			return nil, err
 		}
@@ -785,7 +787,8 @@ func (q *Queries) ListAgentModelChoices(ctx context.Context, arg ListAgentModelC
 }
 
 const listAgentWaitingModelTasks = `-- name: ListAgentWaitingModelTasks :many
-SELECT t.id, t.issue_id, t.model_choice, t.created_at, i.number AS issue_number, i.title AS issue_title
+SELECT t.id, t.issue_id, t.model_choice, t.created_at, i.number AS issue_number, i.title AS issue_title,
+       i.project_id AS issue_project_id
 FROM agent_task_queue t
 LEFT JOIN issue i ON i.id = t.issue_id
 WHERE t.agent_id = $1 AND t.status = 'queued' AND t.model_choice->>'reason' = 'all_unavailable'
@@ -793,12 +796,13 @@ ORDER BY t.created_at
 `
 
 type ListAgentWaitingModelTasksRow struct {
-	ID          pgtype.UUID        `json:"id"`
-	IssueID     pgtype.UUID        `json:"issue_id"`
-	ModelChoice []byte             `json:"model_choice"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
-	IssueNumber pgtype.Int4        `json:"issue_number"`
-	IssueTitle  pgtype.Text        `json:"issue_title"`
+	ID             pgtype.UUID        `json:"id"`
+	IssueID        pgtype.UUID        `json:"issue_id"`
+	ModelChoice    []byte             `json:"model_choice"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	IssueNumber    pgtype.Int4        `json:"issue_number"`
+	IssueTitle     pgtype.Text        `json:"issue_title"`
+	IssueProjectID pgtype.UUID        `json:"issue_project_id"`
 }
 
 // Unclaimed runs of the agent whose every model is unavailable now.
@@ -818,6 +822,7 @@ func (q *Queries) ListAgentWaitingModelTasks(ctx context.Context, agentID pgtype
 			&i.CreatedAt,
 			&i.IssueNumber,
 			&i.IssueTitle,
+			&i.IssueProjectID,
 		); err != nil {
 			return nil, err
 		}
@@ -1035,7 +1040,7 @@ func (q *Queries) ListModelProfiles(ctx context.Context, workspaceID pgtype.UUID
 }
 
 const listOpenIssuesWithModelProfile = `-- name: ListOpenIssuesWithModelProfile :many
-SELECT i.id, i.number, i.title, i.status, i.assignee_type, i.assignee_id, i.model_profile_id FROM issue i
+SELECT i.id, i.number, i.title, i.status, i.assignee_type, i.assignee_id, i.model_profile_id, i.project_id FROM issue i
 WHERE i.workspace_id = $1 AND i.model_profile_id IS NOT NULL
   AND NOT (i.status IN ('done', 'cancelled') OR EXISTS(SELECT 1 FROM issue_status s WHERE s.workspace_id=i.workspace_id AND s.key=i.status AND s.category IN ('done','closed')))
   AND ($2::uuid IS NULL OR (i.assignee_type = 'agent' AND i.assignee_id = $2::uuid))
@@ -1055,6 +1060,7 @@ type ListOpenIssuesWithModelProfileRow struct {
 	AssigneeType   pgtype.Text `json:"assignee_type"`
 	AssigneeID     pgtype.UUID `json:"assignee_id"`
 	ModelProfileID pgtype.UUID `json:"model_profile_id"`
+	ProjectID      pgtype.UUID `json:"project_id"`
 }
 
 // Open issues of the workspace that carry a profile, optionally only those
@@ -1076,6 +1082,7 @@ func (q *Queries) ListOpenIssuesWithModelProfile(ctx context.Context, arg ListOp
 			&i.AssigneeType,
 			&i.AssigneeID,
 			&i.ModelProfileID,
+			&i.ProjectID,
 		); err != nil {
 			return nil, err
 		}

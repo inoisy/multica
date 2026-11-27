@@ -165,7 +165,7 @@ ORDER BY name;
 -- name: ListOpenIssuesWithModelProfile :many
 -- Open issues of the workspace that carry a profile, optionally only those
 -- assigned to one agent.
-SELECT i.id, i.number, i.title, i.status, i.assignee_type, i.assignee_id, i.model_profile_id FROM issue i
+SELECT i.id, i.number, i.title, i.status, i.assignee_type, i.assignee_id, i.model_profile_id, i.project_id FROM issue i
 WHERE i.workspace_id = sqlc.arg(workspace_id) AND i.model_profile_id IS NOT NULL
   AND NOT (i.status IN ('done', 'cancelled') OR EXISTS(SELECT 1 FROM issue_status s WHERE s.workspace_id=i.workspace_id AND s.key=i.status AND s.category IN ('done','closed')))
   AND (sqlc.narg(agent_id)::uuid IS NULL OR (i.assignee_type = 'agent' AND i.assignee_id = sqlc.narg(agent_id)::uuid))
@@ -225,7 +225,7 @@ DELETE FROM runtime_unavailable WHERE runtime_unavailable.runtime_id = $1;
 -- The agent's latest model choices, newest first: the journal of the Models
 -- screen.
 SELECT t.id, t.issue_id, t.status, t.runtime_id, t.model_position, t.model_choice, t.account_fact, t.created_at, t.dispatched_at,
-       i.number AS issue_number, i.title AS issue_title
+       i.number AS issue_number, i.title AS issue_title, i.project_id AS issue_project_id
 FROM agent_task_queue t
 LEFT JOIN issue i ON i.id = t.issue_id
 WHERE t.agent_id = $1 AND t.model_position IS NOT NULL
@@ -289,7 +289,8 @@ SELECT user_id FROM member WHERE workspace_id = $1 AND role = 'owner' ORDER BY c
 
 -- name: ListAgentWaitingModelTasks :many
 -- Unclaimed runs of the agent whose every model is unavailable now.
-SELECT t.id, t.issue_id, t.model_choice, t.created_at, i.number AS issue_number, i.title AS issue_title
+SELECT t.id, t.issue_id, t.model_choice, t.created_at, i.number AS issue_number, i.title AS issue_title,
+       i.project_id AS issue_project_id
 FROM agent_task_queue t
 LEFT JOIN issue i ON i.id = t.issue_id
 WHERE t.agent_id = $1 AND t.status = 'queued' AND t.model_choice->>'reason' = 'all_unavailable'

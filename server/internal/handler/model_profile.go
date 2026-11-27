@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/multica-ai/multica/server/internal/projectaccess"
 	"github.com/multica-ai/multica/server/internal/service"
 	"github.com/multica-ai/multica/server/internal/util"
 	db "github.com/multica-ai/multica/server/pkg/db/generated"
@@ -93,6 +94,9 @@ type modelWorkspace struct {
 	agents   []db.Agent
 	issues   []db.ListOpenIssuesWithModelProfileRow
 	prefix   string
+	// hidden are the private projects the request may not see: their issues
+	// stay out of every list and journal entry built from this snapshot.
+	hidden projectaccess.Hidden
 	// personal maps an agent to its personal profile.
 	personal map[string]service.ModelProfileData
 }
@@ -144,9 +148,19 @@ func (h *Handler) loadModelWorkspace(r *http.Request, workspaceID pgtype.UUID, n
 			m.personal[p.OwnerAgentID] = p
 		}
 	}
+	if m.hidden, err = h.hiddenProjects(r, wsID); err != nil {
+		return m, err
+	}
 	if m.issues, err = h.Queries.ListOpenIssuesWithModelProfile(ctx, db.ListOpenIssuesWithModelProfileParams{WorkspaceID: workspaceID}); err != nil {
 		return m, err
 	}
+	issues := m.issues[:0]
+	for _, i := range m.issues {
+		if m.hidden.CanSeeProject(i.ProjectID) {
+			issues = append(issues, i)
+		}
+	}
+	m.issues = issues
 	if ws, werr := h.Queries.GetWorkspace(ctx, workspaceID); werr == nil {
 		m.prefix = ws.IssuePrefix
 	}
@@ -722,7 +736,9 @@ func (h *Handler) writeAgentModels(w http.ResponseWriter, r *http.Request, agent
 		if fact, ok := service.ParseAccountFact(c.AccountFact); ok {
 			entry.AccountFact = &fact
 		}
-		if c.IssueNumber.Valid {
+		if !m.hidden.CanSeeProject(c.IssueProjectID) {
+			entry.IssueID = nil
+		} else if c.IssueNumber.Valid {
 			entry.IssueIdentifier = service.IssueIdentifier(m.prefix, c.IssueNumber.Int32)
 			entry.IssueTitle = c.IssueTitle.String
 		}
@@ -740,7 +756,9 @@ func (h *Handler) writeAgentModels(w http.ResponseWriter, r *http.Request, agent
 	}
 	for _, t := range waiting {
 		entry := AgentModelChoiceEntry{TaskID: util.UUIDToString(t.ID), Status: "queued", IssueID: uuidToPtr(t.IssueID), CreatedAt: timestampToString(t.CreatedAt)}
-		if t.IssueNumber.Valid {
+		if !m.hidden.CanSeeProject(t.IssueProjectID) {
+			entry.IssueID = nil
+		} else if t.IssueNumber.Valid {
 			entry.IssueIdentifier = service.IssueIdentifier(m.prefix, t.IssueNumber.Int32)
 			entry.IssueTitle = t.IssueTitle.String
 		}
