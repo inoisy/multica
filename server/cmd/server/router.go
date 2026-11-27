@@ -37,7 +37,6 @@ import (
 	"github.com/multica-ai/multica/server/internal/integrations/channel/engine"
 	composiointeg "github.com/multica-ai/multica/server/internal/integrations/composio"
 	"github.com/multica-ai/multica/server/internal/integrations/dingtalk"
-	"github.com/multica-ai/multica/server/internal/integrations/express"
 	"github.com/multica-ai/multica/server/internal/integrations/lark"
 	"github.com/multica-ai/multica/server/internal/integrations/slack"
 	"github.com/multica-ai/multica/server/internal/integrations/telegram"
@@ -453,7 +452,7 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 	origins := allowedOrigins()
 
 	signupConfig := handler.Config{
-		InstanceAdmins:                 splitAndTrim(os.Getenv("MULTICA_INSTANCE_ADMINS")),
+		ForkConfig:                     handler.ForkConfig{InstanceAdmins: splitAndTrim(os.Getenv("MULTICA_INSTANCE_ADMINS"))},
 		AllowSignup:                    os.Getenv("ALLOW_SIGNUP") != "false",
 		AllowedEmails:                  splitAndTrim(os.Getenv("ALLOWED_EMAILS")),
 		AllowedEmailDomains:            splitAndTrim(os.Getenv("ALLOWED_EMAIL_DOMAINS")),
@@ -1381,46 +1380,7 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 		logSecretboxGateDisabled("telegram integration", "MULTICA_TELEGRAM_SECRET_KEY", err)
 	}
 
-	// eXpress (BotX) integration. BYO bot: the CTS administrator registers a
-	// bot whose URL is <API>/api/express, a workspace admin pastes its CTS
-	// address, bot_id and secret_key. BotX is push-only, so inbound is the
-	// public webhook below (JWT-verified per bot), handed straight to the
-	// engine's inbound handler; replies go out on chat:done like DingTalk.
-	// Gated by MULTICA_EXPRESS_SECRET_KEY (at-rest encryption of the secret).
-	if expressKey, err := secretbox.LoadKey("MULTICA_EXPRESS_SECRET_KEY"); err == nil {
-		box, err := secretbox.New(expressKey)
-		if err != nil {
-			slog.Error("express: secretbox.New failed; express integration disabled", "error", err)
-		} else {
-			expressBindingSvc := express.NewBindingTokenService(queries, pool)
-			h.ExpressBindingTokens = expressBindingSvc
-			expressReplier := express.NewOutboundReplier(express.OutboundReplierConfig{
-				Binding: expressBindingSvc,
-				Decrypt: box.Open,
-				AppURL:  appURLFromEnv(),
-				Logger:  slog.Default(),
-			})
-			channelRouter.Register(express.TypeExpress, express.NewExpressResolverSet(queries, pool, expressReplier))
-			express.NewOutbound(queries, box.Open, nil, slog.Default()).Register(bus)
-			express.RegisterExpress(channelRegistry, express.ChannelDeps{Decrypt: box.Open, Logger: slog.Default()})
-			h.ExpressWebhook = express.NewWebhook(express.WebhookConfig{
-				Queries: queries,
-				Decrypt: box.Open,
-				Handler: channelRouter.Handle,
-				Logger:  slog.Default(),
-			})
-			installSvc, ierr := express.NewInstallService(queries, pool, box, slog.Default())
-			if ierr != nil {
-				slog.Error("express: InstallService init failed; install disabled", "error", ierr)
-			} else {
-				h.ExpressInstall = installSvc
-			}
-			slog.Info("express integration enabled (BotX webhook)")
-		}
-	} else {
-		slog.Info("express integration disabled (MULTICA_EXPRESS_SECRET_KEY not set)")
-	}
-
+	setupExpress(h, queries, pool, bus, channelRouter, channelRegistry)
 	// Composio integration (MUL-3720). Gated by COMPOSIO_API_KEY plus the
 	// composio_mcp_apps feature flag. The env var is the project-scoped key the
 	// standalone SDK authenticates Composio with (sent as x-api-key; the project
@@ -1762,12 +1722,7 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 	// GitHub App webhook (no Multica auth — requests are authenticated via
 	// HMAC-SHA256 signature in the handler) and post-install setup callback.
 	r.Post("/api/webhooks/github", h.HandleGitHubWebhook)
-	// eXpress (BotX) bot endpoints. No Multica auth: CTS signs every request
-	// with a JWT made from the bot's secret key, verified in the handler.
-	// The CTS administrator registers <API>/api/express as the bot URL.
-	r.Post("/api/express/command", h.ExpressCommand)
-	r.Get("/api/express/status", h.ExpressStatus)
-	r.Post("/api/express/notification/callback", h.ExpressNotificationCallback)
+	forkPublicRoutes(r, h)
 	r.Get("/api/github/setup", h.GitHubSetupCallback)
 	// Slack OAuth callback (no Multica auth in the path — it is hit by Slack's
 	// browser redirect; the workspace/agent/initiator are recovered from the
@@ -1814,11 +1769,7 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 		r.Get("/workspaces", h.ListDaemonWorkspaces)
 		r.Get("/workspaces/{workspaceId}/repos", h.GetDaemonWorkspaceRepos)
 		r.Get("/workspaces/{workspaceId}/runtime-profiles", h.DaemonListRuntimeProfiles)
-		// Subscriptions the workspace's runtimes spend: the daemon probes them
-		// and reports usage and the state of each credential file.
-		r.Get("/workspaces/{workspaceId}/subscriptions", h.DaemonListSubscriptions)
-		r.Post("/workspaces/{workspaceId}/subscription-usage", h.DaemonReportSubscriptionUsage)
-		r.Post("/runtimes/{runtimeId}/subscription-logins/{loginId}/result", h.DaemonReportSubscriptionLogin)
+		forkDaemonWorkspaceRoutes(r, h)
 
 		// Agent-triggered plugin hooks. The daemon's local MCP server calls
 		// this when an agent picks one of its tools; the server makes the
@@ -1846,7 +1797,7 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 
 		r.Get("/tasks/{taskId}/status", h.GetTaskStatus)
 		r.Post("/tasks/{taskId}/start", h.StartTask)
-		r.Post("/tasks/{taskId}/account", h.ConfirmTaskAccount)
+		forkDaemonTaskRoutes(r, h)
 		r.Post("/tasks/{taskId}/supplements/claim", h.ClaimTaskSupplement)
 		r.Post("/tasks/{taskId}/supplements/{commentId}/ack", h.AckTaskSupplement)
 		r.Post("/tasks/{taskId}/wait-local-directory", h.MarkTaskWaitingLocalDirectory)
@@ -1965,42 +1916,7 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 		// a fresh URL; the workspace-scoped metadata route stays unchanged.
 		r.Get("/api/attachments/{id}/download-metadata", h.GetAttachmentForDownload)
 
-		// Instance-level subscriptions. Readable by members of any workspace;
-		// every write is gated inside the handler on MULTICA_INSTANCE_ADMINS.
-		r.Route("/api/subscriptions", func(r chi.Router) {
-			r.Get("/", h.ListSubscriptions)
-			r.Post("/", h.CreateSubscription)
-			r.Get("/discrepancies", h.ListSubscriptionDiscrepancies)
-			r.Get("/{key}", h.GetSubscription)
-			r.Patch("/{key}", h.UpdateSubscription)
-			r.Delete("/{key}", h.DeleteSubscription)
-			r.Get("/{key}/usage", h.ListSubscriptionUsage)
-			r.Post("/{key}/usage", h.RecordSubscriptionUsage)
-			r.Post("/{key}/login", h.StartSubscriptionLogin)
-			r.Get("/{key}/login", h.GetSubscriptionLogin)
-			r.Delete("/{key}/login", h.CancelSubscriptionLogin)
-			// Forced re-check of the provider limit; owner or admin of a
-			// workspace spending the account, like the recheck of refusals.
-			r.Post("/{key}/probe", h.StartSubscriptionProbe)
-			r.Get("/{key}/probe/{probeId}", h.GetSubscriptionProbe)
-			// Journal of the commands an instance admin ran by hand.
-			r.Get("/{key}/manual-runs", h.ListSubscriptionManualRuns)
-			r.Post("/{key}/manual-runs", h.OpenSubscriptionManualRun)
-			r.Post("/{key}/manual-runs/{runId}/finish", h.FinishSubscriptionManualRun)
-		})
-		r.Post("/api/runtime-pools", h.CreateRuntimePool)
-		// Pools of accounts: readable by members of any workspace for the
-		// workspaces they are in; every write is gated inside the handler on
-		// MULTICA_INSTANCE_ADMINS.
-		r.Route("/api/pools", func(r chi.Router) {
-			r.Get("/", h.ListPools)
-			r.Post("/", h.CreatePool)
-			r.Get("/{id}", h.GetPool)
-			r.Patch("/{id}", h.UpdatePool)
-			r.Delete("/{id}", h.DeletePool)
-			r.Put("/{id}/grants", h.SetPoolGrants)
-		})
-
+		forkUserRoutes(r, h)
 		r.Route("/api/workspaces", func(r chi.Router) {
 			r.Get("/", h.ListWorkspaces)
 			r.Post("/", h.CreateWorkspace)
@@ -2036,12 +1952,7 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 					// are admin-gated below).
 					r.Get("/runtime-profiles", h.ListRuntimeProfiles)
 					r.Get("/runtime-profiles/{profileId}", h.GetRuntimeProfile)
-					// Subscriptions a runtime spends. Reading is member-visible
-					// (subs-run reads it with the run's task token); changing it
-					// is gated inside the handler on instance admins, not on the
-					// workspace role.
-					r.Get("/runtime-profiles/{profileId}/subscriptions", h.GetRuntimeProfileSubscriptions)
-					r.Put("/runtime-profiles/{profileId}/subscriptions", h.SetRuntimeProfileSubscriptions)
+					forkWorkspaceMemberRoutes(r, h)
 					// The workspace MCP library — member-visible so an agent
 					// owner can see what is available to add to their agent.
 					// The payload is names and transports only; the stored
@@ -2215,17 +2126,7 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 					r.Delete("/telegram/installations/{installationId}", h.RevokeTelegramInstallation)
 					r.Post("/telegram/install", h.RegisterTelegramBot)
 				})
-
-				// eXpress integration. Same admin/member split as Telegram.
-				r.Group(func(r chi.Router) {
-					r.Use(middleware.RequireWorkspaceMemberFromURL(queries, "id"))
-					r.Get("/express/installations", h.ListExpressInstallations)
-				})
-				r.Group(func(r chi.Router) {
-					r.Use(middleware.RequireWorkspaceRoleFromURL(queries, "id", "owner", "admin"))
-					r.Delete("/express/installations/{installationId}", h.RevokeExpressInstallation)
-					r.Post("/express/install", h.RegisterExpressBot)
-				})
+				forkWorkspaceIntegrationRoutes(r, h, queries)
 			})
 		})
 
@@ -2253,8 +2154,7 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 		// workspace-scoped, identity from the session, token proves only
 		// "this Telegram user id requested binding".
 		r.Post("/api/telegram/binding/redeem", h.RedeemTelegramBindingToken)
-		// eXpress binding-token redemption. Same rationale as Telegram.
-		r.Post("/api/express/binding/redeem", h.RedeemExpressBindingToken)
+		forkBindingRoutes(r, h)
 
 		// Composio integration (MUL-3720). User-scoped (no workspace context):
 		// a connection belongs to a user. These four require a logged-in
@@ -2408,7 +2308,6 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 					r.Get("/comments", h.ListComments)
 					r.Get("/timeline", h.ListTimeline)
 					r.Get("/workflow-handoff", h.PreviewWorkflowHandoff)
-					r.Get("/workflow-artifact", h.GetIssueWorkflowArtifact)
 					r.Get("/subscribers", h.ListIssueSubscribers)
 					r.Post("/subscribe", h.SubscribeToIssue)
 					r.Post("/unsubscribe", h.UnsubscribeFromIssue)
@@ -2428,8 +2327,7 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 					r.Get("/wakeups/{wakeupID}/runs", h.ListIssueWakeupRuns)
 					r.Get("/system-wakeups", h.ListIssueSystemWakeups)
 					r.Put("/system-wakeups/{rule}", h.UpdateIssueSystemWakeup)
-					r.Get("/model-profile", h.GetIssueModelProfile)
-					r.Put("/model-profile", h.SetIssueModelProfile)
+					forkIssueRoutes(r, h)
 					r.Get("/active-task", h.GetActiveTaskForIssue)
 					r.Post("/tasks/{taskId}/cancel", h.CancelTask)
 					r.With(handler.RequireHumanActor).Post("/tasks/{taskId}/supplements", h.CreateTaskSupplement)
@@ -2748,17 +2646,7 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 					// internal/handler/agent_env.go.
 					r.Get("/env", h.GetAgentEnv)
 					r.Put("/env", h.UpdateAgentEnv)
-					// Model list of the agent: profile, own list, disallowed
-					// tools, and what the server chooses for its next run.
-					r.Get("/models", h.GetAgentModels)
-					r.Put("/models", h.UpdateAgentModels)
-					// Personal profile of the agent: made from a shared one,
-					// edited, or one model only; DELETE returns the agent to the
-					// shared profile it was made from.
-					r.Post("/models/personal", h.CreateAgentPersonalProfile)
-					r.Put("/models/personal", h.SetAgentPersonalProfile)
-					r.Delete("/models/personal", h.ResetAgentPersonalProfile)
-					r.Put("/models/single", h.SetAgentSingleModel)
+					forkAgentRoutes(r, h)
 				})
 			})
 
@@ -2812,30 +2700,14 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 				r.Get("/failures/by-squad", h.GetDashboardFailuresBySquad)
 			})
 
-			// Model profiles of the workspace: agents and issues reference
-			// them; an edit reaches every referencing run from its next claim.
-			r.Route("/api/model-profiles", func(r chi.Router) {
-				r.Get("/", h.ListModelProfiles)
-				r.Post("/", h.CreateModelProfile)
-				r.Post("/import", h.ImportModelProfiles)
-				r.Route("/{id}", func(r chi.Router) {
-					r.Get("/", h.GetModelProfile)
-					r.Put("/", h.UpdateModelProfile)
-					r.Delete("/", h.DeleteModelProfile)
-					r.Post("/preview", h.PreviewModelProfile)
-				})
-			})
-			r.Get("/api/runtime-unavailable", h.ListRuntimeUnavailable)
-			r.Post("/api/runtime-unavailable/recheck", h.RecheckRuntimeUnavailable)
-
+			forkWorkspaceRoutes(r, h)
 			// Runtimes
 			r.Route("/api/runtimes", func(r chi.Router) {
 				r.Get("/", h.ListAgentRuntimes)
 				r.Route("/{runtimeId}", func(r chi.Router) {
 					r.Patch("/", h.UpdateAgentRuntime)
 					r.Get("/usage", h.GetRuntimeUsage)
-					r.Get("/model-usage", h.GetRuntimeModelUsage)
-					r.Get("/run-facts", h.GetRuntimeRunFacts)
+					forkRuntimeRoutes(r, h)
 					r.Get("/usage/by-agent", h.GetRuntimeUsageByAgent)
 					r.Get("/usage/by-hour", h.GetRuntimeUsageByHour)
 					r.Get("/rate-limits", h.GetRuntimeRateLimits)
