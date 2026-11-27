@@ -30,38 +30,6 @@ import type { ZodType } from "zod";
 import { AgentRuntimeSchema, EMPTY_RUNTIME } from "../runtimes/schema";
 import type { IssueWakeup, IssueWakeupInput, IssueWakeupSummaryRow, PausedWakeup, SystemWakeup, WakeupRun, WorkspaceSystemWakeup } from "../types/issue-wakeup";
 import type { WorkspaceWakeupPage, WorkspaceWakeupFilters } from "../types/issue-wakeup";
-import type { AgentModels, CreateModelProfileInput, CreatePersonalProfileInput, IssueModelProfile, ModelProfile, ModelProfileChange, ModelProfileInput, ModelProfileKind, RuntimeUnavailable, SetPersonalProfileInput, SingleModelInput, UpdateAgentModelsInput } from "../types/model-profile";
-import { AgentModelsSchema, IssueModelProfileSchema, ModelProfilePreviewSchema, ModelProfileSchema, RuntimeUnavailableSchema } from "./schemas";
-import {
-  DeleteSubscriptionResultSchema,
-  PoolListSchema,
-  PoolSchema,
-  ManualRunListSchema,
-  RuntimeModelUsageSchema,
-  RuntimeProfileSubscriptionsSchema,
-  RuntimeRunFactsSchema,
-  SubscriptionDiscrepancyListSchema,
-  SubscriptionListSchema,
-  SubscriptionLoginResponseSchema,
-  SubscriptionSchema,
-} from "./schemas";
-import type {
-  CreatePoolInput,
-  CreateSubscriptionInput,
-  DeleteSubscriptionResult,
-  Pool,
-  PoolList,
-  RuntimeProfileSubscriptions,
-  SetPoolGrantsInput,
-  UpdatePoolInput,
-  StartSubscriptionLoginInput,
-  Subscription,
-  SubscriptionDiscrepancy,
-  SubscriptionList,
-  SubscriptionLoginSession,
-  UpdateSubscriptionInput,
-} from "../types/subscription";
-import type { ManualRunList, RuntimeModelUsage, RuntimeRunFacts } from "../types/runtime-model";
 import { WorkspaceWakeupPageSchema, IssueWakeupSchema, IssueWakeupSummaryRowSchema, PausedWakeupSchema, SystemWakeupSchema, WakeupRunSchema, WorkspaceSystemWakeupSchema } from "./schemas";
 import { archivedInboxQuery, type ArchivedInboxFilters } from "../inbox/filters";
 import type { ArchivedInboxPage, ArchivedInboxFacets } from "../types/inbox";
@@ -309,10 +277,6 @@ import type {
   ListTelegramInstallationsResponse,
   RegisterTelegramRequest,
   RedeemTelegramBindingTokenResponse,
-  ExpressInstallation,
-  ListExpressInstallationsResponse,
-  RegisterExpressRequest,
-  RedeemExpressBindingTokenResponse,
   Squad,
   SquadMember,
   SquadMemberStatusListResponse,
@@ -367,6 +331,7 @@ import { type Logger, noopLogger } from "../logger";
 import { createRequestId, createSafeId } from "../utils";
 import { getCurrentSlug } from "../platform/workspace-storage";
 import { parseWithFallback } from "./schema";
+import { installForkMethods } from "./client-fork";
 import { getApiRequestObserver } from "./request-observer";
 import {
   RuntimeProfileSchema,
@@ -542,12 +507,6 @@ import {
   EMPTY_TELEGRAM_INSTALLATION,
   EMPTY_LIST_TELEGRAM_INSTALLATIONS_RESPONSE,
   EMPTY_REDEEM_TELEGRAM_BINDING_TOKEN_RESPONSE,
-  ExpressInstallationSchema,
-  ListExpressInstallationsResponseSchema,
-  RedeemExpressBindingTokenResponseSchema,
-  EMPTY_EXPRESS_INSTALLATION,
-  EMPTY_LIST_EXPRESS_INSTALLATIONS_RESPONSE,
-  EMPTY_REDEEM_EXPRESS_BINDING_TOKEN_RESPONSE,
   EMPTY_BILLING_BALANCE,
   EMPTY_BILLING_TRANSACTIONS_PAGE,
   EMPTY_BILLING_BATCHES_PAGE,
@@ -1810,109 +1769,6 @@ export class ApiClient {
     const parsed = parseWithFallback<WorkspaceWakeupPage | null>(raw, WorkspaceWakeupPageSchema, null, { endpoint: "GET /api/issue-wakeups" });
     if (!parsed) throw new Error("Could not load workspace wakeups");
     return parsed;
-  }
-
-  // Model profiles and agent model lists. The server chooses a run's model
-  // from these at every claim; edits apply from the next run.
-  /** Shared profiles by default; `personal` lists the agents' personal profiles, `all` both. */
-  async listModelProfiles(kind: ModelProfileKind = "shared"): Promise<ModelProfile[]> {
-    const raw = await this.fetch<unknown>(kind === "shared" ? "/api/model-profiles" : `/api/model-profiles?kind=${kind}`);
-    const parsed = parseWithFallback<ModelProfile[] | null>(raw, ModelProfileSchema.array(), null, { endpoint: "GET /api/model-profiles" });
-    if (!parsed) throw new Error("Could not load model profiles");
-    return parsed;
-  }
-
-  private parseModelProfile(raw: unknown, endpoint: string): ModelProfile {
-    const parsed = parseWithFallback<ModelProfile | null>(raw, ModelProfileSchema, null, { endpoint });
-    if (!parsed) throw new Error("Could not read the model profile");
-    return parsed;
-  }
-
-  async createModelProfile(input: CreateModelProfileInput): Promise<ModelProfile> {
-    const raw = await this.fetch<unknown>("/api/model-profiles", { method: "POST", body: JSON.stringify(input) });
-    return this.parseModelProfile(raw, "POST /api/model-profiles");
-  }
-
-  async updateModelProfile(id: string, input: ModelProfileInput): Promise<ModelProfile> {
-    const raw = await this.fetch<unknown>(`/api/model-profiles/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(input) });
-    return this.parseModelProfile(raw, "PUT /api/model-profiles/:id");
-  }
-
-  async deleteModelProfile(id: string): Promise<void> {
-    await this.fetch(`/api/model-profiles/${encodeURIComponent(id)}`, { method: "DELETE" });
-  }
-
-  /** Who would get another model on their next run if the edit were saved. Saves nothing. */
-  async previewModelProfile(id: string, input: ModelProfileInput): Promise<ModelProfileChange[]> {
-    const raw = await this.fetch<unknown>(`/api/model-profiles/${encodeURIComponent(id)}/preview`, { method: "POST", body: JSON.stringify(input) });
-    const parsed = parseWithFallback<{ changes: ModelProfileChange[] } | null>(
-      raw, ModelProfilePreviewSchema, null, { endpoint: "POST /api/model-profiles/:id/preview" });
-    if (!parsed) throw new Error("Could not preview the profile edit");
-    return parsed.changes;
-  }
-
-  async getAgentModels(agentId: string): Promise<AgentModels> {
-    const raw = await this.fetch<unknown>(`/api/agents/${encodeURIComponent(agentId)}/models`);
-    const parsed = parseWithFallback<AgentModels | null>(raw, AgentModelsSchema, null, { endpoint: "GET /api/agents/:id/models" });
-    if (!parsed) throw new Error("Could not load the agent's models");
-    return parsed;
-  }
-
-  async updateAgentModels(agentId: string, input: UpdateAgentModelsInput): Promise<AgentModels> {
-    const raw = await this.fetch<unknown>(`/api/agents/${encodeURIComponent(agentId)}/models`, { method: "PUT", body: JSON.stringify(input) });
-    const parsed = parseWithFallback<AgentModels | null>(raw, AgentModelsSchema, null, { endpoint: "PUT /api/agents/:id/models" });
-    if (!parsed) throw new Error("Could not read the agent's models");
-    return parsed;
-  }
-
-  private async sendAgentModels(agentId: string, path: string, method: "POST" | "PUT" | "DELETE", body?: unknown): Promise<AgentModels> {
-    const endpoint = `${method} /api/agents/:id/models${path}`;
-    const raw = await this.fetch<unknown>(`/api/agents/${encodeURIComponent(agentId)}/models${path}`, {
-      method,
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    });
-    const parsed = parseWithFallback<AgentModels | null>(raw, AgentModelsSchema, null, { endpoint });
-    if (!parsed) throw new Error("Could not read the agent's models");
-    return parsed;
-  }
-
-  /** Copies a shared profile into the agent's personal profile, which the agent then runs from. */
-  createAgentPersonalProfile(agentId: string, input: CreatePersonalProfileInput = {}): Promise<AgentModels> {
-    return this.sendAgentModels(agentId, "/personal", "POST", input);
-  }
-
-  setAgentPersonalProfile(agentId: string, input: SetPersonalProfileInput): Promise<AgentModels> {
-    return this.sendAgentModels(agentId, "/personal", "PUT", input);
-  }
-
-  /** Back to the shared profile the personal one was made from; the personal profile is deleted. */
-  resetAgentPersonalProfile(agentId: string): Promise<AgentModels> {
-    return this.sendAgentModels(agentId, "/personal", "DELETE");
-  }
-
-  setAgentSingleModel(agentId: string, input: SingleModelInput): Promise<AgentModels> {
-    return this.sendAgentModels(agentId, "/single", "PUT", input);
-  }
-
-  async getIssueModelProfile(issueId: string): Promise<IssueModelProfile> {
-    const raw = await this.fetch<unknown>(`/api/issues/${encodeURIComponent(issueId)}/model-profile`);
-    const parsed = parseWithFallback<IssueModelProfile | null>(raw, IssueModelProfileSchema, null, { endpoint: "GET /api/issues/:id/model-profile" });
-    if (!parsed) throw new Error("Could not load the issue's model profile");
-    return parsed;
-  }
-
-  async setIssueModelProfile(issueId: string, modelProfileId: string | null): Promise<IssueModelProfile> {
-    const raw = await this.fetch<unknown>(`/api/issues/${encodeURIComponent(issueId)}/model-profile`, {
-      method: "PUT", body: JSON.stringify({ model_profile_id: modelProfileId }),
-    });
-    const parsed = parseWithFallback<IssueModelProfile | null>(raw, IssueModelProfileSchema, null, { endpoint: "PUT /api/issues/:id/model-profile" });
-    if (!parsed) throw new Error("Could not read the issue's model profile");
-    return parsed;
-  }
-
-  async listRuntimeUnavailable(): Promise<RuntimeUnavailable[]> {
-    const raw = await this.fetch<unknown>("/api/runtime-unavailable");
-    return parseWithFallback<RuntimeUnavailable[]>(raw, RuntimeUnavailableSchema.array(), [], { endpoint: "GET /api/runtime-unavailable" });
   }
 
   async listIssueWakeups(issueId: string): Promise<IssueWakeup[]> {
@@ -3227,187 +3083,6 @@ export class ApiClient {
       `/api/workspaces/${workspaceId}/runtime-profiles/${profileId}`,
       { method: "DELETE" },
     );
-  }
-
-  // ---------------------------------------------------------------------
-  // Instance subscriptions and the runtime pools that spend them. Reads are
-  // open to members; writes need an instance admin (the server answers 403).
-  // A malformed answer throws rather than rendering as "no subscriptions".
-  // ---------------------------------------------------------------------
-
-  async listSubscriptions(): Promise<SubscriptionList> {
-    const raw = await this.fetch<unknown>("/api/subscriptions");
-    const parsed = parseWithFallback<SubscriptionList | null>(raw, SubscriptionListSchema, null, {
-      endpoint: "GET /api/subscriptions",
-    });
-    if (!parsed) throw new Error("Could not load subscriptions");
-    return parsed;
-  }
-
-  private parseSubscription(raw: unknown, endpoint: string): Subscription {
-    const parsed = parseWithFallback<Subscription | null>(raw, SubscriptionSchema, null, { endpoint });
-    if (!parsed) throw new Error("Could not read the subscription");
-    return parsed;
-  }
-
-  async createSubscription(input: CreateSubscriptionInput): Promise<Subscription> {
-    const raw = await this.fetch<unknown>("/api/subscriptions", { method: "POST", body: JSON.stringify(input) });
-    return this.parseSubscription(raw, "POST /api/subscriptions");
-  }
-
-  async updateSubscription(key: string, patch: UpdateSubscriptionInput): Promise<Subscription> {
-    const raw = await this.fetch<unknown>(`/api/subscriptions/${encodeURIComponent(key)}`, {
-      method: "PATCH",
-      body: JSON.stringify(patch),
-    });
-    return this.parseSubscription(raw, "PATCH /api/subscriptions/:key");
-  }
-
-  async deleteSubscription(key: string): Promise<DeleteSubscriptionResult> {
-    const raw = await this.fetch<unknown>(`/api/subscriptions/${encodeURIComponent(key)}`, { method: "DELETE" });
-    return parseWithFallback<DeleteSubscriptionResult>(
-      raw,
-      DeleteSubscriptionResultSchema,
-      { deleted: true, detached_runtime_profile_ids: [] },
-      { endpoint: "DELETE /api/subscriptions/:key" },
-    );
-  }
-
-  /** Things that need a person: credentials missing on a host, unused subscriptions, empty pools, agents on a switched-off pool. */
-  async listSubscriptionDiscrepancies(): Promise<SubscriptionDiscrepancy[]> {
-    const raw = await this.fetch<unknown>("/api/subscriptions/discrepancies");
-    const parsed = parseWithFallback<{ items: SubscriptionDiscrepancy[] } | null>(
-      raw,
-      SubscriptionDiscrepancyListSchema,
-      null,
-      { endpoint: "GET /api/subscriptions/discrepancies" },
-    );
-    if (!parsed) throw new Error("Could not load discrepancies");
-    return parsed.items;
-  }
-
-  private parseLoginSession(raw: unknown, endpoint: string): SubscriptionLoginSession | null {
-    const parsed = parseWithFallback<{ login: SubscriptionLoginSession | null } | undefined>(
-      raw,
-      SubscriptionLoginResponseSchema,
-      undefined,
-      { endpoint },
-    );
-    if (parsed === undefined) throw new Error("Could not read the sign-in state");
-    return parsed.login;
-  }
-
-  /** Starts a sign-in on the daemon host. The token is sent once and kept nowhere on the client. */
-  async startSubscriptionLogin(key: string, input: StartSubscriptionLoginInput): Promise<SubscriptionLoginSession> {
-    const raw = await this.fetch<unknown>(`/api/subscriptions/${encodeURIComponent(key)}/login`, {
-      method: "POST",
-      body: JSON.stringify(input),
-    });
-    const session = this.parseLoginSession(raw, "POST /api/subscriptions/:key/login");
-    if (!session) throw new Error("Could not read the sign-in state");
-    return session;
-  }
-
-  async getSubscriptionLogin(key: string): Promise<SubscriptionLoginSession | null> {
-    const raw = await this.fetch<unknown>(`/api/subscriptions/${encodeURIComponent(key)}/login`);
-    return this.parseLoginSession(raw, "GET /api/subscriptions/:key/login");
-  }
-
-  async cancelSubscriptionLogin(key: string): Promise<void> {
-    await this.fetch(`/api/subscriptions/${encodeURIComponent(key)}/login`, { method: "DELETE" });
-  }
-
-  // -------------------------------------------------------------------
-  // Pools of accounts: the order the accounts are spent in and the
-  // workspaces that have an environment on them. A write carries the
-  // revision the editor read; a pool that moved on answers 409
-  // `pool_revision_conflict` with `current_revision`.
-  // -------------------------------------------------------------------
-
-  async listPools(): Promise<PoolList> {
-    const raw = await this.fetch<unknown>("/api/pools");
-    const parsed = parseWithFallback<PoolList | null>(raw, PoolListSchema, null, { endpoint: "GET /api/pools" });
-    if (!parsed) throw new Error("Could not load pools");
-    return parsed;
-  }
-
-  private parsePool(raw: unknown, endpoint: string): Pool {
-    const parsed = parseWithFallback<Pool | null>(raw, PoolSchema, null, { endpoint });
-    if (!parsed) throw new Error("Could not read the pool");
-    return parsed;
-  }
-
-  async createPool(input: CreatePoolInput): Promise<Pool> {
-    const raw = await this.fetch<unknown>("/api/pools", { method: "POST", body: JSON.stringify(input) });
-    return this.parsePool(raw, "POST /api/pools");
-  }
-
-  async updatePool(id: string, input: UpdatePoolInput): Promise<Pool> {
-    const raw = await this.fetch<unknown>(`/api/pools/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(input) });
-    return this.parsePool(raw, "PATCH /api/pools/:id");
-  }
-
-  async setPoolGrants(id: string, input: SetPoolGrantsInput): Promise<Pool> {
-    const raw = await this.fetch<unknown>(`/api/pools/${encodeURIComponent(id)}/grants`, { method: "PUT", body: JSON.stringify(input) });
-    return this.parsePool(raw, "PUT /api/pools/:id/grants");
-  }
-
-  async deletePool(id: string): Promise<void> {
-    await this.fetch(`/api/pools/${encodeURIComponent(id)}`, { method: "DELETE" });
-  }
-
-  private parseProfileSubscriptions(raw: unknown, endpoint: string): RuntimeProfileSubscriptions {
-    const parsed = parseWithFallback<RuntimeProfileSubscriptions | null>(
-      raw,
-      RuntimeProfileSubscriptionsSchema,
-      null,
-      { endpoint },
-    );
-    if (!parsed) throw new Error("Could not load the runtime's subscriptions");
-    return parsed;
-  }
-
-  async getRuntimeProfileSubscriptions(workspaceId: string, profileId: string): Promise<RuntimeProfileSubscriptions> {
-    const raw = await this.fetch<unknown>(
-      `/api/workspaces/${workspaceId}/runtime-profiles/${encodeURIComponent(profileId)}/subscriptions`,
-    );
-    return this.parseProfileSubscriptions(raw, "GET /api/workspaces/:ws/runtime-profiles/:id/subscriptions");
-  }
-
-  /** Where the environment is selected, who it serves and whether the references let it go. */
-  async getRuntimeModelUsage(runtimeId: string): Promise<RuntimeModelUsage> {
-    const raw = await this.fetch<unknown>(`/api/runtimes/${encodeURIComponent(runtimeId)}/model-usage`);
-    const parsed = parseWithFallback<RuntimeModelUsage | null>(raw, RuntimeModelUsageSchema, null, {
-      endpoint: "GET /api/runtimes/:id/model-usage",
-    });
-    if (!parsed) throw new Error("Could not load where the environment is used");
-    return parsed;
-  }
-
-  /** What ran on the environment in the last 24 hours, apart from its forecast and its machine state. */
-  async getRuntimeRunFacts(runtimeId: string): Promise<RuntimeRunFacts> {
-    const raw = await this.fetch<unknown>(`/api/runtimes/${encodeURIComponent(runtimeId)}/run-facts`);
-    const parsed = parseWithFallback<RuntimeRunFacts | null>(raw, RuntimeRunFactsSchema, null, {
-      endpoint: "GET /api/runtimes/:id/run-facts",
-    });
-    if (!parsed) throw new Error("Could not load the environment's runs");
-    return parsed;
-  }
-
-  /** The journal of commands run by hand under an account; an instance admin in person only. */
-  async listSubscriptionManualRuns(key: string, params?: { limit?: number; before?: string }): Promise<ManualRunList> {
-    const search = new URLSearchParams();
-    if (params?.limit) search.set("limit", String(params.limit));
-    if (params?.before) search.set("before", params.before);
-    const query = search.toString();
-    const raw = await this.fetch<unknown>(
-      `/api/subscriptions/${encodeURIComponent(key)}/manual-runs${query ? `?${query}` : ""}`,
-    );
-    const parsed = parseWithFallback<ManualRunList | null>(raw, ManualRunListSchema, null, {
-      endpoint: "GET /api/subscriptions/:key/manual-runs",
-    });
-    if (!parsed) throw new Error("Could not load the manual runs");
-    return parsed;
   }
 
   async getRuntimeRateLimits(runtimeId: string): Promise<RuntimeRateLimitsResponse> {
@@ -6940,48 +6615,6 @@ export class ApiClient {
       { endpoint: "POST /api/telegram/binding/redeem" },
     );
   }
-
-  async listExpressInstallations(workspaceId: string): Promise<ListExpressInstallationsResponse> {
-    const raw = await this.fetch<unknown>(`/api/workspaces/${workspaceId}/express/installations`);
-    return parseWithFallback(
-      raw,
-      ListExpressInstallationsResponseSchema,
-      EMPTY_LIST_EXPRESS_INSTALLATIONS_RESPONSE,
-      { endpoint: "GET /api/workspaces/:id/express/installations" },
-    );
-  }
-
-  async registerExpressBot(
-    workspaceId: string,
-    agentId: string,
-    body: RegisterExpressRequest,
-  ): Promise<ExpressInstallation> {
-    const search = new URLSearchParams({ agent_id: agentId });
-    const raw = await this.fetch<unknown>(
-      `/api/workspaces/${workspaceId}/express/install?${search.toString()}`,
-      { method: "POST", body: JSON.stringify(body) },
-    );
-    return parseWithFallback(raw, ExpressInstallationSchema, EMPTY_EXPRESS_INSTALLATION, {
-      endpoint: "POST /api/workspaces/:id/express/install",
-    });
-  }
-
-  async deleteExpressInstallation(workspaceId: string, installationId: string): Promise<void> {
-    await this.fetch(`/api/workspaces/${workspaceId}/express/installations/${installationId}`, {
-      method: "DELETE",
-    });
-  }
-
-  async redeemExpressBindingToken(token: string): Promise<RedeemExpressBindingTokenResponse> {
-    const raw = await this.fetch<unknown>(`/api/express/binding/redeem`, {
-      method: "POST",
-      body: JSON.stringify({ token }),
-    });
-    return parseWithFallback(
-      raw,
-      RedeemExpressBindingTokenResponseSchema,
-      EMPTY_REDEEM_EXPRESS_BINDING_TOKEN_RESPONSE,
-      { endpoint: "POST /api/express/binding/redeem" },
-    );
-  }
 }
+
+installForkMethods(ApiClient);
