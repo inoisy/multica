@@ -258,20 +258,6 @@ func (q *Queries) DeleteModelProfileOptions(ctx context.Context, profileID pgtyp
 	return err
 }
 
-const deleteOrphanModelSideRows = `-- name: DeleteOrphanModelSideRows :exec
-WITH a AS (DELETE FROM agent_model_settings s WHERE NOT EXISTS (SELECT 1 FROM agent x WHERE x.id = s.agent_id)),
-     i AS (DELETE FROM issue_model_profile p WHERE NOT EXISTS (SELECT 1 FROM issue x WHERE x.id = p.issue_id)),
-     r AS (DELETE FROM runtime_profile_pool p WHERE NOT EXISTS (SELECT 1 FROM runtime_profile x WHERE x.id = p.runtime_profile_id))
-DELETE FROM task_model_choice c WHERE NOT EXISTS (SELECT 1 FROM agent_task_queue x WHERE x.id = c.task_id)
-`
-
-// Upstream deletes agents, issues, runs and runtime profiles in many places;
-// their side rows are swept here instead of in each of them.
-func (q *Queries) DeleteOrphanModelSideRows(ctx context.Context) error {
-	_, err := q.db.Exec(ctx, deleteOrphanModelSideRows)
-	return err
-}
-
 const deleteProviderLimitRefusalsBySubscription = `-- name: DeleteProviderLimitRefusalsBySubscription :many
 DELETE FROM runtime_unavailable
 WHERE subscription_id = $1 AND reason_code = 'provider_limit'

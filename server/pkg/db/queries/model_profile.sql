@@ -356,14 +356,6 @@ SELECT * FROM task_model_choice WHERE task_id = $1;
 -- name: ListTaskModelChoices :many
 SELECT * FROM task_model_choice WHERE task_id = ANY(sqlc.arg(task_ids)::uuid[]);
 
--- name: DeleteOrphanModelSideRows :exec
--- Upstream deletes agents, issues, runs and runtime profiles in many places;
--- their side rows are swept here instead of in each of them.
-WITH a AS (DELETE FROM agent_model_settings s WHERE NOT EXISTS (SELECT 1 FROM agent x WHERE x.id = s.agent_id)),
-     i AS (DELETE FROM issue_model_profile p WHERE NOT EXISTS (SELECT 1 FROM issue x WHERE x.id = p.issue_id)),
-     r AS (DELETE FROM runtime_profile_pool p WHERE NOT EXISTS (SELECT 1 FROM runtime_profile x WHERE x.id = p.runtime_profile_id))
-DELETE FROM task_model_choice c WHERE NOT EXISTS (SELECT 1 FROM agent_task_queue x WHERE x.id = c.task_id);
-
 -- name: ListRunFacts24Hours :many
 -- Count attempts once, by the runtime the claim recorded and the account the
 -- daemon confirmed, never from quota observations or today's mutable

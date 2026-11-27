@@ -88,15 +88,15 @@ var workspaceDeletionManifest = map[string]workspaceDeleteAction{
 	"issue_wakeup":                       workspaceDelete,
 	"issue_wakeup_receipt":               workspaceDelete,
 	"issue_child_event":                  workspaceDelete,
-	"issue_workflow_artifact":            workspaceDelete,
-	"model_profile":                      workspaceDelete,
-	"model_profile_option":               workspaceDelete,
-	"runtime_unavailable":                workspaceDelete,
-	"model_idle_episode":                 workspaceDelete,
-	"agent_model_settings":               workspaceDelete,
-	"issue_model_profile":                workspaceDelete,
-	"runtime_profile_pool":               workspaceDelete,
-	"task_model_choice":                  workspaceDeleteKeep, // No workspace_id; rows of deleted runs go with the model_side_rows sweep.
+	"issue_workflow_artifact":            workspaceDeleteSettle, // Fork table: the fork_orphans job removes rows of a deleted workspace.
+	"model_profile":                      workspaceDeleteSettle, // Fork table: the fork_orphans job removes rows of a deleted workspace.
+	"model_profile_option":               workspaceDeleteSettle, // Fork table: the fork_orphans job removes rows of a deleted workspace.
+	"runtime_unavailable":                workspaceDeleteSettle, // Fork table: the fork_orphans job removes rows of a deleted workspace.
+	"model_idle_episode":                 workspaceDeleteSettle, // Fork table: the fork_orphans job removes rows of a deleted workspace.
+	"agent_model_settings":               workspaceDeleteSettle, // Fork table: the fork_orphans job removes rows of a deleted workspace.
+	"issue_model_profile":                workspaceDeleteSettle, // Fork table: the fork_orphans job removes rows of a deleted workspace.
+	"runtime_profile_pool":               workspaceDeleteSettle, // Fork table: the fork_orphans job removes rows of a deleted workspace.
+	"task_model_choice":                  workspaceDeleteKeep,   // No workspace_id; rows of deleted runs go with the model_side_rows sweep.
 	"issue_view":                         workspaceDelete,
 	"issue_view_preference":              workspaceDelete,
 	"issue_blocker":                      workspaceDelete,
@@ -159,13 +159,13 @@ var workspaceDeletionManifest = map[string]workspaceDeleteAction{
 	"skill_version":                      workspaceDelete,
 	"squad":                              workspaceDelete,
 	"squad_member":                       workspaceDelete,
-	"subscription":                       workspaceDeleteKeep, // Instance-level provider accounts, shared by every workspace.
-	"subscription_host_state":            workspaceDeleteKeep, // Daemon hosts' view of instance-level credentials.
-	"subscription_manual_run":            workspaceDeleteKeep, // Journal of an instance admin's manual runs on instance-level subscriptions.
-	"subscription_usage":                 workspaceDeleteKeep, // Usage of instance-level subscriptions.
-	"subscription_pool":                  workspaceDeleteKeep, // Instance-level pools of accounts, shared by every workspace.
-	"subscription_pool_member":           workspaceDeleteKeep, // Accounts of an instance-level pool.
-	"subscription_pool_grant":            workspaceDelete,
+	"subscription":                       workspaceDeleteKeep,   // Instance-level provider accounts, shared by every workspace.
+	"subscription_host_state":            workspaceDeleteKeep,   // Daemon hosts' view of instance-level credentials.
+	"subscription_manual_run":            workspaceDeleteKeep,   // Journal of an instance admin's manual runs on instance-level subscriptions.
+	"subscription_usage":                 workspaceDeleteKeep,   // Usage of instance-level subscriptions.
+	"subscription_pool":                  workspaceDeleteKeep,   // Instance-level pools of accounts, shared by every workspace.
+	"subscription_pool_member":           workspaceDeleteKeep,   // Accounts of an instance-level pool.
+	"subscription_pool_grant":            workspaceDeleteSettle, // Fork table: the fork_orphans job removes rows of a deleted workspace.
 	"sys_cron_executions":                workspaceDeleteKeep,
 	"theme_store_download":               workspaceDeleteKeep, // per registry theme, not workspace-owned
 	"task_context_receipt":               workspaceDelete,
