@@ -51,7 +51,7 @@ func TestCreateAgentRunsOnAPersonalProfileOfOneRow(t *testing.T) {
 	id := out["id"].(string)
 	t.Cleanup(func() { testPool.Exec(context.Background(), `DELETE FROM agent WHERE id = $1`, id) })
 
-	if n := dbfx.Count(t, `SELECT count(*) FROM agent a JOIN model_profile p ON p.id = a.model_profile_id AND p.owner_agent_id = a.id
+	if n := dbfx.Count(t, `SELECT count(*) FROM agent a JOIN agent_model_settings ams ON ams.agent_id = a.id JOIN model_profile p ON p.id = ams.model_profile_id AND p.owner_agent_id = a.id
 		JOIN model_profile_option o ON o.profile_id = p.id AND o.position = 1 AND o.runtime_id = a.runtime_id AND o.model = 'sol' AND o.thinking_level = 'high'
 		WHERE a.id = $1 AND (SELECT count(*) FROM model_profile_option x WHERE x.profile_id = p.id) = 1`, id); n != 1 {
 		t.Fatal("the created agent has no personal profile of its row")
@@ -108,10 +108,11 @@ func TestPoolEnvironmentCommandCannotBecomeAWrapper(t *testing.T) {
 	if err := testPool.QueryRow(ctx, `INSERT INTO subscription_pool (name, runtime_type) VALUES ('truth pool', 'claude') RETURNING id::text`).Scan(&pool); err != nil {
 		t.Fatal(err)
 	}
-	if err := testPool.QueryRow(ctx, `INSERT INTO runtime_profile (workspace_id, display_name, protocol_family, command_name, runtime_type, pool_id) VALUES ($1, 'truth pool env', 'claude', 'claude', 'claude', $2) RETURNING id::text`,
-		testWorkspaceID, pool).Scan(&env); err != nil {
+	if err := testPool.QueryRow(ctx, `INSERT INTO runtime_profile (workspace_id, display_name, protocol_family, command_name, runtime_type) VALUES ($1, 'truth pool env', 'claude', 'claude', 'claude') RETURNING id::text`,
+		testWorkspaceID).Scan(&env); err != nil {
 		t.Fatal(err)
 	}
+	dbfx.Exec(t, `INSERT INTO runtime_profile_pool (runtime_profile_id, workspace_id, pool_id) VALUES ($1, $2, $3)`, env, testWorkspaceID, pool)
 	t.Cleanup(func() {
 		testPool.Exec(ctx, `DELETE FROM runtime_profile WHERE id = $1`, env)
 		testPool.Exec(ctx, `DELETE FROM subscription_pool WHERE id = $1`, pool)

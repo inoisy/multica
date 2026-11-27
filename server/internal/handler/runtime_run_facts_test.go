@@ -39,7 +39,7 @@ func TestRuntimeRunFactsCountTaskRecordsInFixedWindow(t *testing.T) {
 		cols := testutil.Cols{"runtime_id": rtID, "issue_id": issue, "status": "completed", "started_at": now.Add(-ago), "dispatched_at": now.Add(-ago)}
 		id := dbfx.Task(t, agent, cols)
 		if account != "" {
-			dbfx.Exec(t, `UPDATE agent_task_queue SET account_fact=$1::jsonb WHERE id=$2`, account, id)
+			dbfx.Exec(t, `INSERT INTO task_model_choice (task_id, account_fact) VALUES ($2, $1::jsonb)`, account, id)
 		}
 	}
 	started(time.Hour, fact)

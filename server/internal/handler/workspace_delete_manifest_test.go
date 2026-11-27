@@ -93,6 +93,10 @@ var workspaceDeletionManifest = map[string]workspaceDeleteAction{
 	"model_profile_option":               workspaceDelete,
 	"runtime_unavailable":                workspaceDelete,
 	"model_idle_episode":                 workspaceDelete,
+	"agent_model_settings":               workspaceDelete,
+	"issue_model_profile":                workspaceDelete,
+	"runtime_profile_pool":               workspaceDelete,
+	"task_model_choice":                  workspaceDeleteKeep, // No workspace_id; rows of deleted runs go with the model_side_rows sweep.
 	"issue_view":                         workspaceDelete,
 	"issue_view_preference":              workspaceDelete,
 	"issue_blocker":                      workspaceDelete,

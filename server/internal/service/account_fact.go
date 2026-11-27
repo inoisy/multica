@@ -80,7 +80,11 @@ func claimAccountOffer(ctx context.Context, q *db.Queries, task *db.AgentTaskQue
 	if err != nil {
 		return err
 	}
-	if offer == nil && task.AccountOffer == nil && task.AccountFact == nil {
+	prev, err := TaskModelChoice(ctx, q, task.ID)
+	if err != nil {
+		return err
+	}
+	if offer == nil && prev.AccountOffer == nil && prev.AccountFact == nil {
 		return nil
 	}
 	var raw []byte
@@ -89,11 +93,7 @@ func claimAccountOffer(ctx context.Context, q *db.Queries, task *db.AgentTaskQue
 			return err
 		}
 	}
-	if err := q.SetClaimedTaskAccountOffer(ctx, db.SetClaimedTaskAccountOfferParams{ID: task.ID, AccountOffer: raw}); err != nil {
-		return err
-	}
-	task.AccountOffer, task.AccountFact = raw, nil
-	return nil
+	return q.SetClaimedTaskAccountOffer(ctx, db.SetClaimedTaskAccountOfferParams{ID: task.ID, AccountOffer: raw})
 }
 
 // BuildAccountOffer is the pool an environment would be handed now, nil when it spends none.
@@ -105,14 +105,14 @@ func BuildAccountOffer(ctx context.Context, q *db.Queries, runtimeID pgtype.UUID
 	if err != nil {
 		return nil, err
 	}
-	profile, err := q.GetRuntimeProfile(ctx, rt.ProfileID)
-	if errors.Is(err, pgx.ErrNoRows) || (err == nil && !profile.PoolID.Valid) {
-		return nil, nil
-	}
+	poolID, err := RuntimeProfilePoolID(ctx, q, rt.ProfileID)
 	if err != nil {
 		return nil, err
 	}
-	pool, err := q.LockSubscriptionPoolShared(ctx, profile.PoolID)
+	if !poolID.Valid {
+		return nil, nil
+	}
+	pool, err := q.LockSubscriptionPoolShared(ctx, poolID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -167,7 +167,11 @@ func (s *TaskService) ConfirmTaskAccount(ctx context.Context, taskID, runtimeID 
 		if task.RuntimeID != runtimeID {
 			return ErrAccountWrongRuntime
 		}
-		offer, ok := ParseAccountOffer(task.AccountOffer)
+		recorded, err := TaskModelChoice(ctx, q, task.ID)
+		if err != nil {
+			return err
+		}
+		offer, ok := ParseAccountOffer(recorded.AccountOffer)
 		if !ok {
 			return ErrAccountNoOffer
 		}
@@ -186,7 +190,7 @@ func (s *TaskService) ConfirmTaskAccount(ctx context.Context, taskID, runtimeID 
 		if chosen == nil || offer.PoolID != req.PoolID || offer.PoolRevision != req.PoolRevision {
 			return ErrAccountNotOffered
 		}
-		if stored, ok := ParseAccountFact(task.AccountFact); ok {
+		if stored, ok := ParseAccountFact(recorded.AccountFact); ok {
 			if stored.DaemonID != daemonID {
 				return ErrAccountWrongRuntime
 			}
@@ -207,7 +211,7 @@ func (s *TaskService) ConfirmTaskAccount(ctx context.Context, taskID, runtimeID 
 		if err != nil {
 			return err
 		}
-		return q.SetTaskAccountFact(ctx, db.SetTaskAccountFactParams{ID: taskID, AccountFact: raw})
+		return q.SetTaskAccountFact(ctx, db.SetTaskAccountFactParams{TaskID: taskID, AccountFact: raw})
 	})
 	return fact, err
 }

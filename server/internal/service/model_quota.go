@@ -192,8 +192,12 @@ func markRuntimeUnavailable(ctx context.Context, q *db.Queries, t db.AgentTaskQu
 	}
 	until := QuotaUnavailableUntil(reported, errMsg, runtimeDisplayName(rt), rt.Provider, now)
 	code := RefusalCodeForFailure(errMsg, refusalCodes...)
+	recorded, err := TaskModelChoice(ctx, q, t.ID)
+	if err != nil {
+		return err
+	}
 	var account pgtype.UUID
-	if fact, ok := ParseAccountFact(t.AccountFact); ok && code == UnavailableProviderLimit {
+	if fact, ok := ParseAccountFact(recorded.AccountFact); ok && code == UnavailableProviderLimit {
 		account = util.MustParseUUID(fact.SubscriptionID)
 	}
 	_, err = q.InsertRuntimeUnavailable(ctx, db.InsertRuntimeUnavailableParams{

@@ -65,9 +65,10 @@ func choiceForTask(ctx context.Context, q *db.Queries, task db.AgentTaskQueue, n
 	return choice, agent, err
 }
 
-// isModelRouted reports whether the run's model comes from a list.
-func isModelRouted(task db.AgentTaskQueue, choice ModelChoice) bool {
-	return task.ModelChoice != nil || choice.Source != ModelSourceAgentFields
+// isModelRouted reports whether the run's model comes from a list; recorded
+// is the choice stored for the run, if any.
+func isModelRouted(recorded []byte, choice ModelChoice) bool {
+	return recorded != nil || choice.Source != ModelSourceAgentFields
 }
 
 // routeKey is what makes two routes of one run the same; equal keys mean the
@@ -80,15 +81,15 @@ func routeKey(runtime pgtype.UUID, c ModelChoice) string {
 	return strings.Join([]string{util.UUIDToString(runtime), c.Source, c.ProfileID, c.Reason, fmt.Sprint(c.Position), wait}, "|")
 }
 
-func storedRouteKey(task db.AgentTaskQueue) string {
-	if task.ModelChoice == nil {
+func storedRouteKey(runtime pgtype.UUID, recorded []byte) string {
+	if recorded == nil {
 		return ""
 	}
 	var c ModelChoice
-	if json.Unmarshal(task.ModelChoice, &c) != nil {
+	if json.Unmarshal(recorded, &c) != nil {
 		return ""
 	}
-	return routeKey(task.RuntimeID, c)
+	return routeKey(runtime, c)
 }
 
 // idleNotice is an inbox item to publish after its transaction commits.
@@ -106,7 +107,11 @@ func (s *TaskService) routeTask(ctx context.Context, q *db.Queries, task db.Agen
 	if err != nil {
 		return task, choice, false, nil, err
 	}
-	if !isModelRouted(task, choice) {
+	recorded, err := TaskModelChoice(ctx, q, task.ID)
+	if err != nil {
+		return task, choice, false, nil, err
+	}
+	if !isModelRouted(recorded.ModelChoice, choice) {
 		return task, choice, false, nil, nil
 	}
 	runtime := task.RuntimeID
@@ -119,7 +124,7 @@ func (s *TaskService) routeTask(ctx context.Context, q *db.Queries, task db.Agen
 			return task, choice, false, nil, err
 		}
 	}
-	if routeKey(runtime, choice) == storedRouteKey(task) {
+	if routeKey(runtime, choice) == storedRouteKey(task.RuntimeID, recorded.ModelChoice) {
 		return task, choice, false, notices, nil
 	}
 	raw, _ := json.Marshal(choice)
@@ -173,7 +178,11 @@ func (s *TaskService) claimModelChoice(ctx context.Context, q *db.Queries, task 
 	if err != nil {
 		return nil, err
 	}
-	if !isModelRouted(*task, choice) {
+	recorded, err := TaskModelChoice(ctx, q, task.ID)
+	if err != nil {
+		return nil, err
+	}
+	if !isModelRouted(recorded.ModelChoice, choice) {
 		return nil, nil
 	}
 	if choice.Waiting() || choice.RuntimeID() != util.UUIDToString(runtimeID) {
@@ -181,12 +190,10 @@ func (s *TaskService) claimModelChoice(ctx context.Context, q *db.Queries, task 
 	}
 	raw, _ := json.Marshal(choice)
 	if err := q.SetClaimedTaskModelChoice(ctx, db.SetClaimedTaskModelChoiceParams{
-		ID: task.ID, ModelPosition: pgtype.Int4{Int32: choice.Position, Valid: true}, ModelChoice: raw,
+		ID: task.ID, ModelPosition: choice.Position, ModelChoice: raw,
 	}); err != nil {
 		return nil, err
 	}
-	task.ModelPosition = pgtype.Int4{Int32: choice.Position, Valid: true}
-	task.ModelChoice = raw
 	return s.closeIdleEpisode(ctx, q, agent, *task, choice)
 }
 
@@ -394,15 +401,15 @@ func runtimePoolVerdict(ctx context.Context, q *db.Queries, runtimeID pgtype.UUI
 	if err != nil {
 		return nil, err
 	}
-	profile, err := q.GetRuntimeProfile(ctx, rt.ProfileID)
-	if errors.Is(err, pgx.ErrNoRows) || (err == nil && !profile.PoolID.Valid) {
-		return nil, nil
-	}
+	pool, err := RuntimeProfilePoolID(ctx, q, rt.ProfileID)
 	if err != nil {
 		return nil, err
 	}
-	poolID := util.UUIDToString(profile.PoolID)
-	accounts, members, err := poolAccounts(ctx, q, map[string]string{util.UUIDToString(profile.ID): poolID}, now)
+	if !pool.Valid {
+		return nil, nil
+	}
+	poolID := util.UUIDToString(pool)
+	accounts, members, err := poolAccounts(ctx, q, map[string]string{util.UUIDToString(rt.ProfileID): poolID}, now)
 	if err != nil {
 		return nil, err
 	}

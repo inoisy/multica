@@ -941,13 +941,7 @@ func taskToResponse(t db.AgentTaskQueue, workspaceID string) AgentTaskResponse {
 	if t.HandoffNote.Valid {
 		handoffNote = t.HandoffNote.String
 	}
-	var accountFact *service.AccountFact
-	if fact, ok := service.ParseAccountFact(t.AccountFact); ok {
-		accountFact = &fact
-	}
 	return AgentTaskResponse{
-		ModelChoice: json.RawMessage(t.ModelChoice),
-		AccountFact: accountFact,
 		// Task-scoped provenance must not transfer through copied retry context.
 		CancelledByCommentChange: t.Status == "cancelled" && cancellation.TaskID != "" && cancellation.TaskID == uuidToString(t.ID),
 		CancelledBy:              taskCancellationActorToResponse(t),
@@ -2077,8 +2071,8 @@ func (h *Handler) canManageAgent(w http.ResponseWriter, r *http.Request, agent d
 // changesProfileOwnedFields reports a request that would move runtime, model
 // or thinking level of an agent whose model profile owns them. Sending the
 // stored value again is not a change: older clients post the whole form back.
-func changesProfileOwnedFields(existing db.Agent, req UpdateAgentRequest) bool {
-	if !existing.ModelProfileID.Valid {
+func changesProfileOwnedFields(existing db.Agent, profileID pgtype.UUID, req UpdateAgentRequest) bool {
+	if !profileID.Valid {
 		return false
 	}
 	return (req.RuntimeID != nil && *req.RuntimeID != uuidToString(existing.RuntimeID)) ||
@@ -2103,7 +2097,12 @@ func (h *Handler) UpdateAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if changesProfileOwnedFields(existing, req) {
+	profileID, err := service.AgentModelProfileID(r.Context(), h.Queries, existing.ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to load agent model profile")
+		return
+	}
+	if changesProfileOwnedFields(existing, profileID, req) {
 		writeErrorCode(w, http.StatusConflict, "agent_model_owned_by_profile",
 			"the runtime, model and thinking level of this agent come from its model profile; change them on the Models tab of the agent")
 		return
@@ -3194,6 +3193,7 @@ func (h *Handler) ListAgentTasks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.hydrateTaskAttributions(r.Context(), attributionsOf(resp))
+	h.hydrateTaskModelChoices(r.Context(), resp)
 	if includeUsage {
 		if err := h.hydrateAgentTaskUsage(r.Context(), agent.ID, taskIDs, resp); err != nil {
 			if writeQueryCancellation(w, r, err) {
@@ -3563,6 +3563,7 @@ func (h *Handler) ListWorkspaceAgentTaskSnapshot(w http.ResponseWriter, r *http.
 		return
 	}
 	h.hydrateTaskAttributions(r.Context(), attributionsOf(resp))
+	h.hydrateTaskModelChoices(r.Context(), resp)
 
 	writeJSON(w, http.StatusOK, resp)
 }

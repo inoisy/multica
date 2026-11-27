@@ -30,7 +30,7 @@ func newPoolRig(t *testing.T) *poolRig {
 	t.Cleanup(func() {
 		ctx := r.ctx
 		pool := r.fx.Pool
-		pool.Exec(ctx, `DELETE FROM runtime_profile WHERE pool_id IN (SELECT id FROM subscription_pool WHERE name LIKE 'ptest %')`)
+		pool.Exec(ctx, `DELETE FROM runtime_profile WHERE id IN (SELECT runtime_profile_id FROM runtime_profile_pool WHERE pool_id IN (SELECT id FROM subscription_pool WHERE name LIKE 'ptest %'))`)
 		pool.Exec(ctx, `DELETE FROM subscription_pool_grant WHERE pool_id IN (SELECT id FROM subscription_pool WHERE name LIKE 'ptest %')`)
 		pool.Exec(ctx, `DELETE FROM subscription_pool_member WHERE pool_id IN (SELECT id FROM subscription_pool WHERE name LIKE 'ptest %')`)
 		pool.Exec(ctx, `DELETE FROM subscription_pool WHERE name LIKE 'ptest %'`)
@@ -58,6 +58,16 @@ func (pr *poolRig) members(pool pgtype.UUID) string {
 	return out
 }
 
+// poolOf is the pool an environment spends, read from its side row.
+func (pr *poolRig) poolOf(profileID pgtype.UUID) pgtype.UUID {
+	pr.t.Helper()
+	id, err := RuntimeProfilePoolID(pr.ctx, pr.q, profileID)
+	if err != nil {
+		pr.t.Fatal(err)
+	}
+	return id
+}
+
 func TestPoolIsCreatedWithItsAccountsGrantsAndEnvironments(t *testing.T) {
 	pr := newPoolRig(t)
 	a, b := pr.account("a", "codex"), pr.account("b", "codex")
@@ -74,7 +84,7 @@ func TestPoolIsCreatedWithItsAccountsGrantsAndEnvironments(t *testing.T) {
 		t.Fatalf("grants %d environments %d", len(res.Grants), len(res.Profiles))
 	}
 	for _, p := range res.Profiles {
-		if p.DisplayName != "ptest one" || p.ProtocolFamily != "codex" || p.CommandName != "codex" || !p.Enabled || p.PoolID != res.Pool.ID {
+		if p.DisplayName != "ptest one" || p.ProtocolFamily != "codex" || p.CommandName != "codex" || !p.Enabled || pr.poolOf(p.ID) != res.Pool.ID {
 			t.Fatalf("environment: %+v", p)
 		}
 	}
@@ -128,7 +138,7 @@ func TestPoolRevisionRisesOnAccountsOrderAndSpendOrderOnly(t *testing.T) {
 	if err := update(1, PoolPatch{Name: &name, Description: &desc}); err != nil || rev() != 1 {
 		t.Fatalf("a rename must not raise the revision: %v rev %d", err, rev())
 	}
-	if n := pr.count(`SELECT count(*) FROM runtime_profile WHERE pool_id=$1 AND display_name='ptest renamed' AND description='words'`, id); n != 1 {
+	if n := pr.count(`SELECT count(*) FROM runtime_profile WHERE id IN (SELECT runtime_profile_id FROM runtime_profile_pool WHERE pool_id=$1) AND display_name='ptest renamed' AND description='words'`, id); n != 1 {
 		t.Fatal("the environment did not follow the pool's name and description")
 	}
 	same := []string{a, b}
@@ -163,7 +173,7 @@ func TestPoolGrantsMakeAndSwitchOffEnvironments(t *testing.T) {
 	id := res.Pool.ID
 	enabled := func(ws pgtype.UUID) string {
 		var out string
-		pr.fx.QueryRow(t, `SELECT coalesce((SELECT enabled::text FROM runtime_profile WHERE pool_id=$1 AND workspace_id=$2), 'none')`, id, ws).Scan(&out)
+		pr.fx.QueryRow(t, `SELECT coalesce((SELECT enabled::text FROM runtime_profile WHERE id IN (SELECT runtime_profile_id FROM runtime_profile_pool WHERE pool_id=$1) AND workspace_id=$2), 'none')`, id, ws).Scan(&out)
 		return out
 	}
 	if _, err := pr.pools.SetGrants(pr.ctx, id, pr.owner, nil, []pgtype.UUID{pr.ws, pr.ws2}); err != nil {
@@ -196,7 +206,7 @@ func TestPoolGrantsMakeAndSwitchOffEnvironments(t *testing.T) {
 	if _, err := pr.pools.SetGrants(pr.ctx, id, pr.owner, nil, []pgtype.UUID{pr.ws, pr.ws2}); err != nil {
 		t.Fatal(err)
 	}
-	if enabled(pr.ws2) != "true" || pr.count(`SELECT count(*) FROM runtime_profile WHERE pool_id=$1`, id) != 2 {
+	if enabled(pr.ws2) != "true" || pr.count(`SELECT count(*) FROM runtime_profile WHERE id IN (SELECT runtime_profile_id FROM runtime_profile_pool WHERE pool_id=$1)`, id) != 2 {
 		t.Fatal("regrant")
 	}
 	// The grants do not move the revision: a run already handed the pool keeps it.
@@ -215,7 +225,7 @@ func TestPoolIsDeletedOnlyWithoutEnvironments(t *testing.T) {
 	if err := pr.pools.Delete(pr.ctx, res.Pool.ID); !errors.Is(err, ErrPoolInUse) {
 		t.Fatalf("pool with an environment: %v", err)
 	}
-	pr.fx.Exec(t, `DELETE FROM runtime_profile WHERE pool_id=$1`, res.Pool.ID)
+	pr.fx.Exec(t, `DELETE FROM runtime_profile WHERE id IN (SELECT runtime_profile_id FROM runtime_profile_pool WHERE pool_id=$1)`, res.Pool.ID)
 	if err := pr.pools.Delete(pr.ctx, res.Pool.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -268,7 +278,7 @@ func TestPoolReachingAllWorkspacesFollowsNewOnes(t *testing.T) {
 	if err := EnsureAllWorkspacePools(pr.ctx, pr.q, ws, pr.owner); err != nil {
 		t.Fatalf("repeat: %v", err)
 	}
-	if n := pr.count(`SELECT count(*) FROM runtime_profile WHERE pool_id=$1 AND workspace_id=$2 AND enabled`, res.Pool.ID, ws); n != 1 {
+	if n := pr.count(`SELECT count(*) FROM runtime_profile WHERE id IN (SELECT runtime_profile_id FROM runtime_profile_pool WHERE pool_id=$1) AND workspace_id=$2 AND enabled`, res.Pool.ID, ws); n != 1 {
 		t.Fatalf("environments of the new workspace: %d", n)
 	}
 	if n := pr.count(`SELECT count(*) FROM subscription_pool_grant WHERE pool_id=$1 AND workspace_id=$2`, res.Pool.ID, ws); n != 1 {

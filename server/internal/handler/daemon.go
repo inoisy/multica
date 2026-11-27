@@ -2596,7 +2596,7 @@ func (h *Handler) finalizeClaimDelivery(
 		if aerr != nil {
 			return fmt.Errorf("re-read agent for delivery authorization: %w", aerr)
 		}
-		if agent.RuntimeID != task.RuntimeID && task.ModelChoice == nil {
+		if agent.RuntimeID != task.RuntimeID && !taskIsModelRouted(ctx, qtx, task.ID) {
 			return &service.ClaimDeliveryAuthzError{
 				Reason: "error_agent_runtime_changed",
 				Detail: "agent runtime changed before delivery",
@@ -2931,12 +2931,12 @@ func applyFreshSessionRetryWorkdir(task db.AgentTaskQueue, resp *AgentTaskRespon
 
 // claimedModelOption is the row the claim chose for a model-routed run, nil
 // for a plain run.
-func claimedModelOption(task *db.AgentTaskQueue) *service.ModelOption {
-	if task.ModelChoice == nil || !task.ModelPosition.Valid {
+func claimedModelOption(recorded db.TaskModelChoice) *service.ModelOption {
+	if recorded.ModelChoice == nil || !recorded.ModelPosition.Valid {
 		return nil
 	}
 	var choice service.ModelChoice
-	if json.Unmarshal(task.ModelChoice, &choice) != nil {
+	if json.Unmarshal(recorded.ModelChoice, &choice) != nil {
 		return nil
 	}
 	return choice.Chosen
@@ -3077,8 +3077,13 @@ func (h *Handler) buildClaimedTaskResponse(r *http.Request, task *db.AgentTaskQu
 	// response assembly. Recheck the freshly loaded Agent here so a rebind or
 	// owner change that committed after the claim cannot reach the daemon.
 	// A model-routed run carries the runtime its model list chose; only a
-	// plain run is bound to the agent's own runtime.
-	if agent.RuntimeID != task.RuntimeID && task.ModelChoice == nil {
+	// plain run is bound to the agent's own runtime. A failed lookup counts
+	// as plain, which refuses a routed run rather than misroute it.
+	recorded, err := service.TaskModelChoice(r.Context(), h.Queries, task.ID)
+	if err != nil {
+		slog.Warn("daemon claim: load model choice failed", "task_id", uuidToString(task.ID), "error", err)
+	}
+	if agent.RuntimeID != task.RuntimeID && recorded.ModelChoice == nil {
 		slog.Warn("daemon claim: agent runtime changed before delivery; refusing dispatch",
 			"task_id", uuidToString(task.ID),
 			"agent_id", uuidToString(task.AgentID),
@@ -3202,7 +3207,7 @@ func (h *Handler) buildClaimedTaskResponse(r *http.Request, task *db.AgentTaskQu
 	}
 	// The model list chose this run's model at claim: its row's model,
 	// thinking level and arguments replace the agent's plain fields.
-	if choice := claimedModelOption(task); choice != nil {
+	if choice := claimedModelOption(recorded); choice != nil {
 		resp.Agent.Model = choice.Model
 		resp.Agent.ThinkingLevel = choice.ThinkingLevel
 		resp.Agent.CustomArgs = choice.CustomArgs
@@ -6451,6 +6456,7 @@ func (h *Handler) GetActiveTaskForIssue(w http.ResponseWriter, r *http.Request) 
 	}
 	// Same issue-facing attribution surface as ListTasksByIssue — hydrate names.
 	h.hydrateTaskAttributions(r.Context(), attributionsOf(resp))
+	h.hydrateTaskModelChoices(r.Context(), resp)
 
 	writeJSON(w, http.StatusOK, map[string]any{"tasks": resp})
 }
@@ -6681,6 +6687,7 @@ func (h *Handler) ListTasksByIssue(w http.ResponseWriter, r *http.Request) {
 	// issue-facing surface must resolve initiator/originator names (departed-safe,
 	// one batch) — otherwise the badge falls back to "someone" on issue detail.
 	h.hydrateTaskAttributions(r.Context(), attributionsOf(resp))
+	h.hydrateTaskModelChoices(r.Context(), resp)
 	// Usage belongs to the execution log, not to a coordination read.
 	// ListIssueTaskUsage returns a row per (task, provider, model) for EVERY
 	// task the issue ever ran, so hydrating it on the active path would keep

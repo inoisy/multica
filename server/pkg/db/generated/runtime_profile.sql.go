@@ -26,7 +26,7 @@ INSERT INTO runtime_profile (
     runtime_type,
     daemon_id
 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-RETURNING id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, daemon_id, pool_id
+RETURNING id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, daemon_id
 `
 
 type CreateRuntimeProfileParams struct {
@@ -76,7 +76,6 @@ func (q *Queries) CreateRuntimeProfile(ctx context.Context, arg CreateRuntimePro
 		&i.UpdatedAt,
 		&i.RuntimeType,
 		&i.DaemonID,
-		&i.PoolID,
 	)
 	return i, err
 }
@@ -153,7 +152,7 @@ func (q *Queries) DeleteRuntimeProfile(ctx context.Context, arg DeleteRuntimePro
 }
 
 const getRuntimeProfile = `-- name: GetRuntimeProfile :one
-SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, daemon_id, pool_id FROM runtime_profile
+SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, daemon_id FROM runtime_profile
 WHERE id = $1
 `
 
@@ -175,13 +174,12 @@ func (q *Queries) GetRuntimeProfile(ctx context.Context, id pgtype.UUID) (Runtim
 		&i.UpdatedAt,
 		&i.RuntimeType,
 		&i.DaemonID,
-		&i.PoolID,
 	)
 	return i, err
 }
 
 const getRuntimeProfileForWorkspace = `-- name: GetRuntimeProfileForWorkspace :one
-SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, daemon_id, pool_id FROM runtime_profile
+SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, daemon_id FROM runtime_profile
 WHERE id = $1 AND workspace_id = $2
 `
 
@@ -208,7 +206,6 @@ func (q *Queries) GetRuntimeProfileForWorkspace(ctx context.Context, arg GetRunt
 		&i.UpdatedAt,
 		&i.RuntimeType,
 		&i.DaemonID,
-		&i.PoolID,
 	)
 	return i, err
 }
@@ -389,7 +386,7 @@ func (q *Queries) ListAgentRuntimeIDsByProfile(ctx context.Context, arg ListAgen
 }
 
 const listEnabledRuntimeProfilesForDaemon = `-- name: ListEnabledRuntimeProfilesForDaemon :many
-SELECT p.id, p.workspace_id, p.display_name, p.protocol_family, p.command_name, p.description, p.fixed_args, p.visibility, p.created_by, p.enabled, p.created_at, p.updated_at, p.runtime_type, p.daemon_id, p.pool_id FROM runtime_profile p
+SELECT p.id, p.workspace_id, p.display_name, p.protocol_family, p.command_name, p.description, p.fixed_args, p.visibility, p.created_by, p.enabled, p.created_at, p.updated_at, p.runtime_type, p.daemon_id FROM runtime_profile p
 WHERE p.workspace_id = $1 AND p.enabled = true
   AND (p.daemon_id = $2 OR (p.daemon_id IS NULL AND EXISTS (
     SELECT 1 FROM agent_runtime ar
@@ -429,7 +426,6 @@ func (q *Queries) ListEnabledRuntimeProfilesForDaemon(ctx context.Context, arg L
 			&i.UpdatedAt,
 			&i.RuntimeType,
 			&i.DaemonID,
-			&i.PoolID,
 		); err != nil {
 			return nil, err
 		}
@@ -442,7 +438,7 @@ func (q *Queries) ListEnabledRuntimeProfilesForDaemon(ctx context.Context, arg L
 }
 
 const listEnabledRuntimeProfilesForOwner = `-- name: ListEnabledRuntimeProfilesForOwner :many
-SELECT p.id, p.workspace_id, p.display_name, p.protocol_family, p.command_name, p.description, p.fixed_args, p.visibility, p.created_by, p.enabled, p.created_at, p.updated_at, p.runtime_type, p.daemon_id, p.pool_id FROM runtime_profile p
+SELECT p.id, p.workspace_id, p.display_name, p.protocol_family, p.command_name, p.description, p.fixed_args, p.visibility, p.created_by, p.enabled, p.created_at, p.updated_at, p.runtime_type, p.daemon_id FROM runtime_profile p
 WHERE p.workspace_id = $1 AND p.enabled = true
   AND (p.created_by = $2 OR EXISTS (
     SELECT 1 FROM agent_runtime ar
@@ -484,7 +480,6 @@ func (q *Queries) ListEnabledRuntimeProfilesForOwner(ctx context.Context, arg Li
 			&i.UpdatedAt,
 			&i.RuntimeType,
 			&i.DaemonID,
-			&i.PoolID,
 		); err != nil {
 			return nil, err
 		}
@@ -497,7 +492,7 @@ func (q *Queries) ListEnabledRuntimeProfilesForOwner(ctx context.Context, arg Li
 }
 
 const listEnabledRuntimeProfilesForWorkspace = `-- name: ListEnabledRuntimeProfilesForWorkspace :many
-SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, daemon_id, pool_id FROM runtime_profile
+SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, daemon_id FROM runtime_profile
 WHERE workspace_id = $1 AND enabled = true
 ORDER BY created_at ASC
 `
@@ -528,7 +523,6 @@ func (q *Queries) ListEnabledRuntimeProfilesForWorkspace(ctx context.Context, wo
 			&i.UpdatedAt,
 			&i.RuntimeType,
 			&i.DaemonID,
-			&i.PoolID,
 		); err != nil {
 			return nil, err
 		}
@@ -577,7 +571,7 @@ func (q *Queries) ListRuntimeProfileMachines(ctx context.Context, arg ListRuntim
 }
 
 const listRuntimeProfiles = `-- name: ListRuntimeProfiles :many
-SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, daemon_id, pool_id FROM runtime_profile
+SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, daemon_id FROM runtime_profile
 WHERE workspace_id = $1
 ORDER BY created_at ASC
 `
@@ -606,7 +600,6 @@ func (q *Queries) ListRuntimeProfiles(ctx context.Context, workspaceID pgtype.UU
 			&i.UpdatedAt,
 			&i.RuntimeType,
 			&i.DaemonID,
-			&i.PoolID,
 		); err != nil {
 			return nil, err
 		}
@@ -619,7 +612,7 @@ func (q *Queries) ListRuntimeProfiles(ctx context.Context, workspaceID pgtype.UU
 }
 
 const lockRuntimeProfileForDelete = `-- name: LockRuntimeProfileForDelete :one
-SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, daemon_id, pool_id FROM runtime_profile
+SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, daemon_id FROM runtime_profile
 WHERE id = $1 AND workspace_id = $2
 FOR UPDATE
 `
@@ -649,13 +642,12 @@ func (q *Queries) LockRuntimeProfileForDelete(ctx context.Context, arg LockRunti
 		&i.UpdatedAt,
 		&i.RuntimeType,
 		&i.DaemonID,
-		&i.PoolID,
 	)
 	return i, err
 }
 
 const lockRuntimeProfileForRegistration = `-- name: LockRuntimeProfileForRegistration :one
-SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, daemon_id, pool_id FROM runtime_profile
+SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, daemon_id FROM runtime_profile
 WHERE id = $1 AND workspace_id = $2
 FOR KEY SHARE
 `
@@ -687,7 +679,6 @@ func (q *Queries) LockRuntimeProfileForRegistration(ctx context.Context, arg Loc
 		&i.UpdatedAt,
 		&i.RuntimeType,
 		&i.DaemonID,
-		&i.PoolID,
 	)
 	return i, err
 }
@@ -723,7 +714,7 @@ SET display_name = COALESCE($1, display_name),
     daemon_id    = COALESCE($7, daemon_id),
     updated_at   = now()
 WHERE id = $8 AND workspace_id = $9
-RETURNING id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, daemon_id, pool_id
+RETURNING id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, daemon_id
 `
 
 type UpdateRuntimeProfileParams struct {
@@ -770,7 +761,6 @@ func (q *Queries) UpdateRuntimeProfile(ctx context.Context, arg UpdateRuntimePro
 		&i.UpdatedAt,
 		&i.RuntimeType,
 		&i.DaemonID,
-		&i.PoolID,
 	)
 	return i, err
 }

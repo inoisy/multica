@@ -31,7 +31,7 @@ func cleanSubtestPools() {
 	testPool.Exec(ctx, `DELETE FROM runtime_unavailable WHERE subscription_id IN (SELECT id FROM subscription WHERE key LIKE 'subtest-%')`)
 	testPool.Exec(ctx, `DELETE FROM subscription_usage WHERE subscription_id IN (SELECT id FROM subscription WHERE key LIKE 'subtest-%')`)
 	testPool.Exec(ctx, `DELETE FROM subscription_host_state WHERE subscription_id IN (SELECT id FROM subscription WHERE key LIKE 'subtest-%')`)
-	testPool.Exec(ctx, `DELETE FROM runtime_profile WHERE display_name LIKE 'Subtest %' OR pool_id IN (SELECT id FROM subscription_pool WHERE name LIKE 'Subtest %')`)
+	testPool.Exec(ctx, `DELETE FROM runtime_profile WHERE display_name LIKE 'Subtest %' OR id IN (SELECT runtime_profile_id FROM runtime_profile_pool WHERE pool_id IN (SELECT id FROM subscription_pool WHERE name LIKE 'Subtest %'))`)
 	testPool.Exec(ctx, `DELETE FROM subscription_pool_member WHERE pool_id IN (SELECT id FROM subscription_pool WHERE name LIKE 'Subtest %')`)
 	testPool.Exec(ctx, `DELETE FROM subscription_pool_grant WHERE pool_id IN (SELECT id FROM subscription_pool WHERE name LIKE 'Subtest %')`)
 	testPool.Exec(ctx, `DELETE FROM subscription_pool WHERE name LIKE 'Subtest %'`)
@@ -289,8 +289,8 @@ func TestRuntimePoolSharedAcrossWorkspaces(t *testing.T) {
 	callSubscription(t, h.DeleteSubscription,
 		withURLParam(newRequest("DELETE", "/api/subscriptions/subtest-c2", nil), "key", "subtest-c2"), http.StatusOK)
 	var subs string
-	testPool.QueryRow(context.Background(), `SELECT coalesce(string_agg(s.key || '@' || m.position, ',' ORDER BY m.position), '') FROM runtime_profile rp
-		JOIN subscription_pool_member m ON m.pool_id = rp.pool_id JOIN subscription s ON s.id = m.subscription_id WHERE rp.id = $1`, theirs).Scan(&subs)
+	testPool.QueryRow(context.Background(), `SELECT coalesce(string_agg(s.key || '@' || m.position, ',' ORDER BY m.position), '') FROM runtime_profile_pool rp
+		JOIN subscription_pool_member m ON m.pool_id = rp.pool_id JOIN subscription s ON s.id = m.subscription_id WHERE rp.runtime_profile_id = $1`, theirs).Scan(&subs)
 	if subs != "subtest-c1@1" {
 		t.Fatalf("pool members after delete = %q, want the one left with the gap closed", subs)
 	}
@@ -326,7 +326,7 @@ func TestAllWorkspacesRuntimeReachesNewWorkspace(t *testing.T) {
 	}
 	poolID := created["pool_id"].(string)
 	var n int
-	testPool.QueryRow(context.Background(), `SELECT count(*) FROM runtime_profile WHERE workspace_id = $1 AND pool_id = $2`, newWS, poolID).Scan(&n)
+	testPool.QueryRow(context.Background(), `SELECT count(*) FROM runtime_profile_pool WHERE workspace_id = $1 AND pool_id = $2`, newWS, poolID).Scan(&n)
 	if n != 1 {
 		t.Fatalf("new workspace copies = %d, want 1", n)
 	}
@@ -334,7 +334,7 @@ func TestAllWorkspacesRuntimeReachesNewWorkspace(t *testing.T) {
 	if err := copyAllWorkspaceRuntimeProfiles(context.Background(), testHandler.Queries, parseUUID(newWS), parseUUID(testUserID)); err != nil {
 		t.Fatalf("second copy: %v", err)
 	}
-	testPool.QueryRow(context.Background(), `SELECT count(*) FROM runtime_profile WHERE workspace_id = $1 AND pool_id = $2`, newWS, poolID).Scan(&n)
+	testPool.QueryRow(context.Background(), `SELECT count(*) FROM runtime_profile_pool WHERE workspace_id = $1 AND pool_id = $2`, newWS, poolID).Scan(&n)
 	if n != 1 {
 		t.Fatalf("copies after second run = %d, want 1", n)
 	}

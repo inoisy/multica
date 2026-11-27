@@ -14,10 +14,12 @@ import (
 const createPoolRuntimeProfile = `-- name: CreatePoolRuntimeProfile :one
 INSERT INTO runtime_profile (
     workspace_id, display_name, protocol_family, command_name, description,
-    fixed_args, visibility, created_by, enabled, runtime_type, pool_id
-) VALUES ($1, $2, $3, $3, $4, '[]'::jsonb, 'workspace', $5, true, $3, $6)
+    fixed_args, visibility, created_by, enabled, runtime_type
+) SELECT $1, $2, $3, $3, $4,
+    '[]'::jsonb, 'workspace', $5, true, $3
+WHERE NOT EXISTS (SELECT 1 FROM runtime_profile_pool p WHERE p.workspace_id = $1 AND p.pool_id = $6)
 ON CONFLICT DO NOTHING
-RETURNING id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, daemon_id, pool_id
+RETURNING id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, daemon_id
 `
 
 type CreatePoolRuntimeProfileParams struct {
@@ -55,7 +57,6 @@ func (q *Queries) CreatePoolRuntimeProfile(ctx context.Context, arg CreatePoolRu
 		&i.UpdatedAt,
 		&i.RuntimeType,
 		&i.DaemonID,
-		&i.PoolID,
 	)
 	return i, err
 }
@@ -100,6 +101,15 @@ func (q *Queries) CreateSubscriptionPool(ctx context.Context, arg CreateSubscrip
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const deleteRuntimeProfilePool = `-- name: DeleteRuntimeProfilePool :exec
+DELETE FROM runtime_profile_pool WHERE runtime_profile_id = $1
+`
+
+func (q *Queries) DeleteRuntimeProfilePool(ctx context.Context, runtimeProfileID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteRuntimeProfilePool, runtimeProfileID)
+	return err
 }
 
 const deleteSubscriptionFromPools = `-- name: DeleteSubscriptionFromPools :many
@@ -164,8 +174,8 @@ func (q *Queries) DeleteSubscriptionPoolMembers(ctx context.Context, poolID pgty
 const disablePoolRuntimeProfileInWorkspace = `-- name: DisablePoolRuntimeProfileInWorkspace :many
 UPDATE runtime_profile
 SET enabled = false, updated_at = now()
-WHERE pool_id = $1 AND workspace_id = $2 AND enabled
-RETURNING id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, daemon_id, pool_id
+WHERE runtime_profile.workspace_id = $2 AND runtime_profile.enabled AND runtime_profile.id IN (SELECT rpp.runtime_profile_id FROM runtime_profile_pool rpp WHERE rpp.pool_id = $1)
+RETURNING id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, daemon_id
 `
 
 type DisablePoolRuntimeProfileInWorkspaceParams struct {
@@ -198,7 +208,6 @@ func (q *Queries) DisablePoolRuntimeProfileInWorkspace(ctx context.Context, arg 
 			&i.UpdatedAt,
 			&i.RuntimeType,
 			&i.DaemonID,
-			&i.PoolID,
 		); err != nil {
 			return nil, err
 		}
@@ -211,7 +220,7 @@ func (q *Queries) DisablePoolRuntimeProfileInWorkspace(ctx context.Context, arg 
 }
 
 const getPoolRuntimeProfileInWorkspace = `-- name: GetPoolRuntimeProfileInWorkspace :one
-SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, daemon_id, pool_id FROM runtime_profile WHERE pool_id = $1 AND workspace_id = $2
+SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, daemon_id FROM runtime_profile WHERE runtime_profile.workspace_id = $2 AND runtime_profile.id IN (SELECT rpp.runtime_profile_id FROM runtime_profile_pool rpp WHERE rpp.pool_id = $1)
 `
 
 type GetPoolRuntimeProfileInWorkspaceParams struct {
@@ -237,9 +246,19 @@ func (q *Queries) GetPoolRuntimeProfileInWorkspace(ctx context.Context, arg GetP
 		&i.UpdatedAt,
 		&i.RuntimeType,
 		&i.DaemonID,
-		&i.PoolID,
 	)
 	return i, err
+}
+
+const getRuntimeProfilePoolID = `-- name: GetRuntimeProfilePoolID :one
+SELECT pool_id FROM runtime_profile_pool WHERE runtime_profile_id = $1
+`
+
+func (q *Queries) GetRuntimeProfilePoolID(ctx context.Context, runtimeProfileID pgtype.UUID) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, getRuntimeProfilePoolID, runtimeProfileID)
+	var pool_id pgtype.UUID
+	err := row.Scan(&pool_id)
+	return pool_id, err
 }
 
 const getSubscriptionPool = `-- name: GetSubscriptionPool :one
@@ -262,6 +281,21 @@ func (q *Queries) GetSubscriptionPool(ctx context.Context, id pgtype.UUID) (Subs
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const insertRuntimeProfilePool = `-- name: InsertRuntimeProfilePool :exec
+INSERT INTO runtime_profile_pool (runtime_profile_id, workspace_id, pool_id) VALUES ($1, $2, $3)
+`
+
+type InsertRuntimeProfilePoolParams struct {
+	RuntimeProfileID pgtype.UUID `json:"runtime_profile_id"`
+	WorkspaceID      pgtype.UUID `json:"workspace_id"`
+	PoolID           pgtype.UUID `json:"pool_id"`
+}
+
+func (q *Queries) InsertRuntimeProfilePool(ctx context.Context, arg InsertRuntimeProfilePoolParams) error {
+	_, err := q.db.Exec(ctx, insertRuntimeProfilePool, arg.RuntimeProfileID, arg.WorkspaceID, arg.PoolID)
+	return err
 }
 
 const insertSubscriptionPoolGrant = `-- name: InsertSubscriptionPoolGrant :exec
@@ -336,6 +370,30 @@ func (q *Queries) ListActiveAccountRefusals(ctx context.Context, arg ListActiveA
 	return items, nil
 }
 
+const listAllRuntimeProfilePools = `-- name: ListAllRuntimeProfilePools :many
+SELECT runtime_profile_id, workspace_id, pool_id FROM runtime_profile_pool
+`
+
+func (q *Queries) ListAllRuntimeProfilePools(ctx context.Context) ([]RuntimeProfilePool, error) {
+	rows, err := q.db.Query(ctx, listAllRuntimeProfilePools)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []RuntimeProfilePool{}
+	for rows.Next() {
+		var i RuntimeProfilePool
+		if err := rows.Scan(&i.RuntimeProfileID, &i.WorkspaceID, &i.PoolID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAllWorkspacePools = `-- name: ListAllWorkspacePools :many
 SELECT id, name, runtime_type, description, spend_order, all_workspaces, revision, created_by, created_at, updated_at FROM subscription_pool WHERE all_workspaces ORDER BY created_at, id
 `
@@ -373,8 +431,8 @@ func (q *Queries) ListAllWorkspacePools(ctx context.Context) ([]SubscriptionPool
 }
 
 const listEnabledPoolRuntimeProfilesForWorkspace = `-- name: ListEnabledPoolRuntimeProfilesForWorkspace :many
-SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, daemon_id, pool_id FROM runtime_profile
-WHERE workspace_id = $1 AND enabled AND pool_id IS NOT NULL
+SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, daemon_id FROM runtime_profile
+WHERE runtime_profile.workspace_id = $1 AND runtime_profile.enabled AND runtime_profile.id IN (SELECT rpp.runtime_profile_id FROM runtime_profile_pool rpp)
 ORDER BY created_at
 `
 
@@ -403,7 +461,6 @@ func (q *Queries) ListEnabledPoolRuntimeProfilesForWorkspace(ctx context.Context
 			&i.UpdatedAt,
 			&i.RuntimeType,
 			&i.DaemonID,
-			&i.PoolID,
 		); err != nil {
 			return nil, err
 		}
@@ -452,7 +509,7 @@ func (q *Queries) ListLatestSubscriptionUsageBySubscriptions(ctx context.Context
 }
 
 const listPoolRuntimeProfiles = `-- name: ListPoolRuntimeProfiles :many
-SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, daemon_id, pool_id FROM runtime_profile WHERE pool_id = $1 ORDER BY created_at, id
+SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, daemon_id FROM runtime_profile WHERE id IN (SELECT rpp.runtime_profile_id FROM runtime_profile_pool rpp WHERE rpp.pool_id = $1) ORDER BY created_at, id
 `
 
 // The environments of a pool, one per workspace it reaches.
@@ -480,7 +537,6 @@ func (q *Queries) ListPoolRuntimeProfiles(ctx context.Context, poolID pgtype.UUI
 			&i.UpdatedAt,
 			&i.RuntimeType,
 			&i.DaemonID,
-			&i.PoolID,
 		); err != nil {
 			return nil, err
 		}
@@ -493,7 +549,7 @@ func (q *Queries) ListPoolRuntimeProfiles(ctx context.Context, poolID pgtype.UUI
 }
 
 const listPoolRuntimeProfilesAll = `-- name: ListPoolRuntimeProfilesAll :many
-SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, daemon_id, pool_id FROM runtime_profile WHERE pool_id IS NOT NULL ORDER BY workspace_id, created_at, id
+SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, daemon_id FROM runtime_profile WHERE id IN (SELECT rpp.runtime_profile_id FROM runtime_profile_pool rpp) ORDER BY workspace_id, created_at, id
 `
 
 // Every environment that spends a pool, in every workspace.
@@ -521,7 +577,6 @@ func (q *Queries) ListPoolRuntimeProfilesAll(ctx context.Context) ([]RuntimeProf
 			&i.UpdatedAt,
 			&i.RuntimeType,
 			&i.DaemonID,
-			&i.PoolID,
 		); err != nil {
 			return nil, err
 		}
@@ -533,8 +588,32 @@ func (q *Queries) ListPoolRuntimeProfilesAll(ctx context.Context) ([]RuntimeProf
 	return items, nil
 }
 
+const listRuntimeProfilePools = `-- name: ListRuntimeProfilePools :many
+SELECT runtime_profile_id, workspace_id, pool_id FROM runtime_profile_pool WHERE runtime_profile_id = ANY($1::uuid[])
+`
+
+func (q *Queries) ListRuntimeProfilePools(ctx context.Context, runtimeProfileIds []pgtype.UUID) ([]RuntimeProfilePool, error) {
+	rows, err := q.db.Query(ctx, listRuntimeProfilePools, runtimeProfileIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []RuntimeProfilePool{}
+	for rows.Next() {
+		var i RuntimeProfilePool
+		if err := rows.Scan(&i.RuntimeProfileID, &i.WorkspaceID, &i.PoolID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRuntimeProfilesByPools = `-- name: ListRuntimeProfilesByPools :many
-SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, daemon_id, pool_id FROM runtime_profile WHERE pool_id = ANY($1::uuid[]) ORDER BY created_at, id
+SELECT id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, daemon_id FROM runtime_profile WHERE id IN (SELECT rpp.runtime_profile_id FROM runtime_profile_pool rpp WHERE rpp.pool_id = ANY($1::uuid[])) ORDER BY created_at, id
 `
 
 func (q *Queries) ListRuntimeProfilesByPools(ctx context.Context, poolIds []pgtype.UUID) ([]RuntimeProfile, error) {
@@ -561,7 +640,6 @@ func (q *Queries) ListRuntimeProfilesByPools(ctx context.Context, poolIds []pgty
 			&i.UpdatedAt,
 			&i.RuntimeType,
 			&i.DaemonID,
-			&i.PoolID,
 		); err != nil {
 			return nil, err
 		}
@@ -812,7 +890,7 @@ func (q *Queries) ListSubscriptionsByIDs(ctx context.Context, ids []pgtype.UUID)
 }
 
 const lockAgentTaskForAccount = `-- name: LockAgentTaskForAccount :one
-SELECT id, agent_id, issue_id, status, priority, dispatched_at, started_at, completed_at, result, error, created_at, context, runtime_id, session_id, work_dir, trigger_comment_id, chat_session_id, autopilot_run_id, attempt, max_attempts, parent_task_id, failure_reason, trigger_summary, force_fresh_session, is_leader_task, wait_reason, initiator_user_id, handoff_note, prepare_lease_expires_at, squad_id, runtime_mcp_overlay, escalation_for_task_id, fire_at, originator_user_id, runtime_connected_apps, coalesced_comment_ids, delivered_comment_ids, chat_input_task_id, chat_finalize_deferred_at, originator_source, delegated_from_task_id, retry_of_task_id, rerun_of_task_id, rule_version_id, trigger_evidence_kind, trigger_evidence_ref_id, accountable_user_id, session_rollout_missing, retired_session_id, quick_actions_disabled, regenerate_quick_actions_for, branch_name, durable_work_dir, channel_context_revision, comment_thread_id, cancelled_by_type, cancelled_by_id, cancelled_by_name, issue_snapshot, workflow_step, usage_squad_id, model_position, model_choice, account_fact, account_offer FROM agent_task_queue WHERE id = $1 FOR UPDATE
+SELECT id, agent_id, issue_id, status, priority, dispatched_at, started_at, completed_at, result, error, created_at, context, runtime_id, session_id, work_dir, trigger_comment_id, chat_session_id, autopilot_run_id, attempt, max_attempts, parent_task_id, failure_reason, trigger_summary, force_fresh_session, is_leader_task, wait_reason, initiator_user_id, handoff_note, prepare_lease_expires_at, squad_id, runtime_mcp_overlay, escalation_for_task_id, fire_at, originator_user_id, runtime_connected_apps, coalesced_comment_ids, delivered_comment_ids, chat_input_task_id, chat_finalize_deferred_at, originator_source, delegated_from_task_id, retry_of_task_id, rerun_of_task_id, rule_version_id, trigger_evidence_kind, trigger_evidence_ref_id, accountable_user_id, session_rollout_missing, retired_session_id, quick_actions_disabled, regenerate_quick_actions_for, branch_name, durable_work_dir, channel_context_revision, comment_thread_id, cancelled_by_type, cancelled_by_id, cancelled_by_name, issue_snapshot, workflow_step, usage_squad_id FROM agent_task_queue WHERE id = $1 FOR UPDATE
 `
 
 func (q *Queries) LockAgentTaskForAccount(ctx context.Context, id pgtype.UUID) (AgentTaskQueue, error) {
@@ -880,10 +958,6 @@ func (q *Queries) LockAgentTaskForAccount(ctx context.Context, id pgtype.UUID) (
 		&i.IssueSnapshot,
 		&i.WorkflowStep,
 		&i.UsageSquadID,
-		&i.ModelPosition,
-		&i.ModelChoice,
-		&i.AccountFact,
-		&i.AccountOffer,
 	)
 	return i, err
 }
@@ -936,9 +1010,10 @@ func (q *Queries) LockSubscriptionPoolShared(ctx context.Context, id pgtype.UUID
 }
 
 const setClaimedTaskAccountOffer = `-- name: SetClaimedTaskAccountOffer :exec
-UPDATE agent_task_queue
-SET account_offer = $1, account_fact = NULL
-WHERE id = $2 AND status = 'dispatched'
+INSERT INTO task_model_choice (task_id, account_offer, account_fact)
+SELECT t.id, $1::jsonb, NULL FROM agent_task_queue t
+WHERE t.id = $2 AND t.status = 'dispatched'
+ON CONFLICT (task_id) DO UPDATE SET account_offer = EXCLUDED.account_offer, account_fact = NULL
 `
 
 type SetClaimedTaskAccountOfferParams struct {
@@ -956,12 +1031,12 @@ func (q *Queries) SetClaimedTaskAccountOffer(ctx context.Context, arg SetClaimed
 const setPoolRuntimeProfilesEnabled = `-- name: SetPoolRuntimeProfilesEnabled :many
 UPDATE runtime_profile rp
 SET enabled = $1, updated_at = now()
-WHERE rp.pool_id = $2
+WHERE rp.id IN (SELECT rpp.runtime_profile_id FROM runtime_profile_pool rpp WHERE rpp.pool_id = $2)
   AND rp.enabled <> $1
   AND ($1::bool = false OR rp.workspace_id IN (
         SELECT g.workspace_id FROM subscription_pool_grant g WHERE g.pool_id = $2
         UNION SELECT w.id FROM workspace w WHERE EXISTS (SELECT 1 FROM subscription_pool p WHERE p.id = $2 AND p.all_workspaces)))
-RETURNING id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, daemon_id, pool_id
+RETURNING id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, daemon_id
 `
 
 type SetPoolRuntimeProfilesEnabledParams struct {
@@ -995,7 +1070,6 @@ func (q *Queries) SetPoolRuntimeProfilesEnabled(ctx context.Context, arg SetPool
 			&i.UpdatedAt,
 			&i.RuntimeType,
 			&i.DaemonID,
-			&i.PoolID,
 		); err != nil {
 			return nil, err
 		}
@@ -1008,16 +1082,17 @@ func (q *Queries) SetPoolRuntimeProfilesEnabled(ctx context.Context, arg SetPool
 }
 
 const setTaskAccountFact = `-- name: SetTaskAccountFact :exec
-UPDATE agent_task_queue SET account_fact = $2 WHERE id = $1
+INSERT INTO task_model_choice (task_id, account_fact) VALUES ($1, $2)
+ON CONFLICT (task_id) DO UPDATE SET account_fact = EXCLUDED.account_fact
 `
 
 type SetTaskAccountFactParams struct {
-	ID          pgtype.UUID `json:"id"`
+	TaskID      pgtype.UUID `json:"task_id"`
 	AccountFact []byte      `json:"account_fact"`
 }
 
 func (q *Queries) SetTaskAccountFact(ctx context.Context, arg SetTaskAccountFactParams) error {
-	_, err := q.db.Exec(ctx, setTaskAccountFact, arg.ID, arg.AccountFact)
+	_, err := q.db.Exec(ctx, setTaskAccountFact, arg.TaskID, arg.AccountFact)
 	return err
 }
 
@@ -1026,9 +1101,9 @@ UPDATE runtime_profile
 SET display_name = $1,
     description = $2,
     updated_at = now()
-WHERE pool_id = $3
+WHERE id IN (SELECT rpp.runtime_profile_id FROM runtime_profile_pool rpp WHERE rpp.pool_id = $3)
   AND (display_name <> $1 OR description IS DISTINCT FROM $2)
-RETURNING id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, daemon_id, pool_id
+RETURNING id, workspace_id, display_name, protocol_family, command_name, description, fixed_args, visibility, created_by, enabled, created_at, updated_at, runtime_type, daemon_id
 `
 
 type SyncPoolRuntimeProfilesParams struct {
@@ -1062,7 +1137,6 @@ func (q *Queries) SyncPoolRuntimeProfiles(ctx context.Context, arg SyncPoolRunti
 			&i.UpdatedAt,
 			&i.RuntimeType,
 			&i.DaemonID,
-			&i.PoolID,
 		); err != nil {
 			return nil, err
 		}

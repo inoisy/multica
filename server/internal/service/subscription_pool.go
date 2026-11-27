@@ -176,7 +176,7 @@ func replaceMembers(ctx context.Context, q *db.Queries, poolID pgtype.UUID, subs
 func ensureEnvironment(ctx context.Context, q *db.Queries, pool db.SubscriptionPool, workspaceID, actor pgtype.UUID) (db.RuntimeProfile, bool, error) {
 	existing, err := q.GetPoolRuntimeProfileInWorkspace(ctx, db.GetPoolRuntimeProfileInWorkspaceParams{PoolID: pool.ID, WorkspaceID: workspaceID})
 	if err == nil {
-		if !PoolCommandMatches(existing) {
+		if !PoolCommandMatches(existing, pool.ID) {
 			return db.RuntimeProfile{}, false, poolInvalid("environment %q runs %q instead of the standard command of its type", existing.DisplayName, existing.CommandName)
 		}
 		if existing.Enabled {
@@ -195,7 +195,13 @@ func ensureEnvironment(ctx context.Context, q *db.Queries, pool db.SubscriptionP
 	if errors.Is(err, pgx.ErrNoRows) {
 		return db.RuntimeProfile{}, false, nil
 	}
-	return p, err == nil, err
+	if err != nil {
+		return db.RuntimeProfile{}, false, err
+	}
+	if err := q.InsertRuntimeProfilePool(ctx, db.InsertRuntimeProfilePoolParams{RuntimeProfileID: p.ID, WorkspaceID: workspaceID, PoolID: pool.ID}); err != nil {
+		return db.RuntimeProfile{}, false, err
+	}
+	return p, true, nil
 }
 
 func (s *PoolService) result(ctx context.Context, q *db.Queries, pool db.SubscriptionPool, profiles []db.RuntimeProfile, skipped []pgtype.UUID) (PoolResult, error) {

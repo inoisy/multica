@@ -10,7 +10,6 @@ import (
 
 	"github.com/multica-ai/multica/server/internal/service"
 	"github.com/multica-ai/multica/server/internal/testutil"
-	db "github.com/multica-ai/multica/server/pkg/db/generated"
 )
 
 func TestPoolAPIScopesGrantsAndRequiresAdminRevision(t *testing.T) {
@@ -63,7 +62,7 @@ func TestConfirmTaskAccountChecksDaemonWorkspaceAndTerminalReplay(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	dbfx.Exec(t, `UPDATE agent_task_queue SET account_offer=$1 WHERE id=$2`, raw, task)
+	dbfx.Exec(t, `INSERT INTO task_model_choice (task_id, account_offer) VALUES ($2, $1)`, raw, task)
 	body := service.AccountConfirmation{OfferID: offer.OfferID, PoolID: offer.PoolID, PoolRevision: offer.PoolRevision, SubscriptionID: offer.Subscriptions[0].SubscriptionID}
 	request := func(ws, daemon string, body any) *http.Request {
 		return withURLParam(newDaemonTokenRequest("POST", "/api/daemon/tasks/"+task+"/account", body, ws, daemon), "taskId", task)
@@ -83,7 +82,7 @@ func TestConfirmTaskAccountChecksDaemonWorkspaceAndTerminalReplay(t *testing.T) 
 	if first.Body.String() != second.Body.String() {
 		t.Fatal("replay changed the fact")
 	}
-	dbfx.Exec(t, `UPDATE agent_task_queue SET account_fact=NULL WHERE id=$1`, task)
+	dbfx.Exec(t, `UPDATE task_model_choice SET account_fact=NULL WHERE task_id=$1`, task)
 	testutil.Call(t, h.ConfirmTaskAccount, request(testWorkspaceID, "subtest-daemon", body)).Want(http.StatusConflict)
 }
 
@@ -106,8 +105,7 @@ func TestClaimPayloadKeepsRefusedAccountDisabledUntilItsRefusalEnds(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	task := &db.AgentTaskQueue{AccountOffer: raw}
-	payload := h.subscriptionPoolForTask(context.Background(), rt, task)
+	payload := h.subscriptionPoolForOffer(context.Background(), rt, raw)
 	if payload == nil || len(payload.Subscriptions) != 1 || !payload.Subscriptions[0].Disabled {
 		t.Fatalf("active refusal must disable the account even when a longer cap blocks it: %+v", payload)
 	}
@@ -116,7 +114,7 @@ func TestClaimPayloadKeepsRefusedAccountDisabledUntilItsRefusalEnds(t *testing.T
 	}
 	// A later edit cannot change the order or revision already handed to this run.
 	dbfx.Exec(t, `UPDATE subscription_pool SET spend_order='balanced',revision=revision+1 WHERE id=$1`, offer.PoolID)
-	payload = h.subscriptionPoolForTask(context.Background(), rt, task)
+	payload = h.subscriptionPoolForOffer(context.Background(), rt, raw)
 	if payload.SpendOrder != offer.SpendOrder || payload.Revision != offer.PoolRevision {
 		t.Fatal("pool edit rewrote the payload of an assignment")
 	}
@@ -143,7 +141,7 @@ func TestAccountWritesRefuseEveryMachineAndNonAdminCaller(t *testing.T) {
 	member := subtestOutsider(t)
 	_, rtID := poolFixture(t, h, "subtest-denied")
 	var poolID string
-	if err := testPool.QueryRow(t.Context(), `SELECT pool_id FROM runtime_profile WHERE id = (SELECT profile_id FROM agent_runtime WHERE id=$1)`, rtID).Scan(&poolID); err != nil {
+	if err := testPool.QueryRow(t.Context(), `SELECT pool_id FROM runtime_profile_pool WHERE runtime_profile_id = (SELECT profile_id FROM agent_runtime WHERE id=$1)`, rtID).Scan(&poolID); err != nil {
 		t.Fatal(err)
 	}
 	writes := map[string]func(*http.Request) *http.Request{

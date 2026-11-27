@@ -20,7 +20,8 @@ type modelRig struct {
 func TestPersonalProfileEndpointsCopyEditResetAndEnforceOwnership(t *testing.T) {
 	r := newModelRig(t)
 	base := r.createProfile("personal API base", r.row("codex-main", "sol", "high"))["id"].(string)
-	agent := dbfx.Agent(t, "personal API", r.runtimes["codex-main"], testutil.Cols{"model_profile_id": base})
+	agent := dbfx.Agent(t, "personal API", r.runtimes["codex-main"], testutil.Cols{})
+	setAgentProfile(t, agent, base)
 	call := func(fn http.HandlerFunc, method string, body any) *testutil.Response {
 		t.Helper()
 		return testutil.Call(t, fn, withURLParam(newRequest(method, "/api/agents/"+agent+"/models", body), "id", agent))
@@ -58,8 +59,8 @@ func newModelRig(t *testing.T) *modelRig {
 	dbfx.Cleanup(t, "DELETE FROM model_profile_option WHERE workspace_id=$1", testWorkspaceID)
 	dbfx.Cleanup(t, "DELETE FROM model_profile WHERE workspace_id=$1", testWorkspaceID)
 	dbfx.Cleanup(t, "DELETE FROM runtime_unavailable WHERE workspace_id=$1", testWorkspaceID)
-	dbfx.Cleanup(t, "UPDATE issue SET model_profile_id=NULL WHERE workspace_id=$1", testWorkspaceID)
-	dbfx.Cleanup(t, "UPDATE agent SET model_profile_id=NULL WHERE workspace_id=$1", testWorkspaceID)
+	dbfx.Cleanup(t, "DELETE FROM issue_model_profile WHERE workspace_id=$1", testWorkspaceID)
+	dbfx.Cleanup(t, "DELETE FROM agent_model_settings WHERE workspace_id=$1", testWorkspaceID)
 	return r
 }
 
@@ -143,7 +144,7 @@ func TestModelProfileCRUDAndReferences(t *testing.T) {
 	del(strongID).Want(http.StatusConflict) // the open issue still holds it
 	dbfx.Exec(t, "UPDATE issue SET status='done' WHERE id=$1", issue)
 	del(strongID).Want(http.StatusNoContent)
-	if n := dbfx.Count(t, "SELECT count(*) FROM issue WHERE id=$1 AND model_profile_id IS NOT NULL", issue); n != 0 {
+	if n := dbfx.Count(t, "SELECT count(*) FROM issue_model_profile WHERE issue_id=$1", issue); n != 0 {
 		t.Fatalf("a closed issue is detached from the deleted profile")
 	}
 	if n := dbfx.Count(t, "SELECT count(*) FROM model_profile_option WHERE profile_id=$1", strongID); n != 0 {
@@ -166,7 +167,7 @@ func TestModelProfilePermissions(t *testing.T) {
 	testutil.Call(t, testHandler.ImportModelProfiles, asMember("POST", "/", map[string]any{"document": map[string]any{}})).Want(http.StatusForbidden)
 	// Not the agent's owner and not an admin: its list does not change.
 	testutil.Call(t, testHandler.UpdateAgentModels, withURLParam(asMember("PUT", "/", map[string]any{"model_profile_id": profile["id"]}), "id", agent)).Want(http.StatusForbidden)
-	if n := dbfx.Count(t, "SELECT count(*) FROM agent WHERE id=$1 AND model_profile_id IS NOT NULL", agent); n != 0 {
+	if n := dbfx.Count(t, "SELECT count(*) FROM agent_model_settings WHERE agent_id=$1 AND model_profile_id IS NOT NULL", agent); n != 0 {
 		t.Fatal("a forbidden write changed the agent")
 	}
 	// Reading is open to members.
@@ -256,8 +257,8 @@ func TestModelProfileAgentModelsView(t *testing.T) {
 
 	// A run waiting for a free model is listed with its issue.
 	waitingIssue := dbfx.Issue(t, "model waiting issue")
-	dbfx.Task(t, agent, testutil.Cols{"runtime_id": r.runtimes["codex-main"], "issue_id": waitingIssue,
-		"model_choice": testutil.Raw(`'{"source":"agent_profile","reason":"all_unavailable","rows":[]}'::jsonb`)})
+	waitingTask := dbfx.Task(t, agent, testutil.Cols{"runtime_id": r.runtimes["codex-main"], "issue_id": waitingIssue})
+	setTaskModelChoice(t, waitingTask, nil, `{"source":"agent_profile","reason":"all_unavailable","rows":[]}`)
 	var withWaiting struct {
 		Waiting []struct {
 			IssueIdentifier string `json:"issue_identifier"`
@@ -379,13 +380,13 @@ func TestModelProfileImportDryRunFixture(t *testing.T) {
 
 	// Applying writes what the dry run planned, and a second dry run is a no-op.
 	testutil.Call(t, testHandler.ImportModelProfiles, newRequest("POST", "/", map[string]any{"document": doc, "dry_run": false})).Want(http.StatusOK)
-	if n := dbfx.Count(t, "SELECT count(*) FROM agent WHERE id=$1 AND model_profile_id IS NOT NULL", same); n != 1 {
+	if n := dbfx.Count(t, "SELECT count(*) FROM agent_model_settings WHERE agent_id=$1 AND model_profile_id IS NOT NULL", same); n != 1 {
 		t.Fatal("agent not put on its profile")
 	}
 	if n := dbfx.Count(t, "SELECT count(*) FROM model_profile_option o JOIN model_profile p ON p.id = o.profile_id WHERE p.owner_agent_id=$1", pinned); n != 1 {
 		t.Fatal("pinned agent has no one-row personal profile")
 	}
-	if n := dbfx.Count(t, "SELECT count(*) FROM issue WHERE id=$1 AND model_profile_id IS NOT NULL", issue); n != 1 {
+	if n := dbfx.Count(t, "SELECT count(*) FROM issue_model_profile WHERE issue_id=$1", issue); n != 1 {
 		t.Fatal("epic override not carried to the issue")
 	}
 	testutil.Call(t, testHandler.ImportModelProfiles, newRequest("POST", "/", map[string]any{"document": doc})).Want(http.StatusOK).JSON(&plan)
@@ -397,11 +398,11 @@ func TestModelProfileImportDryRunFixture(t *testing.T) {
 }
 
 func TestModelOptionClaimPayloadUsesChosenRow(t *testing.T) {
-	plain := &db.AgentTaskQueue{}
+	plain := db.TaskModelChoice{}
 	if claimedModelOption(plain) != nil {
 		t.Fatal("a plain run has no chosen row")
 	}
-	routed := &db.AgentTaskQueue{
+	routed := db.TaskModelChoice{
 		ModelChoice:   []byte(`{"source":"agent_profile","reason":"fallback_row","position":2,"chosen":{"position":2,"runtime_id":"rt","model":"opus","thinking_level":"max","custom_args":["--disallowedTools","mcp__github__delete_repo"]},"rows":[]}`),
 		ModelPosition: pgtype.Int4{Int32: 2, Valid: true},
 	}

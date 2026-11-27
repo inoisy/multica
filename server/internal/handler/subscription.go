@@ -1212,23 +1212,24 @@ func (h *Handler) GetRuntimeProfileSubscriptions(w http.ResponseWriter, r *http.
 
 // poolResponse is the accounts of the pool an environment spends, in order.
 func (h *Handler) poolResponse(ctx context.Context, profile db.RuntimeProfile) poolSubscriptionsResponse {
+	poolID, _ := service.RuntimeProfilePoolID(ctx, h.Queries, profile.ID)
 	resp := poolSubscriptionsResponse{
 		RuntimeProfile: h.runtimeProfileResponse(ctx, profile),
 		SpendOrder:     "first",
 		Subscriptions:  []SubscriptionResponse{},
 		Missing:        []string{},
 		Agents:         []PoolAgentResponse{},
-		PoolID:         uuidToPtr(profile.PoolID),
+		PoolID:         uuidToPtr(poolID),
 	}
 	if agents, err := h.Queries.ListAgentsOnRuntimeProfiles(ctx, []pgtype.UUID{profile.ID}); err == nil {
 		for _, a := range agents {
 			resp.Agents = append(resp.Agents, PoolAgentResponse{ID: uuidToString(a.ID), Name: a.Name})
 		}
 	}
-	if !profile.PoolID.Valid {
+	if !poolID.Valid {
 		return resp
 	}
-	pool, err := h.Queries.GetSubscriptionPool(ctx, profile.PoolID)
+	pool, err := h.Queries.GetSubscriptionPool(ctx, poolID)
 	if err != nil {
 		return resp
 	}
@@ -1296,7 +1297,12 @@ func (h *Handler) SetRuntimeProfileSubscriptions(w http.ResponseWriter, r *http.
 		writeError(w, http.StatusNotFound, "runtime profile not found")
 		return
 	}
-	if !profile.PoolID.Valid {
+	poolID, err := service.RuntimeProfilePoolID(r.Context(), h.Queries, profile.ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to load runtime profile pool")
+		return
+	}
+	if !poolID.Valid {
 		writeError(w, http.StatusBadRequest, "this runtime does not spend a subscription pool; create a pool and grant it to the workspace")
 		return
 	}
@@ -1305,7 +1311,7 @@ func (h *Handler) SetRuntimeProfileSubscriptions(w http.ResponseWriter, r *http.
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	res, err := h.pools().Update(r.Context(), profile.PoolID, parseUUID(userID), req.Revision, service.PoolPatch{Subscriptions: req.Subscriptions, SpendOrder: req.SpendOrder})
+	res, err := h.pools().Update(r.Context(), poolID, parseUUID(userID), req.Revision, service.PoolPatch{Subscriptions: req.Subscriptions, SpendOrder: req.SpendOrder})
 	if err != nil {
 		writePoolError(w, err)
 		return

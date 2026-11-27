@@ -92,8 +92,10 @@ type modelWorkspace struct {
 	world    service.ModelWorld
 	profiles []db.ModelProfile
 	agents   []db.Agent
-	issues   []db.ListOpenIssuesWithModelProfileRow
-	prefix   string
+	// agentProfile maps an agent to the profile it runs on.
+	agentProfile map[pgtype.UUID]pgtype.UUID
+	issues       []db.ListOpenIssuesWithModelProfileRow
+	prefix       string
 	// hidden are the private projects the request may not see: their issues
 	// stay out of every list and journal entry built from this snapshot.
 	hidden projectaccess.Hidden
@@ -131,6 +133,14 @@ func (h *Handler) loadModelWorkspace(r *http.Request, workspaceID pgtype.UUID, n
 		}
 	}
 	m.agents = agents
+	settings, err := h.Queries.ListAgentModelSettings(ctx, workspaceID)
+	if err != nil {
+		return m, err
+	}
+	m.agentProfile = make(map[pgtype.UUID]pgtype.UUID, len(settings))
+	for _, st := range settings {
+		m.agentProfile[st.AgentID] = st.ModelProfileID
+	}
 	profiles := m.profiles[:0]
 	for _, p := range m.profiles {
 		if p.OwnerAgentID.Valid {
@@ -216,7 +226,7 @@ func (m modelWorkspace) profileResponse(p db.ModelProfile, now time.Time) ModelP
 		return resp
 	}
 	for _, a := range m.agents {
-		if a.ArchivedAt.Valid || util.UUIDToString(a.ModelProfileID) != id {
+		if a.ArchivedAt.Valid || util.UUIDToString(m.agentProfile[a.ID]) != id {
 			continue
 		}
 		resp.Agents = append(resp.Agents, ModelRefResponse{ID: util.UUIDToString(a.ID), Name: a.Name})
@@ -671,7 +681,7 @@ func (h *Handler) writeAgentModels(w http.ResponseWriter, r *http.Request, agent
 		return
 	}
 	resp := AgentModelsResponse{
-		AgentID: uuidToString(agent.ID), CanEdit: h.canEditAgentQuietly(r, agent), ModelProfileID: uuidToPtr(agent.ModelProfileID),
+		AgentID: uuidToString(agent.ID), CanEdit: h.canEditAgentQuietly(r, agent), ModelProfileID: strPtrOrNil(ca.ModelProfileID),
 		Mode: "fields", DiffRows: []int32{}, Options: []service.ModelOption{}, PersonalRows: []service.ModelRowState{},
 		DisallowedTools: ca.DisallowedTools,
 		Preview:         service.ChooseModel(m.world.Input(ca, pgtype.UUID{}, pgtype.UUID{}), now),
@@ -705,7 +715,7 @@ func (h *Handler) writeAgentModels(w http.ResponseWriter, r *http.Request, agent
 			resp.Mode = "profile"
 			resp.ProfileRows = m.profileRows(p.ID, ca.OwnerID, now)
 			for _, a := range m.agents {
-				if !a.ArchivedAt.Valid && util.UUIDToString(a.ModelProfileID) == p.ID {
+				if !a.ArchivedAt.Valid && util.UUIDToString(m.agentProfile[a.ID]) == p.ID {
 					resp.ProfileAgents++
 				}
 			}
@@ -875,7 +885,11 @@ func (h *Handler) CreateAgentPersonalProfile(w http.ResponseWriter, r *http.Requ
 		}
 		source = id
 	default:
-		source = agent.ModelProfileID
+		var err error
+		if source, err = service.AgentModelProfileID(r.Context(), h.Queries, agent.ID); err != nil {
+			writeModelProfileError(w, err)
+			return
+		}
 	}
 	if !source.Valid {
 		writeError(w, http.StatusBadRequest, "the agent is on no profile; send from_profile_id or rows to PUT")
@@ -1006,9 +1020,14 @@ func (h *Handler) GetIssueModelProfile(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) writeIssueModelProfile(w http.ResponseWriter, r *http.Request, issue db.Issue) {
-	resp := IssueModelProfileResponse{IssueID: uuidToString(issue.ID), ModelProfileID: uuidToPtr(issue.ModelProfileID)}
-	if issue.ModelProfileID.Valid {
-		if p, err := h.Queries.GetModelProfileInWorkspace(r.Context(), db.GetModelProfileInWorkspaceParams{ID: issue.ModelProfileID, WorkspaceID: issue.WorkspaceID}); err == nil {
+	profileID, err := service.IssueModelProfileID(r.Context(), h.Queries, issue.ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to load issue model profile")
+		return
+	}
+	resp := IssueModelProfileResponse{IssueID: uuidToString(issue.ID), ModelProfileID: uuidToPtr(profileID)}
+	if profileID.Valid {
+		if p, err := h.Queries.GetModelProfileInWorkspace(r.Context(), db.GetModelProfileInWorkspaceParams{ID: profileID, WorkspaceID: issue.WorkspaceID}); err == nil {
 			resp.ProfileName = p.Name
 		}
 	}
