@@ -1,4 +1,13 @@
 import type { LocaleResources } from "@multica/core/i18n";
+import { withForkStrings } from "./fork";
+import forkAgents from "./zh-Hans/fork/agents.json";
+import forkCommon from "./zh-Hans/fork/common.json";
+import forkEditor from "./zh-Hans/fork/editor.json";
+import forkIssues from "./zh-Hans/fork/issues.json";
+import forkLayout from "./zh-Hans/fork/layout.json";
+import forkRuntimes from "./zh-Hans/fork/runtimes.json";
+import forkSettings from "./zh-Hans/fork/settings.json";
+import forkUsage from "./zh-Hans/fork/usage.json";
 import zhHansDocs from "./zh-Hans/docs.json";
 import zhHansCommon from "./zh-Hans/common.json";
 import zhHansAuth from "./zh-Hans/auth.json";
@@ -55,4 +64,4 @@ const resources: LocaleResources = {
   billing: zhHansBilling,
 };
 
-export default resources;
+export default withForkStrings(resources, { agents: forkAgents, common: forkCommon, editor: forkEditor, issues: forkIssues, layout: forkLayout, runtimes: forkRuntimes, settings: forkSettings, usage: forkUsage });

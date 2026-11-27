@@ -30,7 +30,9 @@ import {
   workspaceListOptions,
 } from "@multica/core/workspace/queries";
 import { RESOURCES } from "../locales";
-import enLayout from "../locales/en/layout.json";
+import enResources from "../locales/en";
+
+const enLayout = enResources.layout as I18nResources["layout"];
 import zhHansProjects from "../locales/zh-Hans/projects.json";
 import { SearchCommand } from "./search-command";
 import { DOC_SEARCH_DEBOUNCE_MS } from "./use-doc-search";

@@ -98,9 +98,3 @@ func taskHasModelChoice(ctx context.Context, q *db.Queries, taskID pgtype.UUID) 
 	c, err := TaskModelChoice(ctx, q, taskID)
 	return err == nil && c.ModelChoice != nil
 }
-
-// SweepModelSideRows is the scheduler job that drops side rows of deleted
-// agents, issues, runs and runtime profiles.
-func (s *TaskService) SweepModelSideRows(ctx context.Context) error {
-	return s.Queries.DeleteOrphanModelSideRows(ctx)
-}

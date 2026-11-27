@@ -1777,8 +1777,7 @@
       "step_off": "Desactivado: este flujo de trabajo deja fuera el estado. Actívalo en la lista de pasos para usarlo.",
       "status_new_hint": "Un estado nuevo. Se añade a la biblioteca de estados al guardar.",
       "no_other_status": "Todos los estados ya son un paso.",
-      "no_handoff_step": "Este paso no traspasa: las tareas que entran en él mantienen su asignado y no inician ninguna ejecución.",
-      "preview_error": "No se ha podido cargar el resumen. Revisa el controlador del paso e inténtalo de nuevo."
+      "no_handoff_step": "Este paso no traspasa: las tareas que entran en él mantienen su asignado y no inician ninguna ejecución."
     },
     "mapping": {
       "title": "Mover tareas a {{name}}",
@@ -2174,9 +2173,5 @@
     "marker_notify": "{{name}} recibirá una notificación cuando terminen.",
     "marker_unavailable": "{{name}} no puede ejecutarse ahora, así que nada comenzará cuando terminen.",
     "marker_unassigned": "Sin responsable: nada comenzará cuando terminen."
-  },
-  "model_profile": {
-    "label": "Perfil de modelo",
-    "assignee": "Perfil del asignado"
   }
 }

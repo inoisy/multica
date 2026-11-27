@@ -1,0 +1,11 @@
+{
+  "workflows": {
+    "editor": {
+      "preview_error": "No se ha podido cargar el resumen. Revisa el controlador del paso e inténtalo de nuevo."
+    }
+  },
+  "model_profile": {
+    "label": "Perfil de modelo",
+    "assignee": "Perfil del asignado"
+  }
+}

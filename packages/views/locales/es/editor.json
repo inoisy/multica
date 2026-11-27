@@ -95,8 +95,7 @@
     "table_columns_other": "{{count}} columnas",
     "address": "Dirección",
     "address_hint": "?query",
-    "reload": "Recargar",
-    "back": "Atrás"
+    "reload": "Recargar"
   },
   "link_hover": {
     "copy_link": "Copiar enlace",

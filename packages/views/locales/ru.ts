@@ -1,4 +1,13 @@
 import type { LocaleResources } from "@multica/core/i18n";
+import { withForkStrings } from "./fork";
+import forkAgents from "./ru/fork/agents.json";
+import forkCommon from "./ru/fork/common.json";
+import forkEditor from "./ru/fork/editor.json";
+import forkIssues from "./ru/fork/issues.json";
+import forkLayout from "./ru/fork/layout.json";
+import forkRuntimes from "./ru/fork/runtimes.json";
+import forkSettings from "./ru/fork/settings.json";
+import forkUsage from "./ru/fork/usage.json";
 import ruDocs from "./ru/docs.json";
 import ruCommon from "./ru/common.json";
 import ruAuth from "./ru/auth.json";
@@ -55,4 +64,4 @@ const resources: LocaleResources = {
   billing: ruBilling,
 };
 
-export default resources;
+export default withForkStrings(resources, { agents: forkAgents, common: forkCommon, editor: forkEditor, issues: forkIssues, layout: forkLayout, runtimes: forkRuntimes, settings: forkSettings, usage: forkUsage });

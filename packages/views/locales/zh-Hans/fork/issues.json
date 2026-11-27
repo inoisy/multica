@@ -1,0 +1,11 @@
+{
+  "workflows": {
+    "editor": {
+      "preview_error": "无法加载说明。请检查这一步的处理人后重试。"
+    }
+  },
+  "model_profile": {
+    "label": "Model profile",
+    "assignee": "Assignee's profile"
+  }
+}

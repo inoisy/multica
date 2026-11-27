@@ -1,0 +1,11 @@
+{
+  "workflows": {
+    "editor": {
+      "preview_error": "指示を読み込めませんでした。ステップの処理者を確認して、もう一度お試しください。"
+    }
+  },
+  "model_profile": {
+    "label": "Model profile",
+    "assignee": "Assignee's profile"
+  }
+}

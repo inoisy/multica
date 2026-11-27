@@ -468,9 +468,6 @@ cleared_wakeup_receipts AS (
 cleared_wakeups AS (
  DELETE FROM issue_wakeup WHERE issue_id IN (SELECT target.id FROM target)
 ),
-cleared_workflow_artifacts AS (
- DELETE FROM issue_workflow_artifact WHERE issue_id IN (SELECT target.id FROM target)
-),
 cleared_blockers AS (
  DELETE FROM issue_blocker WHERE workspace_id=$2 AND (issue_id IN (SELECT target.id FROM target) OR blocker_issue_id IN (SELECT target.id FROM target))
 ),

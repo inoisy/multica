@@ -1,0 +1,49 @@
+{
+  "nav": {
+    "subscriptions": "Suscripciones",
+    "pages": "Páginas",
+    "model_profiles": "Perfiles de modelo"
+  },
+  "custom_pages": {
+    "title": "Páginas",
+    "description": "Páginas del espacio de trabajo disponibles desde la barra lateral. Ábrelas dentro de Multica o en una pestaña nueva.",
+    "saved": "Páginas guardadas",
+    "save_failed": "No se han podido guardar las páginas",
+    "add": "Añadir",
+    "save": "Guardar",
+    "saving": "Guardando…",
+    "loading": "Cargando…",
+    "empty_readonly": "Todavía no hay páginas. Los propietarios y administradores del espacio de trabajo pueden añadirlas.",
+    "empty_editable": "Todavía no hay páginas. Haz clic en Añadir para crear una.",
+    "name": "Nombre",
+    "url": "/takes/ o https://…",
+    "open_mode": "Cómo abrir",
+    "embed": "Dentro de Multica",
+    "tab": "Pestaña nueva",
+    "up": "Subir",
+    "down": "Bajar",
+    "open": "Abrir",
+    "delete": "Eliminar",
+    "optional_description": "Descripción (opcional)",
+    "url_hint": "Usa una ruta de este sitio (por ejemplo /takes/) o una URL HTTPS. Los sitios externos pueden bloquear la incrustación; ábrelos en una pestaña nueva.",
+    "configure": "Configurar",
+    "page": "Página",
+    "load_failed": "No se han podido cargar las páginas: {{error}}",
+    "not_found": "Página no encontrada.",
+    "all": "Todas las páginas",
+    "opens_in_tab": "Esta página se abre en una pestaña nueva.",
+    "open_named": "Abrir “{{title}}”",
+    "add_page": "Añadir página"
+  },
+  "section_tabs": {
+    "issues": "Tareas",
+    "agents": "Agentes",
+    "modelProfiles": "Perfiles de modelo",
+    "runtimes": "Runtimes",
+    "subscriptions": "Suscripciones"
+  },
+  "section_tabs_short": {
+    "modelProfiles": "Perfiles",
+    "runtimes": "Runtimes"
+  }
+}

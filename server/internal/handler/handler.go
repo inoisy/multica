@@ -32,7 +32,6 @@ import (
 	"github.com/multica-ai/multica/server/internal/integrations/channel/engine"
 	composio "github.com/multica-ai/multica/server/internal/integrations/composio"
 	"github.com/multica-ai/multica/server/internal/integrations/dingtalk"
-	"github.com/multica-ai/multica/server/internal/integrations/express"
 	"github.com/multica-ai/multica/server/internal/integrations/ghsnapshot"
 	"github.com/multica-ai/multica/server/internal/integrations/lark"
 	"github.com/multica-ai/multica/server/internal/integrations/slack"
@@ -74,9 +73,7 @@ type dbExecutor interface {
 }
 
 type Config struct {
-	// InstanceAdmins are the emails (MULTICA_INSTANCE_ADMINS, comma separated)
-	// allowed to change instance-level subscriptions and their runtime pools.
-	InstanceAdmins      []string
+	ForkConfig
 	AllowSignup         bool
 	AllowedEmails       []string
 	AllowedEmailDomains []string
@@ -251,15 +248,12 @@ type Handler struct {
 	Features entitlement.FeatureProvider
 	// SeatCapacity executes Cloud's pre-purchased human-seat protocol. Nil or
 	// disabled preserves self-hosted behavior.
-	SeatCapacity       seatcapacity.Executor
-	SeatCapacityLocker seatcapacity.WorkspaceLocker
-	SeatCapacityWorker *seatcapacity.Worker
-	EmailService       *service.EmailService
-	UpdateStore        UpdateStore
-	ModelListStore     ModelListStore
-	// SubscriptionLogins holds pending subscription sign-ins in memory only.
-	SubscriptionLogins    *SubscriptionLoginStore
-	SubscriptionProbes    *SubscriptionProbeStore
+	SeatCapacity          seatcapacity.Executor
+	SeatCapacityLocker    seatcapacity.WorkspaceLocker
+	SeatCapacityWorker    *seatcapacity.Worker
+	EmailService          *service.EmailService
+	UpdateStore           UpdateStore
+	ModelListStore        ModelListStore
 	LocalSkillListStore   LocalSkillListStore
 	LocalSkillImportStore LocalSkillImportStore
 	FeatureFlags          *featureflag.Service
@@ -423,15 +417,10 @@ type Handler struct {
 	// enqueues EventChatDone work.
 	TelegramOutbound *telegram.Outbound
 
-	// ExpressInstall owns the eXpress (BotX) bot install lifecycle and the
-	// at-rest encryption of each bot's secret key. ExpressBindingTokens backs
-	// the "link your eXpress account" prompt; ExpressWebhook is the public
-	// endpoint CTS calls. All nil unless MULTICA_EXPRESS_SECRET_KEY is set.
-	ExpressInstall       *express.InstallService
-	ExpressBindingTokens *express.BindingTokenService
-	ExpressWebhook       *express.Webhook
-	WeixinInstall        *weixin.InstallService
-	WeixinOutbound       *weixin.Outbound
+	WeixinInstall  *weixin.InstallService
+	WeixinOutbound *weixin.Outbound
+
+	ForkState
 
 	// channelFileDelivery names the channel types that can, IN THIS
 	// DEPLOYMENT, carry a file the agent produced the last hop into the
@@ -564,8 +553,7 @@ func New(queries *db.Queries, txStarter txStarter, hub *realtime.Hub, bus *event
 		EmailService:                 emailService,
 		UpdateStore:                  NewInMemoryUpdateStore(),
 		ModelListStore:               NewInMemoryModelListStore(),
-		SubscriptionLogins:           NewSubscriptionLoginStore(),
-		SubscriptionProbes:           NewSubscriptionProbeStore(),
+		ForkState:                    newForkState(),
 		ModelCatalogCache:            NewInMemoryModelCatalogCache(),
 		LocalSkillListStore:          NewInMemoryLocalSkillListStore(),
 		LocalSkillImportStore:        NewInMemoryLocalSkillImportStore(),
@@ -1322,26 +1310,6 @@ func (h *Handler) loadAgentForUser(w http.ResponseWriter, r *http.Request, agent
 		return db.Agent{}, false
 	}
 	return agent, true
-}
-
-// loadAgentForView is loadAgentForUser for read-only views: it also returns the
-// workspace's hidden agent of the removed acceptance step (kind = 'system',
-// system_key = 'accept', STT-429), so an archived run it carried shows its name
-// instead of "Unknown Agent". Mutations keep using
-// loadAgentForUser, which still answers 404 for every system agent.
-func (h *Handler) loadAgentForView(w http.ResponseWriter, r *http.Request, agentID string) (db.Agent, bool) {
-	if agentUUID, err := util.ParseUUID(agentID); err == nil {
-		if wsUUID, err := util.ParseUUID(h.resolveWorkspaceID(r)); err == nil {
-			if a, err := h.Queries.GetAgent(r.Context(), agentUUID); err == nil && a.WorkspaceID == wsUUID &&
-				a.Kind == "system" && a.SystemKey.Valid && a.SystemKey.String == "accept" && !a.ArchivedAt.Valid {
-				if _, ok := requireUserID(w, r); !ok {
-					return db.Agent{}, false
-				}
-				return a, true
-			}
-		}
-	}
-	return h.loadAgentForUser(w, r, agentID)
 }
 
 func (h *Handler) loadInboxItemForUser(w http.ResponseWriter, r *http.Request, itemID string) (db.InboxItem, bool) {
