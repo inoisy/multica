@@ -54,8 +54,9 @@ type persistedTerminalTaskReport struct {
 	SessionID             string     `json:"session_id,omitempty"`
 	WorkDir               string     `json:"work_dir,omitempty"`
 	DurableWorkDir        string     `json:"durable_work_dir,omitempty"`
-	RefusalCode           string     `json:"refusal_code,omitempty"`
 	FailureReason         string     `json:"failure_reason,omitempty"`
+	NoToolCallsStarted    bool       `json:"no_tool_calls_started,omitempty"`
+	RefusalCode           string     `json:"refusal_code,omitempty"`
 	SessionRolloutMissing bool       `json:"session_rollout_missing,omitempty"`
 	RetiredSessionID      string     `json:"retired_session_id,omitempty"`
 	QuotaResetAt          *time.Time `json:"quota_reset_at,omitempty"`
@@ -149,6 +150,7 @@ func persistedTerminalReport(report terminalTaskReport, createdAt time.Time) (pe
 		DurableWorkDir:        report.durableWorkDir,
 		FailureReason:         report.failureReason,
 		RefusalCode:           report.refusalCode,
+		NoToolCallsStarted:    report.noToolCallsStarted,
 		SessionRolloutMissing: report.sessionRolloutMissing,
 		RetiredSessionID:      report.retiredSessionID,
 		QuotaResetAt:          timePtr(report.quotaResetAt),
@@ -188,6 +190,7 @@ func (record persistedTerminalTaskReport) terminalReport() (terminalTaskReport, 
 		workDir:               record.WorkDir,
 		durableWorkDir:        record.DurableWorkDir,
 		failureReason:         record.FailureReason,
+		noToolCallsStarted:    record.NoToolCallsStarted,
 		sessionRolloutMissing: record.SessionRolloutMissing,
 		retiredSessionID:      record.RetiredSessionID,
 		quotaResetAt:          derefTime(record.QuotaResetAt),

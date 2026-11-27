@@ -136,6 +136,9 @@ func Classify(rawError string) Reason {
 		return ReasonAgentUnknown
 	}
 	lower := strings.ToLower(trimmed)
+	if reason := classifyTraePromptStreamFailure(lower); reason != "" {
+		return reason
+	}
 	// Cursor's adapter adds event counts to known transport failures. Those
 	// numbers are not HTTP status codes (event_count=429 is not a rate limit).
 	// Apply the existing precedence to the provider stderr, keeping real auth
@@ -155,6 +158,10 @@ func Classify(rawError string) Reason {
 		lower = strings.Join(lines, "\n")
 	}
 
+	return classifyAgentErrorText(lower)
+}
+
+func classifyAgentErrorText(lower string) Reason {
 	switch {
 	// The subscription picker refuses a run when every subscription behind
 	// the runtime is above the limit set for agents. That is the runtime's
@@ -797,6 +804,12 @@ func NormalizeDaemonReason(reason, rawError string) Reason {
 	// flaky provider. Upgrading here makes the retry work the moment the server
 	// deploys, without waiting on the daemon fleet.
 	lowerError := strings.ToLower(strings.TrimSpace(rawError))
+	switch Reason(reason) {
+	case "", "agent_error", ReasonAgentUnknown, ReasonAgentProviderServerError:
+		if refined := classifyTraePromptStreamFailure(lowerError); refined != "" {
+			return refined
+		}
+	}
 	// Normalize before retry eligibility is evaluated so installed daemons
 	// receive the same bounded, resume-safe recovery as current ones. Retain
 	// Classify's precedence if a more specific provider failure is present.

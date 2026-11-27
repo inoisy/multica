@@ -98,6 +98,11 @@ const (
 	// daemon puts on the agent's PATH has `issue comment add --steer`. The
 	// server tells a squad leader about steering only then.
 	DaemonCapabilityCLICommentSteerV1 = "cli-comment-steer-v1"
+	// DaemonCapabilityDocCommentV1 advertises that the daemon runs doc
+	// discussion tasks (MUL-9933): it renders their prompt and brief, and its
+	// CLI has `doc comment add`. An older daemon would treat such a task as an
+	// issue run with no issue, so the claim fails it before launch instead.
+	DaemonCapabilityDocCommentV1 = "doc-comment-v1"
 
 	TaskSupplementFailureTurnNotStarted   = "turn_not_started"
 	TaskSupplementFailureProviderRejected = "provider_rejected"
@@ -230,6 +235,24 @@ type TaskProgressPayload struct {
 // It carries no usage values; clients refetch through their authorized APIs.
 type TaskUsageUpdatedPayload struct {
 	TaskID string `json:"task_id"`
+}
+
+// TaskFailRequest reports the terminal failure of a daemon task.
+type TaskFailRequest struct {
+	Error          string `json:"error"`
+	SessionID      string `json:"session_id,omitempty"`
+	WorkDir        string `json:"work_dir,omitempty"`
+	DurableWorkDir string `json:"durable_work_dir,omitempty"`
+	FailureReason  string `json:"failure_reason,omitempty"`
+	// A worktree can produce a branch even when its task fails.
+	BranchName string `json:"branch_name,omitempty"`
+	// A missing rollout invalidates the withheld session's resume pointer.
+	SessionRolloutMissing bool `json:"session_rollout_missing,omitempty"`
+	// A known unresumable session must also be retired for subsequent tasks.
+	RetiredSessionID string `json:"retired_session_id,omitempty"`
+	// Older daemons and incomplete transcripts leave this proof unset.
+	NoToolCallsStarted bool `json:"no_tool_calls_started,omitempty"`
+	TaskFailFork
 }
 
 // TaskCompletedPayload is sent from daemon to server when a task finishes.
@@ -492,25 +515,20 @@ type DaemonHeartbeatRequestPayload struct {
 // and re-registers; without it the dead UUID would keep heartbeating until the
 // daemon process restarts.
 type DaemonHeartbeatAckPayload struct {
-	RuntimeID          string                           `json:"runtime_id"`
-	Status             string                           `json:"status"`
-	ServerCapabilities []string                         `json:"server_capabilities,omitempty"`
-	RuntimeGone        bool                             `json:"runtime_gone,omitempty"`
-	PendingUpdate      *DaemonHeartbeatPendingUpdate    `json:"pending_update,omitempty"`
-	PendingModelList   *DaemonHeartbeatPendingModelList `json:"pending_model_list,omitempty"`
-	// PendingSubscriptionLogin asks the daemon to sign a subscription in and
-	// write its credential file. Token is set only for pasted secrets.
-	PendingSubscriptionLogin *DaemonHeartbeatPendingSubscriptionLogin `json:"pending_subscription_login,omitempty"`
-	// PendingSubscriptionProbe asks the daemon to measure one subscription now
-	// and report the snapshot tagged with the probe id.
-	PendingSubscriptionProbe *DaemonHeartbeatPendingSubscriptionProbe `json:"pending_subscription_probe,omitempty"`
-	PendingLocalSkills       *DaemonHeartbeatPendingLocalSkills       `json:"pending_local_skills,omitempty"`
-	PendingLocalSkillImport  *DaemonHeartbeatPendingLocalSkillImport  `json:"pending_local_skill_import,omitempty"`
+	RuntimeID               string                                  `json:"runtime_id"`
+	Status                  string                                  `json:"status"`
+	ServerCapabilities      []string                                `json:"server_capabilities,omitempty"`
+	RuntimeGone             bool                                    `json:"runtime_gone,omitempty"`
+	PendingUpdate           *DaemonHeartbeatPendingUpdate           `json:"pending_update,omitempty"`
+	PendingModelList        *DaemonHeartbeatPendingModelList        `json:"pending_model_list,omitempty"`
+	PendingLocalSkills      *DaemonHeartbeatPendingLocalSkills      `json:"pending_local_skills,omitempty"`
+	PendingLocalSkillImport *DaemonHeartbeatPendingLocalSkillImport `json:"pending_local_skill_import,omitempty"`
 	// PendingLocalSkillImports carries multiple import requests in a single
 	// heartbeat so the daemon can process them concurrently. Old daemons
 	// that don't know this field silently ignore it (standard JSON behavior)
 	// and fall back to the singular PendingLocalSkillImport above.
 	PendingLocalSkillImports []DaemonHeartbeatPendingLocalSkillImport `json:"pending_local_skill_imports,omitempty"`
+	DaemonHeartbeatAckFork
 }
 
 // HeartbeatStatusRuntimeGone is the ack Status used when the runtime row no
@@ -528,26 +546,6 @@ type DaemonHeartbeatPendingUpdate struct {
 	// offer repeats on every heartbeat until then. Without it, the update
 	// is running from delivery and a busy daemon fails it.
 	Deferrable bool `json:"deferrable,omitempty"`
-}
-
-// DaemonHeartbeatPendingSubscriptionLogin describes a subscription sign-in for
-// the daemon: a Codex device login, or a pasted Claude token / API key to write
-// atomically to credential_path. The token is never logged by either side.
-type DaemonHeartbeatPendingSubscriptionLogin struct {
-	ID             string `json:"id"`
-	Key            string `json:"key"`
-	Provider       string `json:"provider"`
-	Auth           string `json:"auth"`
-	CredentialPath string `json:"credential_path"`
-	Token          string `json:"token,omitempty"`
-}
-
-// DaemonHeartbeatPendingSubscriptionProbe is a forced measurement of one
-// subscription in the workspace that asked for it.
-type DaemonHeartbeatPendingSubscriptionProbe struct {
-	ID          string `json:"id"`
-	Key         string `json:"key"`
-	WorkspaceID string `json:"workspace_id"`
 }
 
 // DaemonHeartbeatPendingModelList describes a request for the daemon to

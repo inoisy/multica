@@ -31,3 +31,19 @@ type AccountConfirmation struct {
 	PoolID         string `json:"pool_id"`
 	PoolRevision   int32  `json:"pool_revision"`
 }
+
+// TaskFailFork is the fork's part of a failure report: the account refusal
+// that stopped the run and, for a subscription cap, when it frees up. Older
+// daemons omit both.
+type TaskFailFork struct {
+	RefusalCode  string     `json:"refusal_code,omitempty"`
+	QuotaResetAt *time.Time `json:"quota_reset_at,omitempty"`
+}
+
+// QuotaReset is the reported reset, or zero when none was reported.
+func (f TaskFailFork) QuotaReset() time.Time {
+	if f.QuotaResetAt == nil {
+		return time.Time{}
+	}
+	return *f.QuotaResetAt
+}

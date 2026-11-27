@@ -235,6 +235,31 @@ WHERE runtime_id = ANY(@runtime_ids::uuid[]) AND archived_at IS NULL
   AND (system_key IS NULL OR system_key = '')
 RETURNING *;
 
+-- name: ArchiveAgentsByOwner :many
+-- Archives every active user agent a departing member owns in the workspace,
+-- wherever it runs. ArchiveAgentsByRuntime only reaches the member's own
+-- runtimes, so an agent they own on a colleague's public runtime would keep
+-- running their instructions and configuration after they are gone. System
+-- agents are exempt for the same reason as there; their ownership is handed
+-- over instead (TransferProductAgentsOwner).
+UPDATE agent
+SET archived_at = now(), archived_by = @archived_by, updated_at = now()
+WHERE workspace_id = @workspace_id AND owner_id = @owner_id AND archived_at IS NULL
+  AND (system_key IS NULL OR system_key = '')
+RETURNING *;
+
+-- name: TransferProductAgentsOwner :many
+-- Hands the product-defined agents (Mika: kind='user' with a system_key) a
+-- departing member owns to another member. They belong to the workspace and
+-- are never archived, but their owner decides who may manage them and whose
+-- connected apps they use, so a departed owner must not keep them. Builder
+-- carriers (kind='system') are personal and are left alone.
+UPDATE agent
+SET owner_id = @new_owner_id, updated_at = now()
+WHERE workspace_id = @workspace_id AND owner_id = @owner_id
+  AND kind = 'user' AND system_key IS NOT NULL AND system_key <> ''
+RETURNING *;
+
 -- name: ArchiveAgentsByIDs :many
 -- Narrow archive that only touches the explicit ID list. Used by the
 -- cascade-delete endpoint so the user's expected_active_agent_ids list
@@ -575,6 +600,7 @@ WHERE id = $1 AND issue_id IS NULL
 -- ceiling; it does not re-enable tasks whose retry budget was disabled.
 INSERT INTO agent_task_queue (
     agent_id, runtime_id, issue_id, chat_session_id, autopilot_run_id,
+    doc_id, doc_thread_id, doc_comment_id,
     status, priority, trigger_comment_id, coalesced_comment_ids, trigger_summary, context,
     session_id, work_dir,
     attempt, max_attempts, parent_task_id, force_fresh_session, is_leader_task,
@@ -586,6 +612,7 @@ INSERT INTO agent_task_queue (
 )
 SELECT
     p.agent_id, COALESCE(a.runtime_id, p.runtime_id), p.issue_id, p.chat_session_id, p.autopilot_run_id,
+    p.doc_id, p.doc_thread_id, p.doc_comment_id,
     CASE WHEN sqlc.narg(fire_at)::timestamptz IS NOT NULL THEN 'deferred' ELSE 'queued' END,
     CASE WHEN p.chat_session_id IS NOT NULL THEN GREATEST(p.priority, 3) ELSE p.priority END,
     p.trigger_comment_id, p.coalesced_comment_ids, p.trigger_summary, p.context,
@@ -839,6 +866,7 @@ WHERE atq.id = $1 AND a.workspace_id = $2;
 -- already dispatched or running. This allows different agents to work on the same
 -- issue in parallel while preventing a single agent from running duplicate tasks.
 -- Chat tasks (issue_id IS NULL) use chat_session_id for serialization instead.
+-- Doc discussion tasks serialize per (doc, agent), the scope of their session.
 -- Quick-create tasks have no issue / chat / autopilot link, so they serialize on
 -- "any other quick-create-shaped task" (all four FKs NULL) for the same agent —
 -- otherwise a user mashing the create button could fire concurrent quick-creates
@@ -884,13 +912,16 @@ WHERE id = (
             AND (
               (atq.issue_id IS NOT NULL AND active.issue_id = atq.issue_id)
               OR (atq.chat_session_id IS NOT NULL AND active.chat_session_id = atq.chat_session_id)
+              OR (atq.doc_id IS NOT NULL AND active.doc_id = atq.doc_id)
               OR (
                 atq.issue_id IS NULL
                 AND atq.chat_session_id IS NULL
                 AND atq.autopilot_run_id IS NULL
+                AND atq.doc_id IS NULL
                 AND active.issue_id IS NULL
                 AND active.chat_session_id IS NULL
                 AND active.autopilot_run_id IS NULL
+                AND active.doc_id IS NULL
               )
             )
       )
@@ -2181,6 +2212,7 @@ LEFT JOIN squad direct_squad
  AND direct_squad.archived_at IS NULL
  AND direct_squad.handoff_mode = 'direct'
  AND direct_squad.leader_id <> source.agent_id
+ AND direct_squad.leader_id <> failed.agent_id
  AND EXISTS (
      SELECT 1
      FROM squad_member direct_member
@@ -2858,9 +2890,13 @@ RETURNING a.*;
 -- Resolves a workspace's built-in agent by its stable system_key. This is the
 -- identity lookup for system agents: their display name is owner-editable, so
 -- nothing server-side may key off it.
+--
+-- Archived rows are included (an active row wins): an archived Mika still holds
+-- the workspace's slot and her name, so callers must see it to refuse a second
+-- one rather than insert past it.
 SELECT * FROM agent
-WHERE workspace_id = $1 AND system_key = $2 AND archived_at IS NULL
-ORDER BY created_at ASC, id ASC
+WHERE workspace_id = $1 AND system_key = $2
+ORDER BY (archived_at IS NOT NULL) ASC, created_at ASC, id ASC
 LIMIT 1;
 
 -- name: CreateSystemUserAgent :one
@@ -2890,3 +2926,19 @@ RETURNING *;
 -- name: GetCommentThreadRootID :one
 SELECT comment_thread_root_id(@comment_id::uuid)::uuid AS id;
 
+-- name: TaskPassedWorkOn :one
+-- Whether a run posted a comment on its issue, started another agent run
+-- there, or left an enabled wakeup waiting on it: a squad leader run that did
+-- none of these ended its squad's chain of handoffs.
+SELECT (
+    EXISTS (
+        SELECT 1 FROM comment c
+        WHERE c.issue_id = @issue_id::uuid AND c.source_task_id = @task_id::uuid
+    ) OR EXISTS (
+        SELECT 1 FROM agent_task_queue t
+        WHERE t.issue_id = @issue_id::uuid AND t.delegated_from_task_id = @task_id::uuid
+    ) OR EXISTS (
+        SELECT 1 FROM issue_wakeup w
+        WHERE w.issue_id = @issue_id::uuid AND w.source_task_id = @task_id::uuid AND w.enabled
+    )
+)::boolean AS passed_on;

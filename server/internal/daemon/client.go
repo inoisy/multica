@@ -21,6 +21,7 @@ import (
 	"github.com/multica-ai/multica/server/pkg/httptransport"
 	"github.com/multica-ai/multica/server/pkg/protocol"
 	"github.com/multica-ai/multica/server/pkg/remotemcp"
+	"github.com/multica-ai/multica/server/pkg/taskfailure"
 )
 
 // requestError is returned by postJSON/getJSON when the server responds with an error status.
@@ -217,6 +218,7 @@ func daemonCommonCapabilities() []string {
 		protocol.DaemonCapabilityWorkflowStatusRulesV1,
 		protocol.DaemonCapabilityWorkflowStatusMapV1,
 		protocol.DaemonCapabilityCLICommentSteerV1,
+		protocol.DaemonCapabilityDocCommentV1,
 	}
 }
 
@@ -861,48 +863,34 @@ func (c *Client) ReportTaskUsageSnapshot(ctx context.Context, taskID string, usa
 }
 
 func (c *Client) FailTask(ctx context.Context, taskID, errMsg, sessionID, workDir, branchName, failureReason string, sessionRolloutMissing bool, retiredSessionID, durableWorkDir string) error {
-	return c.failTaskWithRetrySchedule(ctx, taskID, errMsg, sessionID, workDir, branchName, failureReason, sessionRolloutMissing, retiredSessionID, durableWorkDir, defaultTerminalRetrySchedule)
+	return c.failTaskWithRetrySchedule(ctx, terminalTaskReport{
+		taskID: taskID, errorMessage: errMsg, sessionID: sessionID, workDir: workDir, branchName: branchName,
+		failureReason: failureReason, sessionRolloutMissing: sessionRolloutMissing, retiredSessionID: retiredSessionID, durableWorkDir: durableWorkDir,
+	}, defaultTerminalRetrySchedule)
 }
 
-func (c *Client) failTaskWithRetrySchedule(ctx context.Context, taskID, errMsg, sessionID, workDir, branchName, failureReason string, sessionRolloutMissing bool, retiredSessionID, durableWorkDir string, schedule []time.Duration) error {
-	return c.failTaskReportWithRetrySchedule(ctx, taskID, errMsg, sessionID, workDir, branchName, failureReason, sessionRolloutMissing, retiredSessionID, durableWorkDir, time.Time{}, schedule)
-}
-
-// failTaskReportWithRetrySchedule also sends quota_reset_at: when a refused
-// run's subscriptions free up, so the server need not parse the error text.
-func (c *Client) failTaskReportWithRetrySchedule(ctx context.Context, taskID, errMsg, sessionID, workDir, branchName, failureReason string, sessionRolloutMissing bool, retiredSessionID, durableWorkDir string, quotaResetAt time.Time, schedule []time.Duration, refusalCodes ...string) error {
-	body := map[string]any{"error": errMsg}
-	if len(refusalCodes) > 0 && refusalCodes[0] != "" {
-		body["refusal_code"] = refusalCodes[0]
+func (c *Client) failTaskWithRetrySchedule(ctx context.Context, report terminalTaskReport, schedule []time.Duration) error {
+	body := protocol.TaskFailRequest{
+		Error:                 report.errorMessage,
+		SessionID:             report.sessionID,
+		WorkDir:               report.workDir,
+		DurableWorkDir:        report.durableWorkDir,
+		BranchName:            report.branchName,
+		FailureReason:         report.failureReason,
+		SessionRolloutMissing: report.sessionRolloutMissing,
+		RetiredSessionID:      report.retiredSessionID,
+		NoToolCallsStarted:    report.noToolCallsStarted,
+		TaskFailFork: protocol.TaskFailFork{
+			RefusalCode:  report.refusalCode,
+			QuotaResetAt: timePtr(report.quotaResetAt),
+		},
 	}
-	if !quotaResetAt.IsZero() {
-		body["quota_reset_at"] = quotaResetAt.UTC().Format(time.RFC3339)
+	// Older servers automatically replay a provider_network failure. Keep the
+	// original server-error label on the wire when the turn cannot be verified.
+	if !body.NoToolCallsStarted && body.FailureReason == taskfailure.ReasonAgentProviderNetwork.String() && taskfailure.IsTraePromptStreamDisconnect(body.Error) {
+		body.FailureReason = taskfailure.ReasonAgentProviderServerError.String()
 	}
-	if sessionID != "" {
-		body["session_id"] = sessionID
-	}
-	if workDir != "" {
-		body["work_dir"] = workDir
-	}
-	if durableWorkDir != "" {
-		body["durable_work_dir"] = durableWorkDir
-	}
-	// A failed run can still have delivered a branch: worktree mode commits
-	// whatever the agent left before removing the worktree, so partial work
-	// survives — but only if its name travels with the failure report.
-	if branchName != "" {
-		body["branch_name"] = branchName
-	}
-	if failureReason != "" {
-		body["failure_reason"] = failureReason
-	}
-	if sessionRolloutMissing {
-		body["session_rollout_missing"] = true
-	}
-	if retiredSessionID != "" {
-		body["retired_session_id"] = retiredSessionID
-	}
-	return c.postJSONWithRetry(ctx, fmt.Sprintf("/api/daemon/tasks/%s/fail", taskID), body, nil, schedule)
+	return c.postJSONWithRetry(ctx, fmt.Sprintf("/api/daemon/tasks/%s/fail", report.taskID), body, nil, schedule)
 }
 
 // PinTaskSession persists the agent's session_id and work_dir on the task

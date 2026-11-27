@@ -354,6 +354,9 @@ export interface AgentTask {
   dispatched_at: string | null;
   started_at: string | null;
   completed_at: string | null;
+  /** Set once an admin has cleared this run's log; absent otherwise. */
+  transcript_purged_at?: string | null;
+  transcript_purged_by?: string;
   result: unknown;
   error: string | null;
   // Empty string when the task is not in a failed state (the backend uses
@@ -383,6 +386,10 @@ export interface AgentTask {
   squad_id?: string;
   /** True when this task runs the agent as a squad leader. */
   is_leader_task?: boolean;
+  /** Non-empty when an agent was asked for in a doc discussion. */
+  doc_id?: string;
+  /** The doc discussion (its first comment's id) the run answers. */
+  doc_thread_id?: string;
   /** Set when this task was created as an auto-retry of a parent task. */
   parent_task_id?: string;
   /** 1-based attempt counter; >1 means this is a retry. */
@@ -424,7 +431,7 @@ export interface AgentTask {
    * remains quick_create after its result issue is linked, so consumers can
    * distinguish creation work from later direct runs on that issue.
    */
-  kind?: "comment" | "autopilot" | "chat" | "quick_create" | "direct";
+  kind?: "comment" | "autopilot" | "chat" | "quick_create" | "doc_comment" | "direct";
   /**
    * Local working directory pinned for this task by the daemon. Empty until
    * the daemon reports a work_dir (typically once execution starts). This is
@@ -557,6 +564,13 @@ export interface ContextReceipt {
   fresh_retry?: boolean;
   mcp_servers: string[];
   sources: ContextReceiptSource[];
+}
+
+/** What clearing a run's log leaves on the run. */
+export interface TaskTranscriptPurge {
+  transcript_purged_at: string | null;
+  transcript_purged_by: string;
+  messages_deleted: number;
 }
 
 export interface TaskContextReceiptResponse {

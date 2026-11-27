@@ -12,6 +12,7 @@ import (
 	"github.com/multica-ai/multica/server/internal/testutil"
 	"github.com/multica-ai/multica/server/internal/util"
 	db "github.com/multica-ai/multica/server/pkg/db/generated"
+	"github.com/multica-ai/multica/server/pkg/protocol"
 	"github.com/multica-ai/multica/server/pkg/taskfailure"
 )
 
@@ -502,7 +503,7 @@ func TestQuotaRefusalParksUntilReportedReset(t *testing.T) {
 		t.Fatal("no claim")
 	}
 	reported := now.Add(25 * time.Minute).Truncate(time.Second)
-	if _, _, err := r.svc.FailTaskWithQuotaReset(r.ctx, task.ID, text, "", "", "", "", false, "", "", reported); err != nil {
+	if _, _, err := r.svc.FailTaskWithTransition(r.ctx, task.ID, protocol.TaskFailRequest{Error: text, TaskFailFork: protocol.TaskFailFork{QuotaResetAt: &reported}}); err != nil {
 		t.Fatal(err)
 	}
 	if got := until(); !got.Equal(reported) {
@@ -649,7 +650,7 @@ func TestStructuredQuotaRefusalStoresCodeAndRetriesWithoutText(t *testing.T) {
 				t.Fatal("no claim")
 			}
 			reset := time.Now().UTC().Add(20 * time.Minute).Truncate(time.Second)
-			failed, transitioned, err := r.svc.FailTaskWithQuotaReset(r.ctx, task.ID, "arbitrary translated text", "", "", "", "agent_error.unknown", false, "", "", reset, code)
+			failed, transitioned, err := r.svc.FailTaskWithTransition(r.ctx, task.ID, protocol.TaskFailRequest{Error: "arbitrary translated text", FailureReason: "agent_error.unknown", TaskFailFork: protocol.TaskFailFork{RefusalCode: code, QuotaResetAt: &reset}})
 			if err != nil || !transitioned || failed.Status != "failed" {
 				t.Fatalf("fail %+v %v %v", failed, transitioned, err)
 			}
