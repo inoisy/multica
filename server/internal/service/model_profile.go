@@ -95,6 +95,14 @@ func normalizeOptions(ctx context.Context, q *db.Queries, workspaceID pgtype.UUI
 	for _, p := range environments {
 		profileOf[util.UUIDToString(p.ID)] = p
 	}
+	envIDs := make([]pgtype.UUID, len(environments))
+	for i, p := range environments {
+		envIDs[i] = p.ID
+	}
+	poolOf, err := RuntimeProfilePools(ctx, q, envIDs)
+	if err != nil {
+		return nil, err
+	}
 	out := make([]ModelOption, 0, len(in))
 	for i, o := range in {
 		id, err := util.ParseUUID(strings.TrimSpace(o.RuntimeID))
@@ -108,7 +116,7 @@ func normalizeOptions(ctx context.Context, q *db.Queries, workspaceID pgtype.UUI
 		if owner != nil && rt.Visibility == "private" && rt.OwnerID.Valid && !RuntimeAllowsUser(rt, *owner) {
 			return nil, invalid("row %d: runtime %q is private to another member", i+1, runtimeDisplayName(rt))
 		}
-		if err := checkRowEnvironment(rt, profileOf); err != nil {
+		if err := checkRowEnvironment(rt, profileOf, poolOf); err != nil {
 			return nil, invalid("row %d: %s", i+1, err.Error())
 		}
 		model, thinking := strings.TrimSpace(o.Model), strings.TrimSpace(o.ThinkingLevel)
@@ -139,11 +147,11 @@ func isBuiltinAccountRuntime(rt db.AgentRuntime) bool {
 // command is not the CLI family of the pool (a wrapper would spend an account
 // of its own outside the pool). A login of one's own, such as a Qwen
 // environment, has no pool and passes.
-func checkRowEnvironment(rt db.AgentRuntime, environments map[string]db.RuntimeProfile) error {
+func checkRowEnvironment(rt db.AgentRuntime, environments map[string]db.RuntimeProfile, pools map[pgtype.UUID]pgtype.UUID) error {
 	if isBuiltinAccountRuntime(rt) {
 		return fmt.Errorf("runtime %q is the built-in %s environment; choose an environment with accounts or with its own login", runtimeDisplayName(rt), rt.Provider)
 	}
-	if env, ok := environments[util.UUIDToString(rt.ProfileID)]; ok && !PoolCommandMatches(env) {
+	if env, ok := environments[util.UUIDToString(rt.ProfileID)]; ok && !PoolCommandMatches(env, pools[env.ID]) {
 		return fmt.Errorf("runtime %q of an account pool runs %q instead of %q, so it would spend an account outside the pool", runtimeDisplayName(rt), env.CommandName, poolEnvironmentType(env))
 	}
 	return nil
@@ -156,9 +164,9 @@ func poolEnvironmentType(env db.RuntimeProfile) string {
 // PoolCommandMatches is false for an environment of an account pool whose
 // command is not the CLI of its type: a wrapper there signs in on its own and
 // spends an account the pool does not meter. Environments without a pool have
-// no such rule.
-func PoolCommandMatches(env db.RuntimeProfile) bool {
-	return !env.PoolID.Valid || env.CommandName == poolEnvironmentType(env)
+// no such rule. poolID is the pool the environment spends, if any.
+func PoolCommandMatches(env db.RuntimeProfile, poolID pgtype.UUID) bool {
+	return !poolID.Valid || env.CommandName == poolEnvironmentType(env)
 }
 
 func runtimeDisplayName(rt db.AgentRuntime) string {
@@ -368,7 +376,11 @@ func (s *ModelProfileService) SaveAgentModels(ctx context.Context, agent db.Agen
 		if _, err := q.LockModelProfilesInWorkspace(ctx, agent.WorkspaceID); err != nil {
 			return err
 		}
-		if in.ClearProfile && agent.ModelProfileID.Valid {
+		profileID, err := AgentModelProfileID(ctx, q, agent.ID)
+		if err != nil {
+			return err
+		}
+		if in.ClearProfile && profileID.Valid {
 			return invalid("an agent runs on a profile; choose a shared profile or give it a personal one")
 		}
 		if in.ModelProfileID != nil && strings.TrimSpace(*in.ModelProfileID) != "" {
@@ -497,6 +509,10 @@ func clipRunes(s string, n int) string {
 }
 
 func savePersonalProfile(ctx context.Context, q *db.Queries, agent db.Agent, in PersonalProfileInput) (db.Agent, error) {
+	agentProfileID, err := AgentModelProfileID(ctx, q, agent.ID)
+	if err != nil {
+		return agent, err
+	}
 	if len(in.Options) == 0 {
 		return agent, invalid("a personal profile needs at least one model")
 	}
@@ -527,8 +543,8 @@ func savePersonalProfile(ctx context.Context, q *db.Queries, agent db.Agent, in 
 			return agent, err
 		}
 		base = id
-	case agent.ModelProfileID.Valid && (!hasPersonal || existing.ID != agent.ModelProfileID):
-		if p, err := q.GetSharedModelProfileInWorkspace(ctx, db.GetSharedModelProfileInWorkspaceParams{ID: agent.ModelProfileID, WorkspaceID: agent.WorkspaceID}); err == nil {
+	case agentProfileID.Valid && (!hasPersonal || existing.ID != agentProfileID):
+		if p, err := q.GetSharedModelProfileInWorkspace(ctx, db.GetSharedModelProfileInWorkspaceParams{ID: agentProfileID, WorkspaceID: agent.WorkspaceID}); err == nil {
 			base = p.ID
 		} else if !errors.Is(err, pgx.ErrNoRows) {
 			return agent, err
@@ -584,6 +600,10 @@ func savePersonalProfile(ctx context.Context, q *db.Queries, agent db.Agent, in 
 }
 
 func resetPersonalProfile(ctx context.Context, q *db.Queries, agent db.Agent) (db.Agent, error) {
+	agentProfileID, err := AgentModelProfileID(ctx, q, agent.ID)
+	if err != nil {
+		return agent, err
+	}
 	existing, err := q.GetPersonalModelProfileOfAgent(ctx, agent.ID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return agent, nil
@@ -594,7 +614,7 @@ func resetPersonalProfile(ctx context.Context, q *db.Queries, agent db.Agent) (d
 	updated := agent
 	// The agent goes back to the profile the personal one was made from. When
 	// it already points at something else it stays there.
-	if agent.ModelProfileID == existing.ID {
+	if agentProfileID == existing.ID {
 		if !existing.BasedOnProfileID.Valid {
 			return agent, invalid("the personal profile was not made from a shared one; choose a shared profile first")
 		}
@@ -786,11 +806,17 @@ func runtimePools(ctx context.Context, q *db.Queries, workspaceID pgtype.UUID) (
 	if err != nil {
 		return nil, err
 	}
+	ids := make([]pgtype.UUID, len(profiles))
+	for i, p := range profiles {
+		ids[i] = p.ID
+	}
+	pools, err := RuntimeProfilePools(ctx, q, ids)
+	if err != nil {
+		return nil, err
+	}
 	out := map[string]string{}
-	for _, p := range profiles {
-		if p.PoolID.Valid {
-			out[util.UUIDToString(p.ID)] = util.UUIDToString(p.PoolID)
-		}
+	for id, pool := range pools {
+		out[util.UUIDToString(id)] = util.UUIDToString(pool)
 	}
 	return out, nil
 }
@@ -842,18 +868,27 @@ func poolAccountList(accounts map[string]Account, ids []string) []Account {
 
 // ChoiceAgent reads the agent's fields for a choice. Its list comes from its
 // profile, shared or personal, which the world already holds.
-func ChoiceAgent(_ context.Context, _ *db.Queries, agent db.Agent) (ModelChoiceAgent, error) {
+func ChoiceAgent(ctx context.Context, q *db.Queries, agent db.Agent) (ModelChoiceAgent, error) {
+	settings, err := AgentModelSettings(ctx, q, agent.ID)
+	if err != nil {
+		return ModelChoiceAgent{}, err
+	}
+	return choiceAgent(agent, settings), nil
+}
+
+// choiceAgent is ChoiceAgent for an agent whose side row is already loaded.
+func choiceAgent(agent db.Agent, settings db.AgentModelSetting) ModelChoiceAgent {
 	a := ModelChoiceAgent{
 		ID: util.UUIDToString(agent.ID), OwnerID: util.UUIDToString(agent.OwnerID), RuntimeID: util.UUIDToString(agent.RuntimeID),
-		Model: agent.Model.String, ThinkingLevel: agent.ThinkingLevel.String, ModelProfileID: util.UUIDToString(agent.ModelProfileID),
+		Model: agent.Model.String, ThinkingLevel: agent.ThinkingLevel.String, ModelProfileID: util.UUIDToString(settings.ModelProfileID),
 	}
 	if agent.CustomArgs != nil {
 		_ = json.Unmarshal(agent.CustomArgs, &a.CustomArgs)
 	}
-	if agent.DisallowedTools != nil {
-		_ = json.Unmarshal(agent.DisallowedTools, &a.DisallowedTools)
+	if settings.DisallowedTools != nil {
+		_ = json.Unmarshal(settings.DisallowedTools, &a.DisallowedTools)
 	}
-	return a, nil
+	return a
 }
 
 // Input assembles the choice input of one agent and, optionally, one issue.
@@ -877,7 +912,10 @@ func PreviewChoice(ctx context.Context, q *db.Queries, agent db.Agent, issue *db
 	}
 	var issueID, issueProfile pgtype.UUID
 	if issue != nil {
-		issueID, issueProfile = issue.ID, issue.ModelProfileID
+		issueID = issue.ID
+		if issueProfile, err = IssueModelProfileID(ctx, q, issue.ID); err != nil {
+			return ModelChoice{}, err
+		}
 	}
 	return ChooseModel(world.Input(a, issueID, issueProfile), now), nil
 }

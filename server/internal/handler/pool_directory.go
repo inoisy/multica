@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/multica-ai/multica/server/internal/service"
 	db "github.com/multica-ai/multica/server/pkg/db/generated"
 )
 
@@ -18,6 +19,8 @@ type poolDirectory struct {
 	accounts map[string]db.Subscription
 	grants   map[string][]db.SubscriptionPoolGrant
 	envs     map[string][]db.RuntimeProfile
+	// envPool maps an environment id to the pool it spends.
+	envPool map[string]string
 }
 
 func (h *Handler) loadPoolDirectory(ctx context.Context) (*poolDirectory, error) {
@@ -37,6 +40,10 @@ func (h *Handler) loadPoolDirectory(ctx context.Context) (*poolDirectory, error)
 	if err != nil {
 		return nil, err
 	}
+	envPools, err := h.Queries.ListAllRuntimeProfilePools(ctx)
+	if err != nil {
+		return nil, err
+	}
 	accounts, err := h.Queries.ListSubscriptions(ctx)
 	if err != nil {
 		return nil, err
@@ -44,6 +51,10 @@ func (h *Handler) loadPoolDirectory(ctx context.Context) (*poolDirectory, error)
 	d := &poolDirectory{
 		pools: map[string]db.SubscriptionPool{}, members: map[string][]db.SubscriptionPoolMember{}, accounts: map[string]db.Subscription{},
 		grants: map[string][]db.SubscriptionPoolGrant{}, envs: map[string][]db.RuntimeProfile{},
+		envPool: make(map[string]string, len(envPools)),
+	}
+	for _, ep := range envPools {
+		d.envPool[uuidToString(ep.RuntimeProfileID)] = uuidToString(ep.PoolID)
 	}
 	for _, p := range pools {
 		id := uuidToString(p.ID)
@@ -57,7 +68,9 @@ func (h *Handler) loadPoolDirectory(ctx context.Context) (*poolDirectory, error)
 		d.grants[uuidToString(g.PoolID)] = append(d.grants[uuidToString(g.PoolID)], g)
 	}
 	for _, e := range envs {
-		d.envs[uuidToString(e.PoolID)] = append(d.envs[uuidToString(e.PoolID)], e)
+		if poolID, ok := d.envPool[uuidToString(e.ID)]; ok {
+			d.envs[poolID] = append(d.envs[poolID], e)
+		}
 	}
 	for _, a := range accounts {
 		d.accounts[uuidToString(a.ID)] = a
@@ -91,11 +104,11 @@ func legacyShareKey(p db.SubscriptionPool, grants int) *string {
 // compat fills the pool fields older clients read from a runtime profile.
 func (d *poolDirectory) compat(resp *RuntimeProfileResponse, p db.RuntimeProfile) {
 	resp.Subscriptions = []string{}
-	if !p.PoolID.Valid {
+	id, ok := d.envPool[uuidToString(p.ID)]
+	if !ok {
 		resp.SpendOrder = "first"
 		return
 	}
-	id := uuidToString(p.PoolID)
 	pool, ok := d.pools[id]
 	if !ok {
 		resp.SpendOrder = "first"
@@ -111,7 +124,7 @@ func (d *poolDirectory) compat(resp *RuntimeProfileResponse, p db.RuntimeProfile
 // runtimeProfileResponse is a runtime profile with the pool fields of its pool.
 func (h *Handler) runtimeProfileResponse(ctx context.Context, p db.RuntimeProfile) RuntimeProfileResponse {
 	resp := runtimeProfileToResponse(p)
-	if !p.PoolID.Valid {
+	if poolID, err := service.RuntimeProfilePoolID(ctx, h.Queries, p.ID); err != nil || !poolID.Valid {
 		return resp
 	}
 	if d, err := h.loadPoolDirectory(ctx); err == nil {
@@ -124,10 +137,15 @@ func (h *Handler) runtimeProfileResponse(ctx context.Context, p db.RuntimeProfil
 // pools once.
 func (h *Handler) runtimeProfileResponses(ctx context.Context, profiles []db.RuntimeProfile) []RuntimeProfileResponse {
 	out := make([]RuntimeProfileResponse, len(profiles))
+	ids := make([]pgtype.UUID, len(profiles))
+	for i, p := range profiles {
+		ids[i] = p.ID
+	}
+	pools, _ := service.RuntimeProfilePools(ctx, h.Queries, ids)
 	var d *poolDirectory
 	for i, p := range profiles {
 		out[i] = runtimeProfileToResponse(p)
-		if !p.PoolID.Valid {
+		if _, ok := pools[p.ID]; !ok {
 			continue
 		}
 		if d == nil {

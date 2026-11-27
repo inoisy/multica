@@ -854,7 +854,7 @@ WHERE id = (
       AND atq.status = 'queued'
   -- A model-routed run whose every model is unavailable waits for the
   -- sweep to route it again; claiming it would only be rolled back.
-  AND (atq.model_choice IS NULL OR atq.model_choice->>'reason' IS DISTINCT FROM 'all_unavailable')
+  AND NOT EXISTS (SELECT 1 FROM task_model_choice tmc WHERE tmc.task_id = atq.id AND tmc.model_choice->>'reason' = 'all_unavailable')
       AND (atq.context->>'wakeup_id' IS NULL OR EXISTS (SELECT 1 FROM issue_wakeup w WHERE w.id=(atq.context->>'wakeup_id')::uuid AND w.disabled_at IS NULL AND w.revision=(atq.context->>'wakeup_revision')::bigint))
       AND EXISTS (
           SELECT 1
@@ -864,7 +864,7 @@ WHERE id = (
             -- A task's persisted runtime is not authority after an agent rebind.
             -- A model-routed run (model_choice set) is placed on a runtime of its
         -- model list, not on the agent's own runtime.
-        AND (a.runtime_id = atq.runtime_id OR atq.model_choice IS NOT NULL)
+        AND (a.runtime_id = atq.runtime_id OR EXISTS (SELECT 1 FROM task_model_choice tmc WHERE tmc.task_id = atq.id AND tmc.model_choice IS NOT NULL))
             -- Queued private-runtime rows are claimable so the handler can
             -- settle an owner mismatch through the existing FailTask path
             -- before daemon delivery. Public runtimes remain shareable across
@@ -996,7 +996,7 @@ WHERE id = (
           WHERE a.id = atq.agent_id
             -- A model-routed run (model_choice set) is placed on a runtime of its
         -- model list, not on the agent's own runtime.
-        AND (a.runtime_id = atq.runtime_id OR atq.model_choice IS NOT NULL)
+        AND (a.runtime_id = atq.runtime_id OR EXISTS (SELECT 1 FROM task_model_choice tmc WHERE tmc.task_id = atq.id AND tmc.model_choice IS NOT NULL))
             AND (
                 r.visibility = 'public'
                 OR (
@@ -1045,7 +1045,7 @@ WITH candidates AS MATERIALIZED (
           WHERE a.id = atq.agent_id
             -- A model-routed run (model_choice set) is placed on a runtime of its
         -- model list, not on the agent's own runtime.
-        AND (a.runtime_id = atq.runtime_id OR atq.model_choice IS NOT NULL)
+        AND (a.runtime_id = atq.runtime_id OR EXISTS (SELECT 1 FROM task_model_choice tmc WHERE tmc.task_id = atq.id AND tmc.model_choice IS NOT NULL))
             AND (
                 r.visibility = 'public'
                 OR (
@@ -2314,7 +2314,7 @@ WHERE atq.runtime_id = $1
   AND atq.status = 'queued'
   -- A model-routed run whose every model is unavailable waits for the
   -- sweep to route it again; claiming it would only be rolled back.
-  AND (atq.model_choice IS NULL OR atq.model_choice->>'reason' IS DISTINCT FROM 'all_unavailable')
+  AND NOT EXISTS (SELECT 1 FROM task_model_choice tmc WHERE tmc.task_id = atq.id AND tmc.model_choice->>'reason' = 'all_unavailable')
       AND (atq.context->>'wakeup_id' IS NULL OR EXISTS (SELECT 1 FROM issue_wakeup w WHERE w.id=(atq.context->>'wakeup_id')::uuid AND w.disabled_at IS NULL AND w.revision=(atq.context->>'wakeup_revision')::bigint))
   AND EXISTS (
       -- Keep this authorization fence in sync with ClaimAgentTask.
@@ -2324,7 +2324,7 @@ WHERE atq.runtime_id = $1
       WHERE a.id = atq.agent_id
         -- A model-routed run (model_choice set) is placed on a runtime of its
         -- model list, not on the agent's own runtime.
-        AND (a.runtime_id = atq.runtime_id OR atq.model_choice IS NOT NULL)
+        AND (a.runtime_id = atq.runtime_id OR EXISTS (SELECT 1 FROM task_model_choice tmc WHERE tmc.task_id = atq.id AND tmc.model_choice IS NOT NULL))
         AND (
             r.visibility = 'public'
             OR r.visibility = 'private'
@@ -2440,7 +2440,7 @@ WHERE atq.runtime_id = ANY(@runtime_ids::uuid[])
   AND atq.status = 'queued'
   -- A model-routed run whose every model is unavailable waits for the
   -- sweep to route it again; claiming it would only be rolled back.
-  AND (atq.model_choice IS NULL OR atq.model_choice->>'reason' IS DISTINCT FROM 'all_unavailable')
+  AND NOT EXISTS (SELECT 1 FROM task_model_choice tmc WHERE tmc.task_id = atq.id AND tmc.model_choice->>'reason' = 'all_unavailable')
       AND (atq.context->>'wakeup_id' IS NULL OR EXISTS (SELECT 1 FROM issue_wakeup w WHERE w.id=(atq.context->>'wakeup_id')::uuid AND w.disabled_at IS NULL AND w.revision=(atq.context->>'wakeup_revision')::bigint))
   AND EXISTS (
       -- Keep this authorization fence in sync with ClaimAgentTask.
@@ -2450,7 +2450,7 @@ WHERE atq.runtime_id = ANY(@runtime_ids::uuid[])
       WHERE a.id = atq.agent_id
         -- A model-routed run (model_choice set) is placed on a runtime of its
         -- model list, not on the agent's own runtime.
-        AND (a.runtime_id = atq.runtime_id OR atq.model_choice IS NOT NULL)
+        AND (a.runtime_id = atq.runtime_id OR EXISTS (SELECT 1 FROM task_model_choice tmc WHERE tmc.task_id = atq.id AND tmc.model_choice IS NOT NULL))
         AND (
             r.visibility = 'public'
             OR r.visibility = 'private'
@@ -2890,14 +2890,3 @@ RETURNING *;
 -- name: GetCommentThreadRootID :one
 SELECT comment_thread_root_id(@comment_id::uuid)::uuid AS id;
 
--- name: ListRunFacts24Hours :many
--- Count attempts once, by the runtime the claim recorded and the account the
--- daemon confirmed, never from quota observations or today's mutable
--- agent/profile configuration.
-SELECT COALESCE(NULLIF(account_fact ->> 'subscription_id', ''), '')::text AS subscription_id,
-       count(*)::bigint AS runs
-FROM agent_task_queue
-WHERE COALESCE(started_at, dispatched_at) >= @since::timestamptz
-  AND COALESCE(started_at, dispatched_at) < @until::timestamptz
-  AND COALESCE(NULLIF(model_choice #>> '{chosen,runtime_id}', ''), runtime_id::text) = @runtime_id::text
-GROUP BY 1;

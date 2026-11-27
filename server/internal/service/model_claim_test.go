@@ -121,11 +121,10 @@ func (r *modelClaimRig) agent(name string, profile pgtype.UUID) db.Agent {
 // route it, as every enqueue path does.
 func (r *modelClaimRig) enqueue(agent db.Agent, issueProfile pgtype.UUID) db.AgentTaskQueue {
 	r.t.Helper()
-	cols := testutil.Cols{}
+	issue := r.fx.Issue(r.t, "models issue")
 	if issueProfile.Valid {
-		cols["model_profile_id"] = util.UUIDToString(issueProfile)
+		r.fx.Exec(r.t, `INSERT INTO issue_model_profile (issue_id, workspace_id, model_profile_id) VALUES ($1, $2, $3)`, issue, r.ws, issueProfile)
 	}
-	issue := r.fx.Issue(r.t, "models issue", cols)
 	id := r.fx.Task(r.t, util.UUIDToString(agent.ID), testutil.Cols{"runtime_id": util.UUIDToString(agent.RuntimeID), "issue_id": issue})
 	task, err := r.q.GetAgentTask(r.ctx, util.MustParseUUID(id))
 	if err != nil {
@@ -133,6 +132,26 @@ func (r *modelClaimRig) enqueue(agent db.Agent, issueProfile pgtype.UUID) db.Age
 	}
 	r.svc.NotifyTaskEnqueued(r.ctx, task)
 	return r.task(task.ID)
+}
+
+// profileOf is the profile the agent runs on, read from its side row.
+func (r *modelClaimRig) profileOf(agent db.Agent) pgtype.UUID {
+	r.t.Helper()
+	id, err := AgentModelProfileID(r.ctx, r.q, agent.ID)
+	if err != nil {
+		r.t.Fatal(err)
+	}
+	return id
+}
+
+// choice is the run's side row with the recorded model choice and account.
+func (r *modelClaimRig) choice(id pgtype.UUID) db.TaskModelChoice {
+	r.t.Helper()
+	c, err := TaskModelChoice(r.ctx, r.q, id)
+	if err != nil {
+		r.t.Fatal(err)
+	}
+	return c
 }
 
 func (r *modelClaimRig) task(id pgtype.UUID) db.AgentTaskQueue {
@@ -166,13 +185,13 @@ func (r *modelClaimRig) runtimeOf(task db.AgentTaskQueue) string {
 	return util.UUIDToString(task.RuntimeID)
 }
 
-func choiceOf(t *testing.T, task db.AgentTaskQueue) ModelChoice {
+func choiceOf(t *testing.T, recorded db.TaskModelChoice) ModelChoice {
 	t.Helper()
 	var c ModelChoice
-	if task.ModelChoice == nil {
-		t.Fatalf("task %s has no model choice", util.UUIDToString(task.ID))
+	if recorded.ModelChoice == nil {
+		t.Fatalf("task %s has no model choice", util.UUIDToString(recorded.TaskID))
 	}
-	if err := json.Unmarshal(task.ModelChoice, &c); err != nil {
+	if err := json.Unmarshal(recorded.ModelChoice, &c); err != nil {
 		t.Fatal(err)
 	}
 	return c
@@ -187,18 +206,18 @@ func TestModelOptionClaimTakesFirstAvailableRow(t *testing.T) {
 	agent := r.agent("models first", r.strong)
 
 	task := r.enqueue(agent, pgtype.UUID{})
-	if r.runtimeOf(task) != "codex" || choiceOf(t, task).Position != 1 {
-		t.Fatalf("routed to %s, %+v", r.runtimeOf(task), choiceOf(t, task))
+	if r.runtimeOf(task) != "codex" || choiceOf(t, r.choice(task.ID)).Position != 1 {
+		t.Fatalf("routed to %s, %+v", r.runtimeOf(task), choiceOf(t, r.choice(task.ID)))
 	}
 	// A daemon that serves another runtime of the list does not take it.
 	if got := r.claim("claude"); got != nil {
 		t.Fatalf("claude took the run of codex: %v", got.ID)
 	}
 	claimed := r.claim("codex")
-	if claimed == nil || claimed.ID != task.ID || !claimed.ModelPosition.Valid || claimed.ModelPosition.Int32 != 1 {
+	if claimed == nil || claimed.ID != task.ID || !r.choice(claimed.ID).ModelPosition.Valid || r.choice(claimed.ID).ModelPosition.Int32 != 1 {
 		t.Fatalf("codex claim: %+v", claimed)
 	}
-	if c := choiceOf(t, r.task(task.ID)); c.Chosen == nil || c.Chosen.Model != "sol" || c.Chosen.ThinkingLevel != "high" || c.Reason != ModelReasonPrimary {
+	if c := choiceOf(t, r.choice(task.ID)); c.Chosen == nil || c.Chosen.Model != "sol" || c.Chosen.ThinkingLevel != "high" || c.Reason != ModelReasonPrimary {
 		t.Fatalf("recorded choice: %+v", c)
 	}
 }
@@ -209,8 +228,8 @@ func TestModelOptionClaimSkipsUnavailableAndRehomes(t *testing.T) {
 	// The first row's runtime is offline: the run goes to row 2 at enqueue.
 	r.fx.Exec(t, "UPDATE agent_runtime SET status='offline' WHERE id=$1", r.rt["codex"])
 	task := r.enqueue(agent, pgtype.UUID{})
-	if r.runtimeOf(task) != "claude" || choiceOf(t, task).Reason != ModelReasonFallbackRow {
-		t.Fatalf("offline row 1: %s %+v", r.runtimeOf(task), choiceOf(t, task))
+	if r.runtimeOf(task) != "claude" || choiceOf(t, r.choice(task.ID)).Reason != ModelReasonFallbackRow {
+		t.Fatalf("offline row 1: %s %+v", r.runtimeOf(task), choiceOf(t, r.choice(task.ID)))
 	}
 	// Row 1 comes back before anyone claimed: claude does not take a run
 	// whose list now chooses codex; the run moves there instead.
@@ -221,7 +240,7 @@ func TestModelOptionClaimSkipsUnavailableAndRehomes(t *testing.T) {
 	if moved := r.task(task.ID); r.runtimeOf(moved) != "codex" || moved.Status != "queued" {
 		t.Fatalf("run not re-homed: %s %s", r.runtimeOf(moved), moved.Status)
 	}
-	if got := r.claim("codex"); got == nil || got.ModelPosition.Int32 != 1 {
+	if got := r.claim("codex"); got == nil || r.choice(got.ID).ModelPosition.Int32 != 1 {
 		t.Fatalf("codex claim after re-home: %+v", got)
 	}
 }
@@ -262,10 +281,10 @@ func TestQuotaFailureMarksRuntimeAndRetriesOnceOnNextRow(t *testing.T) {
 		t.Fatalf("retry routed to %s (%s)", r.runtimeOf(child), child.Status)
 	}
 	got := r.claim("claude")
-	if got == nil || got.ID != child.ID || got.ModelPosition.Int32 != 2 {
+	if got == nil || got.ID != child.ID || r.choice(got.ID).ModelPosition.Int32 != 2 {
 		t.Fatalf("retry claim: %+v", got)
 	}
-	if c := choiceOf(t, r.task(child.ID)); c.Reason != ModelReasonFallbackRow || c.Chosen.Model != "opus" {
+	if c := choiceOf(t, r.choice(child.ID)); c.Reason != ModelReasonFallbackRow || c.Chosen.Model != "opus" {
 		t.Fatalf("retry choice: %+v", c)
 	}
 }
@@ -311,7 +330,7 @@ func TestIdleAllUnavailableWaitsNotifiesOnceAndSweepReleases(t *testing.T) {
 		r.limit(rt, soon)
 	}
 	task := r.enqueue(agent, pgtype.UUID{})
-	c := choiceOf(t, task)
+	c := choiceOf(t, r.choice(task.ID))
 	if c.Reason != ModelReasonAllUnavailable || c.WaitUntil == nil {
 		t.Fatalf("waiting choice: %+v", c)
 	}
@@ -348,7 +367,7 @@ func TestIdleAllUnavailableWaitsNotifiesOnceAndSweepReleases(t *testing.T) {
 		t.Fatalf("second sweep changed %d (%v)", n, err)
 	}
 	got := r.claim("codex")
-	if got == nil || got.ModelPosition.Int32 != 1 {
+	if got == nil || r.choice(got.ID).ModelPosition.Int32 != 1 {
 		t.Fatalf("after the reset the primary row runs: %+v", got)
 	}
 	if n := r.count(restored, r.ws); n != 1 {
@@ -384,7 +403,7 @@ func TestModelOptionExhaustedProfileUsedAtClaim(t *testing.T) {
 	if got == nil {
 		t.Fatal("spare did not claim")
 	}
-	if c := choiceOf(t, r.task(task.ID)); c.Reason != ModelReasonFallbackProfile || c.ProfileName != "Mid" || len(c.ExhaustedProfiles) != 1 {
+	if c := choiceOf(t, r.choice(task.ID)); c.Reason != ModelReasonFallbackProfile || c.ProfileName != "Mid" || len(c.ExhaustedProfiles) != 1 {
 		t.Fatalf("choice: %+v", c)
 	}
 	if n := r.count("SELECT count(*) FROM inbox_item WHERE workspace_id=$1", r.ws); n != 0 {
@@ -419,10 +438,10 @@ func TestModelOptionIssueProfileOnlyForItsRuns(t *testing.T) {
 	agent := r.agent("models issue", r.strong)
 	withProfile := r.enqueue(agent, r.mid)
 	plain := r.enqueue(agent, pgtype.UUID{})
-	if r.runtimeOf(withProfile) != "spare" || choiceOf(t, withProfile).Source != ModelSourceIssueProfile {
-		t.Fatalf("issue profile: %s %+v", r.runtimeOf(withProfile), choiceOf(t, withProfile))
+	if r.runtimeOf(withProfile) != "spare" || choiceOf(t, r.choice(withProfile.ID)).Source != ModelSourceIssueProfile {
+		t.Fatalf("issue profile: %s %+v", r.runtimeOf(withProfile), choiceOf(t, r.choice(withProfile.ID)))
 	}
-	if r.runtimeOf(plain) != "codex" || choiceOf(t, plain).Source != ModelSourceAgentProfile {
+	if r.runtimeOf(plain) != "codex" || choiceOf(t, r.choice(plain.ID)).Source != ModelSourceAgentProfile {
 		t.Fatalf("other issue: %s", r.runtimeOf(plain))
 	}
 }
@@ -433,12 +452,13 @@ func TestModelOptionRunningRunUntouchedByListChange(t *testing.T) {
 	task := r.enqueue(agent, pgtype.UUID{})
 	r.claim("codex")
 	before := r.task(task.ID)
+	beforeChoice := r.choice(task.ID)
 	r.saveProfile(r.strong, "Strong", "", "glm:glm")
 	if _, err := r.svc.SweepModelRouting(r.ctx); err != nil {
 		t.Fatal(err)
 	}
 	after := r.task(task.ID)
-	if after.RuntimeID != before.RuntimeID || string(after.ModelChoice) != string(before.ModelChoice) || after.Status != "dispatched" {
+	if after.RuntimeID != before.RuntimeID || string(r.choice(task.ID).ModelChoice) != string(beforeChoice.ModelChoice) || after.Status != "dispatched" {
 		t.Fatalf("a dispatched run changed: %s → %s", r.runtimeOf(before), r.runtimeOf(after))
 	}
 }
@@ -447,17 +467,17 @@ func TestModelOptionPlainAgentAndKillSwitchUnchanged(t *testing.T) {
 	r := newModelClaimRig(t)
 	plain := r.agent("models plain", pgtype.UUID{})
 	task := r.enqueue(plain, pgtype.UUID{})
-	if task.ModelChoice != nil || r.runtimeOf(task) != "codex" {
-		t.Fatalf("a plain agent's run was routed: %s", task.ModelChoice)
+	if r.choice(task.ID).ModelChoice != nil || r.runtimeOf(task) != "codex" {
+		t.Fatalf("a plain agent's run was routed: %s", r.choice(task.ID).ModelChoice)
 	}
-	if got := r.claim("codex"); got == nil || got.ModelPosition.Valid {
+	if got := r.claim("codex"); got == nil || r.choice(got.ID).ModelPosition.Valid {
 		t.Fatalf("plain claim: %+v", got)
 	}
 
 	t.Setenv("MULTICA_MODEL_CHOICE", "off")
 	agent := r.agent("models switch off", r.strong)
 	r.fx.Exec(t, "UPDATE agent_runtime SET status='offline' WHERE id=$1", r.rt["codex"])
-	if task := r.enqueue(agent, pgtype.UUID{}); task.ModelChoice != nil || r.runtimeOf(task) != "codex" {
+	if task := r.enqueue(agent, pgtype.UUID{}); r.choice(task.ID).ModelChoice != nil || r.runtimeOf(task) != "codex" {
 		t.Fatalf("switched off, the run was still routed")
 	}
 }
@@ -539,13 +559,15 @@ func (r *modelClaimRig) poolOn(runtime, spend string, accts ...acct) (string, []
 		r.fx.Exec(r.t, `INSERT INTO subscription_usage (subscription_id, window_key, used_percent, resets_at, limit_reached, observed_at) VALUES ($1, 'week', $2, $3, $4, $5)`,
 			id, a.used, resets, a.limit, observed)
 	}
-	r.fx.QueryRow(r.t, `INSERT INTO runtime_profile (workspace_id, display_name, protocol_family, command_name, runtime_type, pool_id) VALUES ($1, $2, 'codex', 'codex', 'codex', $3) RETURNING id::text`,
-		r.ws, "env "+suffix, pool).Scan(&profile)
+	r.fx.QueryRow(r.t, `INSERT INTO runtime_profile (workspace_id, display_name, protocol_family, command_name, runtime_type) VALUES ($1, $2, 'codex', 'codex', 'codex') RETURNING id::text`,
+		r.ws, "env "+suffix).Scan(&profile)
+	r.fx.Exec(r.t, `INSERT INTO runtime_profile_pool (runtime_profile_id, workspace_id, pool_id) VALUES ($1, $2, $3)`, profile, r.ws, pool)
 	r.fx.Exec(r.t, `UPDATE agent_runtime SET profile_id = $2 WHERE id = $1`, r.rt[runtime], profile)
 	r.t.Cleanup(func() {
 		ctx := context.Background()
 		r.fx.Pool.Exec(ctx, `UPDATE agent_runtime SET profile_id = NULL WHERE id = $1`, r.rt[runtime])
 		r.fx.Pool.Exec(ctx, `DELETE FROM runtime_profile WHERE id = $1`, profile)
+		r.fx.Pool.Exec(ctx, `DELETE FROM runtime_profile_pool WHERE runtime_profile_id = $1`, profile)
 		r.fx.Pool.Exec(ctx, `DELETE FROM subscription_pool_member WHERE pool_id = $1`, pool)
 		r.fx.Pool.Exec(ctx, `DELETE FROM subscription_pool_grant WHERE pool_id = $1`, pool)
 		r.fx.Pool.Exec(ctx, `DELETE FROM subscription_pool WHERE id = $1`, pool)
@@ -585,7 +607,7 @@ func TestStaleLocalRefusalIsLiftedByAUsableAccount(t *testing.T) {
 	r.limit("claude", tomorrow)
 	r.limit("glm", tomorrow)
 	waiting := r.enqueue(agent, pgtype.UUID{})
-	if c := choiceOf(t, waiting); c.Reason != ModelReasonAllUnavailable || c.WaitReasonCode != ReasonAgentCap {
+	if c := choiceOf(t, r.choice(waiting.ID)); c.Reason != ModelReasonAllUnavailable || c.WaitReasonCode != ReasonAgentCap {
 		t.Fatalf("all exhausted must wait for the agent limit: %+v", c)
 	}
 	if r.claim("codex") != nil {
@@ -677,7 +699,7 @@ func TestEveryAttemptRecordsTheRejectedRowAndWhy(t *testing.T) {
 	if r.claim("codex") == nil {
 		t.Fatal("no claim")
 	}
-	first := choiceOf(t, r.task(task.ID))
+	first := choiceOf(t, r.choice(task.ID))
 	if first.Chosen == nil || len(first.Rows) < 3 || !first.Rows[0].Chosen {
 		t.Fatalf("first attempt: %+v", first)
 	}
@@ -686,7 +708,7 @@ func TestEveryAttemptRecordsTheRejectedRowAndWhy(t *testing.T) {
 	}
 	var childID pgtype.UUID
 	r.fx.QueryRow(t, "SELECT id FROM agent_task_queue WHERE retry_of_task_id=$1", task.ID).Scan(&childID)
-	retry := choiceOf(t, r.task(childID))
+	retry := choiceOf(t, r.choice(childID))
 	if retry.Chosen == nil || len(retry.Rows) < 3 {
 		t.Fatalf("retry choice: %+v", retry)
 	}

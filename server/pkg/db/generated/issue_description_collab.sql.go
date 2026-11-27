@@ -145,7 +145,7 @@ func (q *Queries) LinkUnboundAttachmentsToIssue(ctx context.Context, arg LinkUnb
 }
 
 const lockIssueByIDForUpdate = `-- name: LockIssueByIDForUpdate :one
-SELECT id, workspace_id, title, description, status, priority, assignee_type, assignee_id, creator_type, creator_id, parent_issue_id, acceptance_criteria, context_refs, position, due_date, created_at, updated_at, number, project_id, origin_type, origin_id, first_executed_at, start_date, metadata, stage, properties, revision, last_activity_at, triage_state, duplicate_of_issue_id, requester_user_id, description_revision, model_profile_id, stage_squad_id, stage_dispatch_by FROM issue WHERE id = $1 FOR UPDATE
+SELECT id, workspace_id, title, description, status, priority, assignee_type, assignee_id, creator_type, creator_id, parent_issue_id, acceptance_criteria, context_refs, position, due_date, created_at, updated_at, number, project_id, origin_type, origin_id, first_executed_at, start_date, metadata, stage, properties, revision, last_activity_at, triage_state, duplicate_of_issue_id, requester_user_id, description_revision FROM issue WHERE id = $1 FOR UPDATE
 `
 
 func (q *Queries) LockIssueByIDForUpdate(ctx context.Context, id pgtype.UUID) (Issue, error) {
@@ -184,9 +184,6 @@ func (q *Queries) LockIssueByIDForUpdate(ctx context.Context, id pgtype.UUID) (I
 		&i.DuplicateOfIssueID,
 		&i.RequesterUserID,
 		&i.DescriptionRevision,
-		&i.ModelProfileID,
-		&i.StageSquadID,
-		&i.StageDispatchBy,
 	)
 	return i, err
 }

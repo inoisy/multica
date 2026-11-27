@@ -42,8 +42,7 @@ func TestClaimCarriesSubscriptionPool(t *testing.T) {
 		t.Fatalf("offer: %+v %v", offer, err)
 	}
 	raw, _ := json.Marshal(offer)
-	task := &db.AgentTaskQueue{AccountOffer: raw}
-	pool := h.subscriptionPoolForTask(context.Background(), rt, task)
+	pool := h.subscriptionPoolForOffer(context.Background(), rt, raw)
 	if pool == nil || pool.SpendOrder != "first" || len(pool.Subscriptions) != 1 || pool.Subscriptions[0].Key != "subtest-claim" ||
 		pool.Subscriptions[0].CredentialPath != "~/.config/subtest-claim/token" {
 		t.Fatalf("pool: %+v", pool)
@@ -52,7 +51,7 @@ func TestClaimCarriesSubscriptionPool(t *testing.T) {
 		t.Fatalf("payload does not carry the offer: %+v vs %+v", pool, offer)
 	}
 	rt.ProfileID.Valid = false
-	if h.subscriptionPoolForTask(context.Background(), rt, task) != nil {
+	if h.subscriptionPoolForTask(context.Background(), rt, &db.AgentTaskQueue{}) != nil {
 		t.Fatal("built-in runtimes carry no pool")
 	}
 	if h.subscriptionPoolForTask(context.Background(), rt, &db.AgentTaskQueue{}) != nil {

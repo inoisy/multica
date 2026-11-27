@@ -23,13 +23,22 @@ func projectProfileOnAgents(ctx context.Context, q *db.Queries, workspaceID, pro
 // writer of model settings. Revoked rows stay visible in the saved profile;
 // the choice's permission gate prevents their use.
 func RestoreAgentModelProjections(ctx context.Context, q *db.Queries, agents []db.Agent) ([]db.Agent, error) {
+	ids := make([]pgtype.UUID, len(agents))
+	for i, a := range agents {
+		ids[i] = a.ID
+	}
+	settings, err := AgentModelSettingsByAgent(ctx, q, ids)
+	if err != nil {
+		return nil, err
+	}
 	seen := map[pgtype.UUID]bool{}
 	for _, a := range agents {
-		if a.ModelProfileID.Valid && !seen[a.ModelProfileID] {
-			if err := projectProfileOnAgents(ctx, q, a.WorkspaceID, a.ModelProfileID); err != nil {
+		profileID := settings[a.ID].ModelProfileID
+		if profileID.Valid && !seen[profileID] {
+			if err := projectProfileOnAgents(ctx, q, a.WorkspaceID, profileID); err != nil {
 				return nil, err
 			}
-			seen[a.ModelProfileID] = true
+			seen[profileID] = true
 		}
 	}
 	out := make([]db.Agent, len(agents))

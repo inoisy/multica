@@ -123,8 +123,16 @@ func RuntimeModelUsageOf(ctx context.Context, q *db.Queries, rt db.AgentRuntime)
 		if err != nil {
 			return out, err
 		}
+		ids := make([]pgtype.UUID, len(agents))
+		for i, a := range agents {
+			ids[i] = a.ID
+		}
+		settings, err := AgentModelSettingsByAgent(ctx, q, ids)
+		if err != nil {
+			return out, err
+		}
 		for _, a := range agents {
-			via := []string{util.UUIDToString(a.ModelProfileID)}
+			via := []string{util.UUIDToString(settings[a.ID].ModelProfileID)}
 			out.Agents = append(out.Agents, RuntimeServingAgent{AgentID: util.UUIDToString(a.ID), Name: a.Name, ViaProfiles: via})
 		}
 		issues, err := q.ListOpenIssuesWithModelProfile(ctx, db.ListOpenIssuesWithModelProfileParams{WorkspaceID: rt.WorkspaceID})
@@ -141,8 +149,16 @@ func RuntimeModelUsageOf(ctx context.Context, q *db.Queries, rt db.AgentRuntime)
 	if err != nil {
 		return out, err
 	}
+	boundIDs := make([]pgtype.UUID, len(bound))
+	for i, a := range bound {
+		boundIDs[i] = a.ID
+	}
+	boundSettings, err := AgentModelSettingsByAgent(ctx, q, boundIDs)
+	if err != nil {
+		return out, err
+	}
 	for _, a := range bound {
-		if !a.ModelProfileID.Valid {
+		if !boundSettings[a.ID].ModelProfileID.Valid {
 			out.Agents = append(out.Agents, RuntimeServingAgent{AgentID: util.UUIDToString(a.ID), Name: a.Name})
 		}
 	}

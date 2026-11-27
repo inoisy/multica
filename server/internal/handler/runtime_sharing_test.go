@@ -19,7 +19,8 @@ func TestRuntimeRevocationPreservesProfileProjection(t *testing.T) {
 	agentID := createRuntimePrivacyAgent(t, rtID, removedID, "Profile revocation")
 	profileID := dbfx.Insert(t, "model_profile", testutil.Cols{"workspace_id": testWorkspaceID, "name": "Revocation profile", "owner_agent_id": agentID})
 	dbfx.InsertNoID(t, "model_profile_option", testutil.Cols{"workspace_id": testWorkspaceID, "profile_id": profileID, "runtime_id": rtID, "position": 1, "model": "saved-model", "thinking_level": "high"}, "profile_id = $1", profileID)
-	dbfx.Exec(t, `UPDATE agent SET model_profile_id=$2, model='saved-model', thinking_level='high' WHERE id=$1`, agentID, profileID)
+	dbfx.Exec(t, `UPDATE agent SET model='saved-model', thinking_level='high' WHERE id=$1`, agentID)
+	setAgentProfile(t, agentID, profileID)
 	runtimePrivacyRequest(t, rtID, ownerID, map[string]any{
 		"expected_nonowner_agent_ids": []string{agentID}, "expected_task_ids": []string{},
 	}).Want(http.StatusOK)

@@ -798,6 +798,15 @@ deleted_model_profiles AS (
 deleted_pool_grants AS (
     DELETE FROM subscription_pool_grant WHERE subscription_pool_grant.workspace_id = $1
 ),
+deleted_agent_model_settings AS (
+    DELETE FROM agent_model_settings WHERE agent_model_settings.workspace_id = $1
+),
+deleted_issue_model_profiles AS (
+    DELETE FROM issue_model_profile WHERE issue_model_profile.workspace_id = $1
+),
+deleted_runtime_profile_pools AS (
+    DELETE FROM runtime_profile_pool WHERE runtime_profile_pool.workspace_id = $1
+),
 deleted_project_members AS (
     DELETE FROM project_member WHERE project_member.workspace_id = $1
 ),

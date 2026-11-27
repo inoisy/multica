@@ -12,16 +12,18 @@ func TestModelProfileReadsHideIssuesInPrivateProjects(t *testing.T) {
 	rig := newModelRig(t)
 	f := newPrivateProjectFixture(t)
 	profile := rig.createProfile(f.marker+" profile", rig.row("codex-main", "base", ""))["id"].(string)
-	agent := dbfx.Agent(t, f.marker+" agent", rig.runtimes["codex-main"], testutil.Cols{"model_profile_id": profile, "permission_mode": "public_to"})
+	agent := dbfx.Agent(t, f.marker+" agent", rig.runtimes["codex-main"], testutil.Cols{"permission_mode": "public_to"})
+	setAgentProfile(t, agent, profile)
 	for _, member := range []string{f.insider, f.outsider} {
 		dbfx.Insert(t, "agent_invocation_target", testutil.Cols{"agent_id": agent, "target_type": "member", "target_id": member})
 	}
 	for _, issue := range []string{f.secretIssue, f.publicIssue} {
-		dbfx.Exec(t, "UPDATE issue SET model_profile_id=$1, assignee_type='agent', assignee_id=$2 WHERE id=$3", profile, agent, issue)
-		dbfx.Task(t, agent, testutil.Cols{"issue_id": issue, "runtime_id": rig.runtimes["codex-main"], "status": "completed",
-			"model_position": 1, "model_choice": testutil.Raw(`'{"reason":"chosen"}'::jsonb`)})
-		dbfx.Task(t, agent, testutil.Cols{"issue_id": issue, "runtime_id": rig.runtimes["codex-main"], "status": "queued",
-			"model_choice": testutil.Raw(`'{"reason":"all_unavailable"}'::jsonb`)})
+		dbfx.Exec(t, "UPDATE issue SET assignee_type='agent', assignee_id=$1 WHERE id=$2", agent, issue)
+		setIssueProfile(t, issue, profile)
+		done := dbfx.Task(t, agent, testutil.Cols{"issue_id": issue, "runtime_id": rig.runtimes["codex-main"], "status": "completed"})
+		setTaskModelChoice(t, done, 1, `{"reason":"chosen"}`)
+		waiting := dbfx.Task(t, agent, testutil.Cols{"issue_id": issue, "runtime_id": rig.runtimes["codex-main"], "status": "queued"})
+		setTaskModelChoice(t, waiting, nil, `{"reason":"all_unavailable"}`)
 	}
 	secretTitle := f.marker + " secret issue"
 

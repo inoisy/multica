@@ -54,8 +54,6 @@ type Agent struct {
 	DisabledRuntimeSkills []byte      `json:"disabled_runtime_skills"`
 	ServiceTier           pgtype.Text `json:"service_tier"`
 	ConversationStarters  []byte      `json:"conversation_starters"`
-	ModelProfileID        pgtype.UUID `json:"model_profile_id"`
-	DisallowedTools       []byte      `json:"disallowed_tools"`
 }
 
 type AgentApp struct {
@@ -92,6 +90,13 @@ type AgentMcpServer struct {
 	ServerID  pgtype.UUID        `json:"server_id"`
 	Enabled   bool               `json:"enabled"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+type AgentModelSetting struct {
+	AgentID         pgtype.UUID `json:"agent_id"`
+	WorkspaceID     pgtype.UUID `json:"workspace_id"`
+	ModelProfileID  pgtype.UUID `json:"model_profile_id"`
+	DisallowedTools []byte      `json:"disallowed_tools"`
 }
 
 type AgentRuntime struct {
@@ -196,11 +201,7 @@ type AgentTaskQueue struct {
 	IssueSnapshot             []byte      `json:"issue_snapshot"`
 	WorkflowStep              pgtype.Text `json:"workflow_step"`
 	// Squad UUID for usage attribution and unified execution avatar grouping. Separate from squad_id (which carries leader/worker routing authority). NULL for standalone non-squad runs.
-	UsageSquadID  pgtype.UUID `json:"usage_squad_id"`
-	ModelPosition pgtype.Int4 `json:"model_position"`
-	ModelChoice   []byte      `json:"model_choice"`
-	AccountFact   []byte      `json:"account_fact"`
-	AccountOffer  []byte      `json:"account_offer"`
+	UsageSquadID pgtype.UUID `json:"usage_squad_id"`
 }
 
 type AgentToLabel struct {
@@ -1163,9 +1164,6 @@ type Issue struct {
 	DuplicateOfIssueID  pgtype.UUID        `json:"duplicate_of_issue_id"`
 	RequesterUserID     pgtype.UUID        `json:"requester_user_id"`
 	DescriptionRevision int64              `json:"description_revision"`
-	ModelProfileID      pgtype.UUID        `json:"model_profile_id"`
-	StageSquadID        pgtype.UUID        `json:"stage_squad_id"`
-	StageDispatchBy     pgtype.UUID        `json:"stage_dispatch_by"`
 }
 
 type IssueBlocker struct {
@@ -1279,6 +1277,12 @@ type IssueLabel struct {
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 	ResourceType string             `json:"resource_type"`
 	Description  string             `json:"description"`
+}
+
+type IssueModelProfile struct {
+	IssueID        pgtype.UUID `json:"issue_id"`
+	WorkspaceID    pgtype.UUID `json:"workspace_id"`
+	ModelProfileID pgtype.UUID `json:"model_profile_id"`
 }
 
 type IssuePrAutomation struct {
@@ -1926,7 +1930,12 @@ type RuntimeProfile struct {
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 	RuntimeType    string             `json:"runtime_type"`
 	DaemonID       pgtype.Text        `json:"daemon_id"`
-	PoolID         pgtype.UUID        `json:"pool_id"`
+}
+
+type RuntimeProfilePool struct {
+	RuntimeProfileID pgtype.UUID `json:"runtime_profile_id"`
+	WorkspaceID      pgtype.UUID `json:"workspace_id"`
+	PoolID           pgtype.UUID `json:"pool_id"`
 }
 
 type RuntimeRateLimit struct {
@@ -2180,6 +2189,14 @@ type TaskMessage struct {
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 	OutputTruncated pgtype.Bool        `json:"output_truncated"`
 	CallID          pgtype.Text        `json:"call_id"`
+}
+
+type TaskModelChoice struct {
+	TaskID        pgtype.UUID `json:"task_id"`
+	ModelPosition pgtype.Int4 `json:"model_position"`
+	ModelChoice   []byte      `json:"model_choice"`
+	AccountOffer  []byte      `json:"account_offer"`
+	AccountFact   []byte      `json:"account_fact"`
 }
 
 type TaskSupplement struct {

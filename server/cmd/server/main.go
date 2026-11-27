@@ -875,6 +875,9 @@ func main() {
 	if err := schedulerMgr.Register(scheduler.ModelRoutingJob(taskSvc)); err != nil {
 		slog.Error("scheduler: register model routing", "error", err)
 	}
+	if err := schedulerMgr.Register(scheduler.ModelSideRowsJob(taskSvc)); err != nil {
+		slog.Error("scheduler: register model side rows", "error", err)
+	}
 	if err := schedulerMgr.Register(scheduler.ChatWakeupJob(&service.ChatWakeupService{Tasks: taskSvc})); err != nil {
 		slog.Error("scheduler: register chat wakeups", "error", err)
 	}

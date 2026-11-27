@@ -82,7 +82,8 @@ func TestSnapshotCoversContextsAndDoesNotWrite(t *testing.T) {
 	project := fx.Project(t, "comparison project", testutil.Cols{"workflow_id": wf})
 	profile := fx.Insert(t, "model_profile", testutil.Cols{"workspace_id": ws, "name": "workflow issue models"})
 	fx.InsertNoID(t, "model_profile_option", testutil.Cols{"workspace_id": ws, "profile_id": profile, "position": 1, "runtime_id": rt, "model": "workflow-model"}, "profile_id=$1", profile)
-	workflowIssue := fx.Issue(t, "workflow issue without an agent assignee", testutil.Cols{"project_id": project, "status": "in_progress", "model_profile_id": profile})
+	workflowIssue := fx.Issue(t, "workflow issue without an agent assignee", testutil.Cols{"project_id": project, "status": "in_progress"})
+	fx.Exec(t, "INSERT INTO issue_model_profile (issue_id, workspace_id, model_profile_id) VALUES ($1, $2, $3)", workflowIssue, ws, profile)
 
 	now := time.Now().UTC()
 	take := func() snapshot {

@@ -78,8 +78,8 @@ func TestProjectionRollsBackWithTheChange(t *testing.T) {
 		t.Fatalf("a built-in row: %v", err)
 	}
 	got := r.refetch(agent)
-	if got.ModelProfileID != r.mid || r.fieldsOf(agent) != "spare|mini|" {
-		t.Fatalf("the selection was not rolled back: profile %v fields %s", got.ModelProfileID, r.fieldsOf(agent))
+	if r.profileOf(got) != r.mid || r.fieldsOf(agent) != "spare|mini|" {
+		t.Fatalf("the selection was not rolled back: profile %v fields %s", r.profileOf(got), r.fieldsOf(agent))
 	}
 }
 
@@ -109,8 +109,8 @@ func TestPersonalSingleAndResetProjectTheirRowOne(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := r.fieldsOf(agent); got != "glm|glm|" || agent.ModelProfileID != r.strong {
-		t.Fatalf("reset: %s on %v", got, agent.ModelProfileID)
+	if got := r.fieldsOf(agent); got != "glm|glm|" || r.profileOf(agent) != r.strong {
+		t.Fatalf("reset: %s on %v", got, r.profileOf(agent))
 	}
 }
 
@@ -126,7 +126,7 @@ func TestProfileFromAgentFieldsMakesAPersonalRow(t *testing.T) {
 		t.Fatal(err)
 	}
 	p, ok := r.personalOf(agent)
-	if !ok || agent.ModelProfileID != p.ID {
+	if !ok || r.profileOf(agent) != p.ID {
 		t.Fatalf("no personal profile: %+v", p)
 	}
 	rows, err := r.q.ListModelProfileOptions(r.ctx, p.ID)
@@ -197,23 +197,24 @@ func TestBuiltinEnvironmentsAreRefusedOnEveryWritePath(t *testing.T) {
 }
 
 func TestPoolEnvironmentMustRunTheStandardCommand(t *testing.T) {
-	env := db.RuntimeProfile{ProtocolFamily: "claude", RuntimeType: "claude", CommandName: "claude", PoolID: util.MustParseUUID("11111111-1111-4111-8111-111111111111")}
-	if !PoolCommandMatches(env) {
+	env := db.RuntimeProfile{ProtocolFamily: "claude", RuntimeType: "claude", CommandName: "claude"}
+	pool := util.MustParseUUID("11111111-1111-4111-8111-111111111111")
+	if !PoolCommandMatches(env, pool) {
 		t.Error("the standard command was refused")
 	}
 	// An empty pool is still a pool, however few accounts it has.
 	env.CommandName = "claude-direct"
-	if PoolCommandMatches(env) {
+	if PoolCommandMatches(env, pool) {
 		t.Error("a wrapper in a pool environment passed")
 	}
 	// An old profile without runtime_type is read by its protocol family.
 	env.CommandName, env.RuntimeType = "claude", ""
-	if !PoolCommandMatches(env) {
+	if !PoolCommandMatches(env, pool) {
 		t.Error("an empty runtime_type must read as the protocol family")
 	}
 	// Without a pool the command is the environment's own business.
-	env.CommandName, env.PoolID = "qwen-loodsen", pgtype.UUID{}
-	if !PoolCommandMatches(env) {
+	env.CommandName = "qwen-loodsen"
+	if !PoolCommandMatches(env, pgtype.UUID{}) {
 		t.Error("an own login was refused")
 	}
 }
@@ -309,8 +310,9 @@ func TestRuntimeModelUsageListsEveryReference(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r.fx.Issue(t, "usage open issue", testutil.Cols{"model_profile_id": util.UUIDToString(fallback)})
-	closed := r.fx.Issue(t, "usage closed issue", testutil.Cols{"model_profile_id": util.UUIDToString(base)})
+	open := r.fx.Issue(t, "usage open issue")
+	closed := r.fx.Issue(t, "usage closed issue")
+	r.fx.Exec(t, `INSERT INTO issue_model_profile (issue_id, workspace_id, model_profile_id) VALUES ($1, $3, $4), ($2, $3, $5)`, open, closed, r.ws, fallback, base)
 	r.fx.Exec(t, "UPDATE issue SET status='done' WHERE id=$1", closed)
 	plainID := r.fx.Agent(t, "usage plain", r.rt["spare"])
 

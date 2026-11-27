@@ -26,11 +26,11 @@ func claimedAccountRun(t *testing.T) (*poolRig, db.AgentTaskQueue, AccountOffer)
 	if claimed == nil || claimed.ID != task.ID {
 		t.Fatal("run was not claimed")
 	}
-	offer, ok := ParseAccountOffer(claimed.AccountOffer)
+	offer, ok := ParseAccountOffer(r.choice(claimed.ID).AccountOffer)
 	if !ok || len(offer.Subscriptions) != 2 {
-		t.Fatalf("claim has no offer: %s", claimed.AccountOffer)
+		t.Fatalf("claim has no offer: %s", r.choice(claimed.ID).AccountOffer)
 	}
-	stored := r.task(task.ID)
+	stored := r.choice(task.ID)
 	storedOffer, ok := ParseAccountOffer(stored.AccountOffer)
 	if !ok || !reflect.DeepEqual(storedOffer, offer) || stored.AccountFact != nil {
 		t.Fatal("offer was not stored with claim")
@@ -89,7 +89,7 @@ func TestAccountConfirmationRejectsUnrelatedAssignments(t *testing.T) {
 			if _, err := r.svc.ConfirmTaskAccount(r.ctx, task.ID, rt, daemon, req, time.Now()); err == nil {
 				t.Fatal("unrelated confirmation succeeded")
 			}
-			if r.task(task.ID).AccountFact != nil {
+			if r.choice(task.ID).AccountFact != nil {
 				t.Fatal("rejected confirmation wrote a fact")
 			}
 		})
@@ -130,7 +130,7 @@ func TestConcurrentAccountConfirmationsKeepTheFirstFact(t *testing.T) {
 	if successes != 1 || conflicts != 1 {
 		t.Fatalf("successes=%d conflicts=%d", successes, conflicts)
 	}
-	if _, ok := ParseAccountFact(r.task(task.ID).AccountFact); !ok {
+	if _, ok := ParseAccountFact(r.choice(task.ID).AccountFact); !ok {
 		t.Fatal("no fact stored")
 	}
 }
@@ -146,8 +146,8 @@ func TestReclaimReplacesTheOfferAndClearsThePreviousFact(t *testing.T) {
 	if claimed == nil || claimed.ID != task.ID {
 		t.Fatal("task was not reassigned")
 	}
-	next, ok := ParseAccountOffer(claimed.AccountOffer)
-	if !ok || next.OfferID == previous.OfferID || next.DaemonID != "replacement-daemon" || claimed.AccountFact != nil {
+	next, ok := ParseAccountOffer(r.choice(claimed.ID).AccountOffer)
+	if !ok || next.OfferID == previous.OfferID || next.DaemonID != "replacement-daemon" || r.choice(claimed.ID).AccountFact != nil {
 		t.Fatalf("reclaim kept old assignment: %+v", claimed)
 	}
 	if _, err := r.svc.ConfirmTaskAccount(r.ctx, task.ID, task.RuntimeID, "replacement-daemon", confirmation(previous, 0), time.Now()); !errors.Is(err, ErrAccountStaleOffer) {

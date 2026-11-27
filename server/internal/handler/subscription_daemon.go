@@ -59,7 +59,16 @@ func (h *Handler) subscriptionPoolForTask(ctx context.Context, rt db.AgentRuntim
 	if !rt.ProfileID.Valid || task == nil {
 		return nil
 	}
-	offer, ok := service.ParseAccountOffer(task.AccountOffer)
+	recorded, err := service.TaskModelChoice(ctx, h.Queries, task.ID)
+	if err != nil {
+		return nil
+	}
+	return h.subscriptionPoolForOffer(ctx, rt, recorded.AccountOffer)
+}
+
+// subscriptionPoolForOffer is the pool payload of a stored account offer.
+func (h *Handler) subscriptionPoolForOffer(ctx context.Context, rt db.AgentRuntime, rawOffer []byte) *SubscriptionPoolPayload {
+	offer, ok := service.ParseAccountOffer(rawOffer)
 	if !ok {
 		return nil
 	}
@@ -137,9 +146,17 @@ func (h *Handler) workspacePoolSubscriptions(ctx context.Context, ws pgtype.UUID
 	if len(profiles) == 0 {
 		return out, nil
 	}
-	poolIDs := make([]pgtype.UUID, len(profiles))
+	profileIDs := make([]pgtype.UUID, len(profiles))
 	for i, p := range profiles {
-		poolIDs[i] = p.PoolID
+		profileIDs[i] = p.ID
+	}
+	pools, err := service.RuntimeProfilePools(ctx, h.Queries, profileIDs)
+	if err != nil {
+		return nil, err
+	}
+	poolIDs := make([]pgtype.UUID, 0, len(pools))
+	for _, poolID := range pools {
+		poolIDs = append(poolIDs, poolID)
 	}
 	members, err := h.Queries.ListSubscriptionPoolMembersByPools(ctx, poolIDs)
 	if err != nil {

@@ -25,3 +25,21 @@ func ModelRoutingJob(routing ModelRouting) JobSpec {
 		},
 	}
 }
+
+// ModelSideRows removes side rows whose agent, issue, run or environment is gone.
+type ModelSideRows interface {
+	SweepModelSideRows(context.Context) error
+}
+
+// ModelSideRowsJob keeps the model side tables free of rows left by upstream
+// deletes, which do not know these tables.
+func ModelSideRowsJob(rows ModelSideRows) JobSpec {
+	return JobSpec{
+		Name: "model_side_rows", Cadence: time.Hour, CatchUpMode: CatchUpLatestOnly, CatchUpWindow: 24 * time.Hour,
+		RunTimeout: 5 * time.Minute, StaleTimeout: 10 * time.Minute, HeartbeatInterval: 30 * time.Second,
+		AllowStaleReentry: true, MaxAttempts: 1, Scopes: StaticScopes(ScopeGlobal),
+		Handler: func(ctx context.Context, _ HandlerInput) (HandlerResult, error) {
+			return HandlerResult{}, rows.SweepModelSideRows(ctx)
+		},
+	}
+}

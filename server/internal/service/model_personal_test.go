@@ -40,8 +40,8 @@ func TestPersonalProfileIsMadeEditedAndReset(t *testing.T) {
 		t.Fatal(err)
 	}
 	p, ok := r.personalOf(agent)
-	if !ok || agent.ModelProfileID != p.ID || p.BasedOnProfileID != r.strong || p.OwnerAgentID != agent.ID {
-		t.Fatalf("personal profile: %+v agent on %v", p, agent.ModelProfileID)
+	if !ok || r.profileOf(agent) != p.ID || p.BasedOnProfileID != r.strong || p.OwnerAgentID != agent.ID {
+		t.Fatalf("personal profile: %+v agent on %v", p, r.profileOf(agent))
 	}
 	if p.Name != "personal agent" {
 		t.Fatalf("name %q", p.Name)
@@ -71,8 +71,8 @@ func TestPersonalProfileIsMadeEditedAndReset(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if agent.ModelProfileID != r.strong {
-		t.Fatalf("agent on %v after the reset", agent.ModelProfileID)
+	if r.profileOf(agent) != r.strong {
+		t.Fatalf("agent on %v after the reset", r.profileOf(agent))
 	}
 	if _, ok := r.personalOf(agent); ok {
 		t.Fatal("personal profile survived the reset")
@@ -108,7 +108,7 @@ func TestOnlyTheOwnerUsesAPersonalProfile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	personal := util.UUIDToString(owner.ModelProfileID)
+	personal := util.UUIDToString(r.profileOf(owner))
 
 	if _, err := r.profiles.SaveAgentModels(r.ctx, stranger, AgentModelsInput{ModelProfileID: &personal}); !errors.Is(err, ErrModelProfileInvalid) {
 		t.Fatalf("another agent on the personal profile: %v", err)
@@ -118,17 +118,17 @@ func TestOnlyTheOwnerUsesAPersonalProfile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := r.profiles.SetIssueProfile(r.ctx, row, owner.ModelProfileID); !errors.Is(err, ErrModelProfileInvalid) {
+	if _, err := r.profiles.SetIssueProfile(r.ctx, row, r.profileOf(owner)); !errors.Is(err, ErrModelProfileInvalid) {
 		t.Fatalf("issue on a personal profile: %v", err)
 	}
 	if _, err := r.profiles.SaveProfile(r.ctx, r.ws, r.mid, r.owner, ModelProfileInput{Name: "Mid", WhenExhaustedProfileID: &personal, Options: r.rows("spare:mini")}); !errors.Is(err, ErrModelProfileInvalid) {
 		t.Fatalf("fallback to a personal profile: %v", err)
 	}
 	// A personal profile is not edited through the shared profile API and cannot be deleted there.
-	if _, err := r.profiles.SaveProfile(r.ctx, r.ws, owner.ModelProfileID, r.owner, ModelProfileInput{Name: "x", Options: r.rows("glm:glm")}); !errors.Is(err, ErrModelProfileNotFound) {
+	if _, err := r.profiles.SaveProfile(r.ctx, r.ws, r.profileOf(owner), r.owner, ModelProfileInput{Name: "x", Options: r.rows("glm:glm")}); !errors.Is(err, ErrModelProfileNotFound) {
 		t.Fatalf("shared API on a personal profile: %v", err)
 	}
-	if err := r.profiles.DeleteProfile(r.ctx, r.ws, owner.ModelProfileID); !errors.Is(err, ErrModelProfileNotFound) {
+	if err := r.profiles.DeleteProfile(r.ctx, r.ws, r.profileOf(owner)); !errors.Is(err, ErrModelProfileNotFound) {
 		t.Fatalf("delete of a personal profile through the shared API: %v", err)
 	}
 }
@@ -148,8 +148,8 @@ func TestDeletingTheBaseKeepsThePersonalProfile(t *testing.T) {
 	if !ok || p.BasedOnProfileID.Valid {
 		t.Fatalf("personal profile after the base is gone: %+v %v", p, ok)
 	}
-	if got := r.refetch(agent); got.ModelProfileID != p.ID {
-		t.Fatalf("agent moved off its personal profile: %v", got.ModelProfileID)
+	if got := r.refetch(agent); r.profileOf(got) != p.ID {
+		t.Fatalf("agent moved off its personal profile: %v", r.profileOf(got))
 	}
 	if n := r.count("SELECT count(*) FROM model_profile_option WHERE profile_id=$1", p.ID); n != 1 {
 		t.Fatalf("rows of the personal profile: %d", n)
@@ -159,8 +159,8 @@ func TestDeletingTheBaseKeepsThePersonalProfile(t *testing.T) {
 	if _, err := r.profiles.ResetPersonalProfile(r.ctx, r.refetch(agent)); !errors.Is(err, ErrModelProfileInvalid) {
 		t.Fatalf("reset without a base: %v", err)
 	}
-	if got := r.refetch(agent); got.ModelProfileID != p.ID {
-		t.Fatalf("agent left its personal profile: %v", got.ModelProfileID)
+	if got := r.refetch(agent); r.profileOf(got) != p.ID {
+		t.Fatalf("agent left its personal profile: %v", r.profileOf(got))
 	}
 }
 
@@ -194,7 +194,7 @@ func TestOlderClientsOwnListIsAPersonalProfile(t *testing.T) {
 		t.Fatal(err)
 	}
 	p, ok := r.personalOf(agent)
-	if !ok || agent.ModelProfileID != p.ID || p.BasedOnProfileID != r.strong {
+	if !ok || r.profileOf(agent) != p.ID || p.BasedOnProfileID != r.strong {
 		t.Fatalf("own list → personal: %+v", p)
 	}
 	world, _ := LoadModelWorld(r.ctx, r.q, r.ws, timeNow())
@@ -205,15 +205,15 @@ func TestOlderClientsOwnListIsAPersonalProfile(t *testing.T) {
 	// "No own list" is a reset.
 	none := []ModelOptionInput{}
 	agent, err = r.profiles.SaveAgentModels(r.ctx, agent, AgentModelsInput{Options: &none})
-	if err != nil || agent.ModelProfileID != r.strong {
-		t.Fatalf("empty list: %v on %v", err, agent.ModelProfileID)
+	if err != nil || r.profileOf(agent) != r.strong {
+		t.Fatalf("empty list: %v on %v", err, r.profileOf(agent))
 	}
 	// Choosing a shared profile keeps the personal one aside, unused.
 	agent, _ = r.profiles.SaveAgentModels(r.ctx, agent, AgentModelsInput{Options: &rows})
 	shared := util.UUIDToString(r.mid)
 	agent, err = r.profiles.SaveAgentModels(r.ctx, agent, AgentModelsInput{ModelProfileID: &shared})
-	if err != nil || agent.ModelProfileID != r.mid {
-		t.Fatalf("shared profile chosen: %v %v", err, agent.ModelProfileID)
+	if err != nil || r.profileOf(agent) != r.mid {
+		t.Fatalf("shared profile chosen: %v %v", err, r.profileOf(agent))
 	}
 	if _, ok := r.personalOf(agent); !ok {
 		t.Fatal("the personal profile must wait, not vanish")

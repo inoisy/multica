@@ -12,7 +12,7 @@ import (
 )
 
 const clearClosedIssueModelProfiles = `-- name: ClearClosedIssueModelProfiles :exec
-UPDATE issue SET model_profile_id = NULL
+DELETE FROM issue_model_profile
 WHERE workspace_id = $1 AND model_profile_id = $2
 `
 
@@ -83,8 +83,10 @@ func (q *Queries) CompactModelProfileOptionPositions(ctx context.Context, profil
 
 const countModelProfileReferences = `-- name: CountModelProfileReferences :one
 SELECT
- (SELECT count(*) FROM agent a WHERE a.workspace_id = $1 AND a.model_profile_id = $2 AND a.archived_at IS NULL)::bigint AS agents,
- (SELECT count(*) FROM issue i WHERE i.workspace_id = $1 AND i.model_profile_id = $2
+ (SELECT count(*) FROM agent a JOIN agent_model_settings ams ON ams.agent_id = a.id
+   WHERE a.workspace_id = $1 AND ams.model_profile_id = $2 AND a.archived_at IS NULL)::bigint AS agents,
+ (SELECT count(*) FROM issue i JOIN issue_model_profile imp ON imp.issue_id = i.id
+   WHERE i.workspace_id = $1 AND imp.model_profile_id = $2
    AND NOT (i.status IN ('done', 'cancelled') OR EXISTS(SELECT 1 FROM issue_status s WHERE s.workspace_id=i.workspace_id AND s.key=i.status AND s.category IN ('done','closed'))))::bigint AS open_issues,
  (SELECT count(*) FROM model_profile p WHERE p.workspace_id = $1 AND p.when_exhausted_profile_id = $2 AND p.id <> $2)::bigint AS fallback_of
 `
@@ -256,6 +258,20 @@ func (q *Queries) DeleteModelProfileOptions(ctx context.Context, profileID pgtyp
 	return err
 }
 
+const deleteOrphanModelSideRows = `-- name: DeleteOrphanModelSideRows :exec
+WITH a AS (DELETE FROM agent_model_settings s WHERE NOT EXISTS (SELECT 1 FROM agent x WHERE x.id = s.agent_id)),
+     i AS (DELETE FROM issue_model_profile p WHERE NOT EXISTS (SELECT 1 FROM issue x WHERE x.id = p.issue_id)),
+     r AS (DELETE FROM runtime_profile_pool p WHERE NOT EXISTS (SELECT 1 FROM runtime_profile x WHERE x.id = p.runtime_profile_id))
+DELETE FROM task_model_choice c WHERE NOT EXISTS (SELECT 1 FROM agent_task_queue x WHERE x.id = c.task_id)
+`
+
+// Upstream deletes agents, issues, runs and runtime profiles in many places;
+// their side rows are swept here instead of in each of them.
+func (q *Queries) DeleteOrphanModelSideRows(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, deleteOrphanModelSideRows)
+	return err
+}
+
 const deleteProviderLimitRefusalsBySubscription = `-- name: DeleteProviderLimitRefusalsBySubscription :many
 DELETE FROM runtime_unavailable
 WHERE subscription_id = $1 AND reason_code = 'provider_limit'
@@ -341,6 +357,33 @@ func (q *Queries) DeleteRuntimeUnavailableByIDs(ctx context.Context, ids []pgtyp
 		return nil, err
 	}
 	return items, nil
+}
+
+const getAgentModelSettings = `-- name: GetAgentModelSettings :one
+SELECT agent_id, workspace_id, model_profile_id, disallowed_tools FROM agent_model_settings WHERE agent_id = $1
+`
+
+func (q *Queries) GetAgentModelSettings(ctx context.Context, agentID pgtype.UUID) (AgentModelSetting, error) {
+	row := q.db.QueryRow(ctx, getAgentModelSettings, agentID)
+	var i AgentModelSetting
+	err := row.Scan(
+		&i.AgentID,
+		&i.WorkspaceID,
+		&i.ModelProfileID,
+		&i.DisallowedTools,
+	)
+	return i, err
+}
+
+const getIssueModelProfileID = `-- name: GetIssueModelProfileID :one
+SELECT model_profile_id FROM issue_model_profile WHERE issue_id = $1
+`
+
+func (q *Queries) GetIssueModelProfileID(ctx context.Context, issueID pgtype.UUID) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, getIssueModelProfileID, issueID)
+	var model_profile_id pgtype.UUID
+	err := row.Scan(&model_profile_id)
+	return model_profile_id, err
 }
 
 const getModelProfileByNameInWorkspace = `-- name: GetModelProfileByNameInWorkspace :one
@@ -470,6 +513,23 @@ func (q *Queries) GetSharedModelProfileInWorkspace(ctx context.Context, arg GetS
 	return i, err
 }
 
+const getTaskModelChoice = `-- name: GetTaskModelChoice :one
+SELECT task_id, model_position, model_choice, account_offer, account_fact FROM task_model_choice WHERE task_id = $1
+`
+
+func (q *Queries) GetTaskModelChoice(ctx context.Context, taskID pgtype.UUID) (TaskModelChoice, error) {
+	row := q.db.QueryRow(ctx, getTaskModelChoice, taskID)
+	var i TaskModelChoice
+	err := row.Scan(
+		&i.TaskID,
+		&i.ModelPosition,
+		&i.ModelChoice,
+		&i.AccountOffer,
+		&i.AccountFact,
+	)
+	return i, err
+}
+
 const insertModelProfileOption = `-- name: InsertModelProfileOption :exec
 INSERT INTO model_profile_option (workspace_id, profile_id, position, runtime_id, model, thinking_level, custom_args)
 VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -543,8 +603,9 @@ func (q *Queries) InsertRuntimeUnavailable(ctx context.Context, arg InsertRuntim
 }
 
 const listActiveAgentsByModelProfiles = `-- name: ListActiveAgentsByModelProfiles :many
-SELECT id, workspace_id, name, avatar_url, runtime_mode, runtime_config, visibility, status, max_concurrent_tasks, owner_id, created_at, updated_at, description, runtime_id, instructions, archived_at, archived_by, custom_env, custom_args, mcp_config, model, thinking_level, composio_toolkit_allowlist, permission_mode, kind, system_key, disabled_runtime_skills, service_tier, conversation_starters, model_profile_id, disallowed_tools FROM agent
-WHERE workspace_id = $1 AND model_profile_id = ANY($2::uuid[]) AND archived_at IS NULL
+SELECT id, workspace_id, name, avatar_url, runtime_mode, runtime_config, visibility, status, max_concurrent_tasks, owner_id, created_at, updated_at, description, runtime_id, instructions, archived_at, archived_by, custom_env, custom_args, mcp_config, model, thinking_level, composio_toolkit_allowlist, permission_mode, kind, system_key, disabled_runtime_skills, service_tier, conversation_starters FROM agent
+WHERE agent.workspace_id = $1 AND agent.archived_at IS NULL
+  AND id IN (SELECT s.agent_id FROM agent_model_settings s WHERE s.model_profile_id = ANY($2::uuid[]))
 ORDER BY name
 `
 
@@ -592,8 +653,6 @@ func (q *Queries) ListActiveAgentsByModelProfiles(ctx context.Context, arg ListA
 			&i.DisabledRuntimeSkills,
 			&i.ServiceTier,
 			&i.ConversationStarters,
-			&i.ModelProfileID,
-			&i.DisallowedTools,
 		); err != nil {
 			return nil, err
 		}
@@ -722,11 +781,12 @@ func (q *Queries) ListActiveRuntimeUnavailableForRuntimes(ctx context.Context, r
 }
 
 const listAgentModelChoices = `-- name: ListAgentModelChoices :many
-SELECT t.id, t.issue_id, t.status, t.runtime_id, t.model_position, t.model_choice, t.account_fact, t.created_at, t.dispatched_at,
+SELECT t.id, t.issue_id, t.status, t.runtime_id, c.model_position, c.model_choice, c.account_fact, t.created_at, t.dispatched_at,
        i.number AS issue_number, i.title AS issue_title, i.project_id AS issue_project_id
 FROM agent_task_queue t
+JOIN task_model_choice c ON c.task_id = t.id
 LEFT JOIN issue i ON i.id = t.issue_id
-WHERE t.agent_id = $1 AND t.model_position IS NOT NULL
+WHERE t.agent_id = $1 AND c.model_position IS NOT NULL
 ORDER BY t.created_at DESC
 LIMIT $2
 `
@@ -786,12 +846,71 @@ func (q *Queries) ListAgentModelChoices(ctx context.Context, arg ListAgentModelC
 	return items, nil
 }
 
+const listAgentModelSettings = `-- name: ListAgentModelSettings :many
+SELECT agent_id, workspace_id, model_profile_id, disallowed_tools FROM agent_model_settings WHERE workspace_id = $1
+`
+
+func (q *Queries) ListAgentModelSettings(ctx context.Context, workspaceID pgtype.UUID) ([]AgentModelSetting, error) {
+	rows, err := q.db.Query(ctx, listAgentModelSettings, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []AgentModelSetting{}
+	for rows.Next() {
+		var i AgentModelSetting
+		if err := rows.Scan(
+			&i.AgentID,
+			&i.WorkspaceID,
+			&i.ModelProfileID,
+			&i.DisallowedTools,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAgentModelSettingsByAgents = `-- name: ListAgentModelSettingsByAgents :many
+SELECT agent_id, workspace_id, model_profile_id, disallowed_tools FROM agent_model_settings WHERE agent_id = ANY($1::uuid[])
+`
+
+func (q *Queries) ListAgentModelSettingsByAgents(ctx context.Context, agentIds []pgtype.UUID) ([]AgentModelSetting, error) {
+	rows, err := q.db.Query(ctx, listAgentModelSettingsByAgents, agentIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []AgentModelSetting{}
+	for rows.Next() {
+		var i AgentModelSetting
+		if err := rows.Scan(
+			&i.AgentID,
+			&i.WorkspaceID,
+			&i.ModelProfileID,
+			&i.DisallowedTools,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAgentWaitingModelTasks = `-- name: ListAgentWaitingModelTasks :many
-SELECT t.id, t.issue_id, t.model_choice, t.created_at, i.number AS issue_number, i.title AS issue_title,
+SELECT t.id, t.issue_id, c.model_choice, t.created_at, i.number AS issue_number, i.title AS issue_title,
        i.project_id AS issue_project_id
 FROM agent_task_queue t
+JOIN task_model_choice c ON c.task_id = t.id
 LEFT JOIN issue i ON i.id = t.issue_id
-WHERE t.agent_id = $1 AND t.status = 'queued' AND t.model_choice->>'reason' = 'all_unavailable'
+WHERE t.agent_id = $1 AND t.status = 'queued' AND c.model_choice->>'reason' = 'all_unavailable'
 ORDER BY t.created_at
 `
 
@@ -835,8 +954,9 @@ func (q *Queries) ListAgentWaitingModelTasks(ctx context.Context, agentID pgtype
 }
 
 const listAgentsByModelProfile = `-- name: ListAgentsByModelProfile :many
-SELECT id, workspace_id, name, avatar_url, runtime_mode, runtime_config, visibility, status, max_concurrent_tasks, owner_id, created_at, updated_at, description, runtime_id, instructions, archived_at, archived_by, custom_env, custom_args, mcp_config, model, thinking_level, composio_toolkit_allowlist, permission_mode, kind, system_key, disabled_runtime_skills, service_tier, conversation_starters, model_profile_id, disallowed_tools FROM agent
-WHERE workspace_id = $1 AND model_profile_id = $2 AND archived_at IS NULL
+SELECT id, workspace_id, name, avatar_url, runtime_mode, runtime_config, visibility, status, max_concurrent_tasks, owner_id, created_at, updated_at, description, runtime_id, instructions, archived_at, archived_by, custom_env, custom_args, mcp_config, model, thinking_level, composio_toolkit_allowlist, permission_mode, kind, system_key, disabled_runtime_skills, service_tier, conversation_starters FROM agent
+WHERE agent.workspace_id = $1 AND agent.archived_at IS NULL
+  AND id IN (SELECT s.agent_id FROM agent_model_settings s WHERE s.model_profile_id = $2)
 ORDER BY name
 `
 
@@ -884,8 +1004,6 @@ func (q *Queries) ListAgentsByModelProfile(ctx context.Context, arg ListAgentsBy
 			&i.DisabledRuntimeSkills,
 			&i.ServiceTier,
 			&i.ConversationStarters,
-			&i.ModelProfileID,
-			&i.DisallowedTools,
 		); err != nil {
 			return nil, err
 		}
@@ -1040,8 +1158,9 @@ func (q *Queries) ListModelProfiles(ctx context.Context, workspaceID pgtype.UUID
 }
 
 const listOpenIssuesWithModelProfile = `-- name: ListOpenIssuesWithModelProfile :many
-SELECT i.id, i.number, i.title, i.status, i.assignee_type, i.assignee_id, i.model_profile_id, i.project_id FROM issue i
-WHERE i.workspace_id = $1 AND i.model_profile_id IS NOT NULL
+SELECT i.id, i.number, i.title, i.status, i.assignee_type, i.assignee_id, p.model_profile_id, i.project_id FROM issue i
+JOIN issue_model_profile p ON p.issue_id = i.id
+WHERE i.workspace_id = $1
   AND NOT (i.status IN ('done', 'cancelled') OR EXISTS(SELECT 1 FROM issue_status s WHERE s.workspace_id=i.workspace_id AND s.key=i.status AND s.category IN ('done','closed')))
   AND ($2::uuid IS NULL OR (i.assignee_type = 'agent' AND i.assignee_id = $2::uuid))
 ORDER BY i.number
@@ -1132,12 +1251,12 @@ func (q *Queries) ListPersonalModelProfiles(ctx context.Context, workspaceID pgt
 }
 
 const listQueuedTasksForModelRouting = `-- name: ListQueuedTasksForModelRouting :many
-SELECT t.id, t.agent_id, t.issue_id, t.status, t.priority, t.dispatched_at, t.started_at, t.completed_at, t.result, t.error, t.created_at, t.context, t.runtime_id, t.session_id, t.work_dir, t.trigger_comment_id, t.chat_session_id, t.autopilot_run_id, t.attempt, t.max_attempts, t.parent_task_id, t.failure_reason, t.trigger_summary, t.force_fresh_session, t.is_leader_task, t.wait_reason, t.initiator_user_id, t.handoff_note, t.prepare_lease_expires_at, t.squad_id, t.runtime_mcp_overlay, t.escalation_for_task_id, t.fire_at, t.originator_user_id, t.runtime_connected_apps, t.coalesced_comment_ids, t.delivered_comment_ids, t.chat_input_task_id, t.chat_finalize_deferred_at, t.originator_source, t.delegated_from_task_id, t.retry_of_task_id, t.rerun_of_task_id, t.rule_version_id, t.trigger_evidence_kind, t.trigger_evidence_ref_id, t.accountable_user_id, t.session_rollout_missing, t.retired_session_id, t.quick_actions_disabled, t.regenerate_quick_actions_for, t.branch_name, t.durable_work_dir, t.channel_context_revision, t.comment_thread_id, t.cancelled_by_type, t.cancelled_by_id, t.cancelled_by_name, t.issue_snapshot, t.workflow_step, t.usage_squad_id, t.model_position, t.model_choice, t.account_fact, t.account_offer FROM agent_task_queue t
+SELECT t.id, t.agent_id, t.issue_id, t.status, t.priority, t.dispatched_at, t.started_at, t.completed_at, t.result, t.error, t.created_at, t.context, t.runtime_id, t.session_id, t.work_dir, t.trigger_comment_id, t.chat_session_id, t.autopilot_run_id, t.attempt, t.max_attempts, t.parent_task_id, t.failure_reason, t.trigger_summary, t.force_fresh_session, t.is_leader_task, t.wait_reason, t.initiator_user_id, t.handoff_note, t.prepare_lease_expires_at, t.squad_id, t.runtime_mcp_overlay, t.escalation_for_task_id, t.fire_at, t.originator_user_id, t.runtime_connected_apps, t.coalesced_comment_ids, t.delivered_comment_ids, t.chat_input_task_id, t.chat_finalize_deferred_at, t.originator_source, t.delegated_from_task_id, t.retry_of_task_id, t.rerun_of_task_id, t.rule_version_id, t.trigger_evidence_kind, t.trigger_evidence_ref_id, t.accountable_user_id, t.session_rollout_missing, t.retired_session_id, t.quick_actions_disabled, t.regenerate_quick_actions_for, t.branch_name, t.durable_work_dir, t.channel_context_revision, t.comment_thread_id, t.cancelled_by_type, t.cancelled_by_id, t.cancelled_by_name, t.issue_snapshot, t.workflow_step, t.usage_squad_id FROM agent_task_queue t
 WHERE t.status = 'queued'
   AND (
-    t.model_choice IS NOT NULL
-    OR EXISTS (SELECT 1 FROM agent a WHERE a.id = t.agent_id AND a.model_profile_id IS NOT NULL)
-    OR EXISTS (SELECT 1 FROM issue i WHERE i.id = t.issue_id AND i.model_profile_id IS NOT NULL)
+    EXISTS (SELECT 1 FROM task_model_choice c WHERE c.task_id = t.id AND c.model_choice IS NOT NULL)
+    OR EXISTS (SELECT 1 FROM agent_model_settings s WHERE s.agent_id = t.agent_id AND s.model_profile_id IS NOT NULL)
+    OR EXISTS (SELECT 1 FROM issue_model_profile p WHERE p.issue_id = t.issue_id)
   )
 ORDER BY t.created_at
 LIMIT $1
@@ -1216,11 +1335,52 @@ func (q *Queries) ListQueuedTasksForModelRouting(ctx context.Context, pageSize i
 			&i.IssueSnapshot,
 			&i.WorkflowStep,
 			&i.UsageSquadID,
-			&i.ModelPosition,
-			&i.ModelChoice,
-			&i.AccountFact,
-			&i.AccountOffer,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRunFacts24Hours = `-- name: ListRunFacts24Hours :many
+SELECT COALESCE(NULLIF(c.account_fact ->> 'subscription_id', ''), '')::text AS subscription_id,
+       count(*)::bigint AS runs
+FROM agent_task_queue t
+LEFT JOIN task_model_choice c ON c.task_id = t.id
+WHERE COALESCE(t.started_at, t.dispatched_at) >= $1::timestamptz
+  AND COALESCE(t.started_at, t.dispatched_at) < $2::timestamptz
+  AND COALESCE(NULLIF(c.model_choice #>> '{chosen,runtime_id}', ''), t.runtime_id::text) = $3::text
+GROUP BY 1
+`
+
+type ListRunFacts24HoursParams struct {
+	Since     pgtype.Timestamptz `json:"since"`
+	Until     pgtype.Timestamptz `json:"until"`
+	RuntimeID string             `json:"runtime_id"`
+}
+
+type ListRunFacts24HoursRow struct {
+	SubscriptionID string `json:"subscription_id"`
+	Runs           int64  `json:"runs"`
+}
+
+// Count attempts once, by the runtime the claim recorded and the account the
+// daemon confirmed, never from quota observations or today's mutable
+// agent/profile configuration.
+func (q *Queries) ListRunFacts24Hours(ctx context.Context, arg ListRunFacts24HoursParams) ([]ListRunFacts24HoursRow, error) {
+	rows, err := q.db.Query(ctx, listRunFacts24Hours, arg.Since, arg.Until, arg.RuntimeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListRunFacts24HoursRow{}
+	for rows.Next() {
+		var i ListRunFacts24HoursRow
+		if err := rows.Scan(&i.SubscriptionID, &i.Runs); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1257,6 +1417,36 @@ func (q *Queries) ListSharedModelProfiles(ctx context.Context, workspaceID pgtyp
 			&i.UpdatedAt,
 			&i.OwnerAgentID,
 			&i.BasedOnProfileID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTaskModelChoices = `-- name: ListTaskModelChoices :many
+SELECT task_id, model_position, model_choice, account_offer, account_fact FROM task_model_choice WHERE task_id = ANY($1::uuid[])
+`
+
+func (q *Queries) ListTaskModelChoices(ctx context.Context, taskIds []pgtype.UUID) ([]TaskModelChoice, error) {
+	rows, err := q.db.Query(ctx, listTaskModelChoices, taskIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []TaskModelChoice{}
+	for rows.Next() {
+		var i TaskModelChoice
+		if err := rows.Scan(
+			&i.TaskID,
+			&i.ModelPosition,
+			&i.ModelChoice,
+			&i.AccountOffer,
+			&i.AccountFact,
 		); err != nil {
 			return nil, err
 		}
@@ -1375,7 +1565,7 @@ SET runtime_id = o.runtime_id,
     updated_at = now()
 FROM model_profile_option o
 JOIN agent_runtime r ON r.id = o.runtime_id
-WHERE a.model_profile_id = $1
+WHERE EXISTS (SELECT 1 FROM agent_model_settings s WHERE s.agent_id = a.id AND s.model_profile_id = $1)
   AND a.workspace_id = $2
   AND o.profile_id = $1
   AND o.position = (SELECT min(m.position) FROM model_profile_option m WHERE m.profile_id = $1)
@@ -1422,9 +1612,15 @@ func (q *Queries) ReassignRuntimeModelReferences(ctx context.Context, arg Reassi
 }
 
 const setAgentDisallowedTools = `-- name: SetAgentDisallowedTools :one
-UPDATE agent SET disallowed_tools = $3, updated_at = now()
-WHERE id = $1 AND workspace_id = $2
-RETURNING id, workspace_id, name, avatar_url, runtime_mode, runtime_config, visibility, status, max_concurrent_tasks, owner_id, created_at, updated_at, description, runtime_id, instructions, archived_at, archived_by, custom_env, custom_args, mcp_config, model, thinking_level, composio_toolkit_allowlist, permission_mode, kind, system_key, disabled_runtime_skills, service_tier, conversation_starters, model_profile_id, disallowed_tools
+WITH settings AS (
+    INSERT INTO agent_model_settings (agent_id, workspace_id, disallowed_tools)
+    SELECT a.id, a.workspace_id, $3::jsonb FROM agent a
+    WHERE a.id = $1 AND a.workspace_id = $2
+    ON CONFLICT (agent_id) DO UPDATE SET disallowed_tools = EXCLUDED.disallowed_tools
+)
+UPDATE agent SET updated_at = now()
+WHERE agent.id = $1 AND agent.workspace_id = $2
+RETURNING id, workspace_id, name, avatar_url, runtime_mode, runtime_config, visibility, status, max_concurrent_tasks, owner_id, created_at, updated_at, description, runtime_id, instructions, archived_at, archived_by, custom_env, custom_args, mcp_config, model, thinking_level, composio_toolkit_allowlist, permission_mode, kind, system_key, disabled_runtime_skills, service_tier, conversation_starters
 `
 
 type SetAgentDisallowedToolsParams struct {
@@ -1466,16 +1662,20 @@ func (q *Queries) SetAgentDisallowedTools(ctx context.Context, arg SetAgentDisal
 		&i.DisabledRuntimeSkills,
 		&i.ServiceTier,
 		&i.ConversationStarters,
-		&i.ModelProfileID,
-		&i.DisallowedTools,
 	)
 	return i, err
 }
 
 const setAgentModelProfile = `-- name: SetAgentModelProfile :one
-UPDATE agent SET model_profile_id = $3, updated_at = now()
-WHERE id = $1 AND workspace_id = $2
-RETURNING id, workspace_id, name, avatar_url, runtime_mode, runtime_config, visibility, status, max_concurrent_tasks, owner_id, created_at, updated_at, description, runtime_id, instructions, archived_at, archived_by, custom_env, custom_args, mcp_config, model, thinking_level, composio_toolkit_allowlist, permission_mode, kind, system_key, disabled_runtime_skills, service_tier, conversation_starters, model_profile_id, disallowed_tools
+WITH settings AS (
+    INSERT INTO agent_model_settings (agent_id, workspace_id, model_profile_id)
+    SELECT a.id, a.workspace_id, $3::uuid FROM agent a
+    WHERE a.id = $1 AND a.workspace_id = $2
+    ON CONFLICT (agent_id) DO UPDATE SET model_profile_id = EXCLUDED.model_profile_id
+)
+UPDATE agent SET updated_at = now()
+WHERE agent.id = $1 AND agent.workspace_id = $2
+RETURNING id, workspace_id, name, avatar_url, runtime_mode, runtime_config, visibility, status, max_concurrent_tasks, owner_id, created_at, updated_at, description, runtime_id, instructions, archived_at, archived_by, custom_env, custom_args, mcp_config, model, thinking_level, composio_toolkit_allowlist, permission_mode, kind, system_key, disabled_runtime_skills, service_tier, conversation_starters
 `
 
 type SetAgentModelProfileParams struct {
@@ -1517,20 +1717,19 @@ func (q *Queries) SetAgentModelProfile(ctx context.Context, arg SetAgentModelPro
 		&i.DisabledRuntimeSkills,
 		&i.ServiceTier,
 		&i.ConversationStarters,
-		&i.ModelProfileID,
-		&i.DisallowedTools,
 	)
 	return i, err
 }
 
 const setClaimedTaskModelChoice = `-- name: SetClaimedTaskModelChoice :exec
-UPDATE agent_task_queue
-SET model_position = $1, model_choice = $2
-WHERE id = $3 AND status = 'dispatched'
+INSERT INTO task_model_choice (task_id, model_position, model_choice)
+SELECT t.id, $1::int, $2::jsonb FROM agent_task_queue t
+WHERE t.id = $3 AND t.status = 'dispatched'
+ON CONFLICT (task_id) DO UPDATE SET model_position = EXCLUDED.model_position, model_choice = EXCLUDED.model_choice
 `
 
 type SetClaimedTaskModelChoiceParams struct {
-	ModelPosition pgtype.Int4 `json:"model_position"`
+	ModelPosition int32       `json:"model_position"`
 	ModelChoice   []byte      `json:"model_choice"`
 	ID            pgtype.UUID `json:"id"`
 }
@@ -1542,9 +1741,18 @@ func (q *Queries) SetClaimedTaskModelChoice(ctx context.Context, arg SetClaimedT
 }
 
 const setIssueModelProfile = `-- name: SetIssueModelProfile :one
-UPDATE issue SET model_profile_id = $3, updated_at = now()
-WHERE id = $1 AND workspace_id = $2
-RETURNING id, workspace_id, title, description, status, priority, assignee_type, assignee_id, creator_type, creator_id, parent_issue_id, acceptance_criteria, context_refs, position, due_date, created_at, updated_at, number, project_id, origin_type, origin_id, first_executed_at, start_date, metadata, stage, properties, revision, last_activity_at, triage_state, duplicate_of_issue_id, requester_user_id, description_revision, model_profile_id, stage_squad_id, stage_dispatch_by
+WITH cleared AS (
+    DELETE FROM issue_model_profile p
+    WHERE p.issue_id = $1 AND $3::uuid IS NULL
+), set_profile AS (
+    INSERT INTO issue_model_profile (issue_id, workspace_id, model_profile_id)
+    SELECT i.id, i.workspace_id, $3::uuid FROM issue i
+    WHERE i.id = $1 AND i.workspace_id = $2 AND $3::uuid IS NOT NULL
+    ON CONFLICT (issue_id) DO UPDATE SET model_profile_id = EXCLUDED.model_profile_id
+)
+UPDATE issue SET updated_at = now()
+WHERE issue.id = $1 AND issue.workspace_id = $2
+RETURNING id, workspace_id, title, description, status, priority, assignee_type, assignee_id, creator_type, creator_id, parent_issue_id, acceptance_criteria, context_refs, position, due_date, created_at, updated_at, number, project_id, origin_type, origin_id, first_executed_at, start_date, metadata, stage, properties, revision, last_activity_at, triage_state, duplicate_of_issue_id, requester_user_id, description_revision
 `
 
 type SetIssueModelProfileParams struct {
@@ -1589,9 +1797,6 @@ func (q *Queries) SetIssueModelProfile(ctx context.Context, arg SetIssueModelPro
 		&i.DuplicateOfIssueID,
 		&i.RequesterUserID,
 		&i.DescriptionRevision,
-		&i.ModelProfileID,
-		&i.StageSquadID,
-		&i.StageDispatchBy,
 	)
 	return i, err
 }
@@ -1612,23 +1817,29 @@ func (q *Queries) SetPersonalModelProfileBase(ctx context.Context, arg SetPerson
 }
 
 const setTaskModelRoute = `-- name: SetTaskModelRoute :one
+WITH choice AS (
+    INSERT INTO task_model_choice (task_id, model_choice)
+    SELECT t.id, $3::jsonb FROM agent_task_queue t
+    WHERE t.id = $2 AND t.status IN ('queued', 'deferred')
+    ON CONFLICT (task_id) DO UPDATE SET model_choice = EXCLUDED.model_choice
+)
 UPDATE agent_task_queue
-SET runtime_id = $1, model_choice = $2
-WHERE id = $3 AND status IN ('queued', 'deferred')
-RETURNING id, agent_id, issue_id, status, priority, dispatched_at, started_at, completed_at, result, error, created_at, context, runtime_id, session_id, work_dir, trigger_comment_id, chat_session_id, autopilot_run_id, attempt, max_attempts, parent_task_id, failure_reason, trigger_summary, force_fresh_session, is_leader_task, wait_reason, initiator_user_id, handoff_note, prepare_lease_expires_at, squad_id, runtime_mcp_overlay, escalation_for_task_id, fire_at, originator_user_id, runtime_connected_apps, coalesced_comment_ids, delivered_comment_ids, chat_input_task_id, chat_finalize_deferred_at, originator_source, delegated_from_task_id, retry_of_task_id, rerun_of_task_id, rule_version_id, trigger_evidence_kind, trigger_evidence_ref_id, accountable_user_id, session_rollout_missing, retired_session_id, quick_actions_disabled, regenerate_quick_actions_for, branch_name, durable_work_dir, channel_context_revision, comment_thread_id, cancelled_by_type, cancelled_by_id, cancelled_by_name, issue_snapshot, workflow_step, usage_squad_id, model_position, model_choice, account_fact, account_offer
+SET runtime_id = $1
+WHERE agent_task_queue.id = $2 AND agent_task_queue.status IN ('queued', 'deferred')
+RETURNING id, agent_id, issue_id, status, priority, dispatched_at, started_at, completed_at, result, error, created_at, context, runtime_id, session_id, work_dir, trigger_comment_id, chat_session_id, autopilot_run_id, attempt, max_attempts, parent_task_id, failure_reason, trigger_summary, force_fresh_session, is_leader_task, wait_reason, initiator_user_id, handoff_note, prepare_lease_expires_at, squad_id, runtime_mcp_overlay, escalation_for_task_id, fire_at, originator_user_id, runtime_connected_apps, coalesced_comment_ids, delivered_comment_ids, chat_input_task_id, chat_finalize_deferred_at, originator_source, delegated_from_task_id, retry_of_task_id, rerun_of_task_id, rule_version_id, trigger_evidence_kind, trigger_evidence_ref_id, accountable_user_id, session_rollout_missing, retired_session_id, quick_actions_disabled, regenerate_quick_actions_for, branch_name, durable_work_dir, channel_context_revision, comment_thread_id, cancelled_by_type, cancelled_by_id, cancelled_by_name, issue_snapshot, workflow_step, usage_squad_id
 `
 
 type SetTaskModelRouteParams struct {
 	RuntimeID   pgtype.UUID `json:"runtime_id"`
-	ModelChoice []byte      `json:"model_choice"`
 	ID          pgtype.UUID `json:"id"`
+	ModelChoice []byte      `json:"model_choice"`
 }
 
 // Places a run that has not been claimed yet on the runtime its model list
 // chooses now, with the choice that put it there. A run already claimed or
 // finished is left alone.
 func (q *Queries) SetTaskModelRoute(ctx context.Context, arg SetTaskModelRouteParams) (AgentTaskQueue, error) {
-	row := q.db.QueryRow(ctx, setTaskModelRoute, arg.RuntimeID, arg.ModelChoice, arg.ID)
+	row := q.db.QueryRow(ctx, setTaskModelRoute, arg.RuntimeID, arg.ID, arg.ModelChoice)
 	var i AgentTaskQueue
 	err := row.Scan(
 		&i.ID,
@@ -1692,10 +1903,6 @@ func (q *Queries) SetTaskModelRoute(ctx context.Context, arg SetTaskModelRoutePa
 		&i.IssueSnapshot,
 		&i.WorkflowStep,
 		&i.UsageSquadID,
-		&i.ModelPosition,
-		&i.ModelChoice,
-		&i.AccountFact,
-		&i.AccountOffer,
 	)
 	return i, err
 }

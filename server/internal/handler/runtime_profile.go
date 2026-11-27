@@ -78,7 +78,6 @@ func runtimeProfileToResponse(p db.RuntimeProfile) RuntimeProfileResponse {
 		Visibility:     p.Visibility,
 		CreatedBy:      uuidToPtr(p.CreatedBy),
 		Enabled:        p.Enabled,
-		PoolID:         uuidToPtr(p.PoolID),
 		Subscriptions:  []string{},
 		SpendOrder:     "first",
 		CreatedAt:      timestampToString(p.CreatedAt),
@@ -361,13 +360,18 @@ func (h *Handler) UpdateRuntimeProfile(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "runtime profile not found")
 		return
 	}
-	poolWide := before.PoolID.Valid && (req.DisplayName != nil || req.Description != nil || req.Enabled != nil)
+	beforePool, err := service.RuntimeProfilePoolID(r.Context(), h.Queries, before.ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to load runtime profile pool")
+		return
+	}
+	poolWide := beforePool.Valid && (req.DisplayName != nil || req.Description != nil || req.Enabled != nil)
 	if poolWide || req.AllWorkspaces != nil {
 		if _, ok := h.requireInstanceAdmin(w, r); !ok {
 			return
 		}
 	}
-	if req.AllWorkspaces != nil && !before.PoolID.Valid {
+	if req.AllWorkspaces != nil && !beforePool.Valid {
 		writeError(w, http.StatusBadRequest, "only an environment of a subscription pool can be spread to every workspace")
 		return
 	}
@@ -380,7 +384,7 @@ func (h *Handler) UpdateRuntimeProfile(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "display_name cannot be empty")
 			return
 		}
-		if !before.PoolID.Valid {
+		if !beforePool.Valid {
 			params.DisplayName = strToText(name)
 		}
 	}
@@ -392,13 +396,13 @@ func (h *Handler) UpdateRuntimeProfile(w http.ResponseWriter, r *http.Request) {
 		}
 		next := before
 		next.CommandName = cmd
-		if !service.PoolCommandMatches(next) {
+		if !service.PoolCommandMatches(next, beforePool) {
 			writeError(w, http.StatusBadRequest, fmt.Sprintf("an environment with accounts runs the standard %q command; a wrapper would spend an account outside the pool", agent.ProfileRuntimeType(before.RuntimeType, before.ProtocolFamily)))
 			return
 		}
 		params.CommandName = strToText(cmd)
 	}
-	if req.Description != nil && !before.PoolID.Valid {
+	if req.Description != nil && !beforePool.Valid {
 		params.Description = ptrToText(req.Description)
 	}
 	if req.FixedArgs != nil {
@@ -409,7 +413,7 @@ func (h *Handler) UpdateRuntimeProfile(w http.ResponseWriter, r *http.Request) {
 		}
 		params.FixedArgs = fixedArgs
 	}
-	if req.Enabled != nil && !before.PoolID.Valid {
+	if req.Enabled != nil && !beforePool.Valid {
 		params.Enabled = pgtype.Bool{Bool: *req.Enabled, Valid: true}
 	}
 
@@ -456,7 +460,7 @@ func (h *Handler) UpdateRuntimeProfile(w http.ResponseWriter, r *http.Request) {
 		h.publishRuntimeTeardown(r.Context(), teardown, wsID, uuidToString(member.UserID))
 	}
 	changed := []db.RuntimeProfile{profile}
-	if before.PoolID.Valid && (poolWide || req.AllWorkspaces != nil) {
+	if beforePool.Valid && (poolWide || req.AllWorkspaces != nil) {
 		pools := h.pools()
 		if req.DisplayName != nil || req.Description != nil || req.AllWorkspaces != nil {
 			patch := service.PoolPatch{AllWorkspaces: req.AllWorkspaces}
@@ -464,7 +468,7 @@ func (h *Handler) UpdateRuntimeProfile(w http.ResponseWriter, r *http.Request) {
 				patch.Name = &name
 			}
 			patch.Description = req.Description
-			res, err := pools.Update(r.Context(), before.PoolID, member.UserID, nil, patch)
+			res, err := pools.Update(r.Context(), beforePool, member.UserID, nil, patch)
 			if err != nil {
 				writePoolError(w, err)
 				return
@@ -472,7 +476,7 @@ func (h *Handler) UpdateRuntimeProfile(w http.ResponseWriter, r *http.Request) {
 			changed = append(changed, res.Profiles...)
 		}
 		if req.Enabled != nil {
-			switched, err := pools.SetEnabled(r.Context(), before.PoolID, *req.Enabled)
+			switched, err := pools.SetEnabled(r.Context(), beforePool, *req.Enabled)
 			if err != nil {
 				writePoolError(w, err)
 				return
@@ -745,6 +749,12 @@ func (h *Handler) DeleteRuntimeProfile(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if !profileMissing {
+		poolID, err := service.RuntimeProfilePoolID(r.Context(), qtx, profileUUID)
+		if err != nil {
+			slog.Error("load runtime profile pool failed", "error", err, "profile_id", uuidToString(profileUUID))
+			writeError(w, http.StatusInternalServerError, "failed to delete runtime profile")
+			return
+		}
 		if err := qtx.DeleteRuntimeProfile(r.Context(), db.DeleteRuntimeProfileParams{
 			ID:          profileUUID,
 			WorkspaceID: wsUUID,
@@ -754,8 +764,13 @@ func (h *Handler) DeleteRuntimeProfile(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		// The workspace no longer has the environment, so it no longer holds the grant.
-		if profile.PoolID.Valid {
-			if err := qtx.DeleteSubscriptionPoolGrant(r.Context(), db.DeleteSubscriptionPoolGrantParams{PoolID: profile.PoolID, WorkspaceID: wsUUID}); err != nil {
+		if poolID.Valid {
+			if err := qtx.DeleteRuntimeProfilePool(r.Context(), profileUUID); err != nil {
+				slog.Error("DeleteRuntimeProfilePool failed", "error", err, "profile_id", uuidToString(profileUUID))
+				writeError(w, http.StatusInternalServerError, "failed to delete runtime profile")
+				return
+			}
+			if err := qtx.DeleteSubscriptionPoolGrant(r.Context(), db.DeleteSubscriptionPoolGrantParams{PoolID: poolID, WorkspaceID: wsUUID}); err != nil {
 				slog.Error("DeleteSubscriptionPoolGrant failed", "error", err, "profile_id", uuidToString(profileUUID))
 				writeError(w, http.StatusInternalServerError, "failed to delete runtime profile")
 				return

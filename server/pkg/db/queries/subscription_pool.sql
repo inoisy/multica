@@ -75,22 +75,33 @@ SELECT * FROM subscription_pool WHERE all_workspaces ORDER BY created_at, id;
 
 -- name: ListPoolRuntimeProfiles :many
 -- The environments of a pool, one per workspace it reaches.
-SELECT * FROM runtime_profile WHERE pool_id = $1 ORDER BY created_at, id;
+SELECT * FROM runtime_profile WHERE id IN (SELECT rpp.runtime_profile_id FROM runtime_profile_pool rpp WHERE rpp.pool_id = $1) ORDER BY created_at, id;
 
 -- name: ListRuntimeProfilesByPools :many
-SELECT * FROM runtime_profile WHERE pool_id = ANY(@pool_ids::uuid[]) ORDER BY created_at, id;
+SELECT * FROM runtime_profile WHERE id IN (SELECT rpp.runtime_profile_id FROM runtime_profile_pool rpp WHERE rpp.pool_id = ANY(@pool_ids::uuid[])) ORDER BY created_at, id;
 
 -- name: GetPoolRuntimeProfileInWorkspace :one
-SELECT * FROM runtime_profile WHERE pool_id = $1 AND workspace_id = $2;
+SELECT * FROM runtime_profile WHERE runtime_profile.workspace_id = $2 AND runtime_profile.id IN (SELECT rpp.runtime_profile_id FROM runtime_profile_pool rpp WHERE rpp.pool_id = $1);
 
 -- name: CreatePoolRuntimeProfile :one
 -- The environment a workspace keeps for a pool. command_name is the CLI family.
 INSERT INTO runtime_profile (
     workspace_id, display_name, protocol_family, command_name, description,
-    fixed_args, visibility, created_by, enabled, runtime_type, pool_id
-) VALUES ($1, $2, $3, $3, $4, '[]'::jsonb, 'workspace', $5, true, $3, $6)
+    fixed_args, visibility, created_by, enabled, runtime_type
+) SELECT sqlc.arg(workspace_id), sqlc.arg(display_name), sqlc.arg(protocol_family), sqlc.arg(protocol_family), sqlc.arg(description),
+    '[]'::jsonb, 'workspace', sqlc.arg(created_by), true, sqlc.arg(protocol_family)
+WHERE NOT EXISTS (SELECT 1 FROM runtime_profile_pool p WHERE p.workspace_id = sqlc.arg(workspace_id) AND p.pool_id = sqlc.arg(pool_id))
 ON CONFLICT DO NOTHING
 RETURNING *;
+
+-- name: InsertRuntimeProfilePool :exec
+INSERT INTO runtime_profile_pool (runtime_profile_id, workspace_id, pool_id) VALUES ($1, $2, $3);
+
+-- name: GetRuntimeProfilePoolID :one
+SELECT pool_id FROM runtime_profile_pool WHERE runtime_profile_id = $1;
+
+-- name: ListRuntimeProfilePools :many
+SELECT * FROM runtime_profile_pool WHERE runtime_profile_id = ANY(@runtime_profile_ids::uuid[]);
 
 -- name: SyncPoolRuntimeProfiles :many
 -- Name and description of a pool go to its environments in one statement.
@@ -98,7 +109,7 @@ UPDATE runtime_profile
 SET display_name = @display_name,
     description = @description,
     updated_at = now()
-WHERE pool_id = @pool_id
+WHERE id IN (SELECT rpp.runtime_profile_id FROM runtime_profile_pool rpp WHERE rpp.pool_id = @pool_id)
   AND (display_name <> @display_name OR description IS DISTINCT FROM @description)
 RETURNING *;
 
@@ -107,7 +118,7 @@ RETURNING *;
 -- pool is granted to; a revoked one stays off.
 UPDATE runtime_profile rp
 SET enabled = @enabled, updated_at = now()
-WHERE rp.pool_id = @pool_id
+WHERE rp.id IN (SELECT rpp.runtime_profile_id FROM runtime_profile_pool rpp WHERE rpp.pool_id = @pool_id)
   AND rp.enabled <> @enabled
   AND (@enabled::bool = false OR rp.workspace_id IN (
         SELECT g.workspace_id FROM subscription_pool_grant g WHERE g.pool_id = @pool_id
@@ -118,13 +129,13 @@ RETURNING *;
 -- A grant is taken back: the environment stays, it is switched off.
 UPDATE runtime_profile
 SET enabled = false, updated_at = now()
-WHERE pool_id = $1 AND workspace_id = $2 AND enabled
+WHERE runtime_profile.workspace_id = $2 AND runtime_profile.enabled AND runtime_profile.id IN (SELECT rpp.runtime_profile_id FROM runtime_profile_pool rpp WHERE rpp.pool_id = $1)
 RETURNING *;
 
 -- name: ListEnabledPoolRuntimeProfilesForWorkspace :many
 -- Daemon-facing: the enabled environments of a workspace that spend a pool.
 SELECT * FROM runtime_profile
-WHERE workspace_id = $1 AND enabled AND pool_id IS NOT NULL
+WHERE runtime_profile.workspace_id = $1 AND runtime_profile.enabled AND runtime_profile.id IN (SELECT rpp.runtime_profile_id FROM runtime_profile_pool rpp)
 ORDER BY created_at;
 
 -- name: ListLatestSubscriptionUsageBySubscriptions :many
@@ -155,19 +166,27 @@ SELECT * FROM subscription_pool WHERE id = $1 FOR SHARE;
 -- name: SetClaimedTaskAccountOffer :exec
 -- The accounts handed to the daemon with the claim. The fact of an earlier
 -- assignment is not carried over.
-UPDATE agent_task_queue
-SET account_offer = sqlc.narg(account_offer), account_fact = NULL
-WHERE id = sqlc.arg(id) AND status = 'dispatched';
+INSERT INTO task_model_choice (task_id, account_offer, account_fact)
+SELECT t.id, sqlc.narg(account_offer)::jsonb, NULL FROM agent_task_queue t
+WHERE t.id = sqlc.arg(id) AND t.status = 'dispatched'
+ON CONFLICT (task_id) DO UPDATE SET account_offer = EXCLUDED.account_offer, account_fact = NULL;
 
 -- name: LockAgentTaskForAccount :one
 SELECT * FROM agent_task_queue WHERE id = $1 FOR UPDATE;
 
 -- name: SetTaskAccountFact :exec
-UPDATE agent_task_queue SET account_fact = $2 WHERE id = $1;
+INSERT INTO task_model_choice (task_id, account_fact) VALUES ($1, $2)
+ON CONFLICT (task_id) DO UPDATE SET account_fact = EXCLUDED.account_fact;
 
 -- name: ListPoolRuntimeProfilesAll :many
 -- Every environment that spends a pool, in every workspace.
-SELECT * FROM runtime_profile WHERE pool_id IS NOT NULL ORDER BY workspace_id, created_at, id;
+SELECT * FROM runtime_profile WHERE id IN (SELECT rpp.runtime_profile_id FROM runtime_profile_pool rpp) ORDER BY workspace_id, created_at, id;
 
 -- name: ListSubscriptionPoolMembersBySubscription :many
 SELECT * FROM subscription_pool_member WHERE subscription_id = $1 ORDER BY pool_id;
+
+-- name: ListAllRuntimeProfilePools :many
+SELECT * FROM runtime_profile_pool;
+
+-- name: DeleteRuntimeProfilePool :exec
+DELETE FROM runtime_profile_pool WHERE runtime_profile_id = $1;

@@ -5452,7 +5452,7 @@ func (s *TaskService) FailTaskWithQuotaReset(ctx context.Context, taskID pgtype.
 	// transaction (or waits, opening the agent's idle episode).
 	quotaRetry := false
 	if !wantRetry && ModelChoiceEnabled() && isQuotaReason(failureReason) {
-		if parent, perr := s.Queries.GetAgentTask(ctx, taskID); perr == nil && parent.ModelChoice != nil && quotaRetryEligible(parent) {
+		if parent, perr := s.Queries.GetAgentTask(ctx, taskID); perr == nil && taskHasModelChoice(ctx, s.Queries, taskID) && quotaRetryEligible(parent) {
 			quotaRetry, wantRetry = true, true
 			retryMaxAttempts = pgtype.Int4{Int32: max(parent.MaxAttempts, parent.Attempt+1), Valid: true}
 			if agent, aerr := s.Queries.GetAgent(ctx, parent.AgentID); aerr == nil {
