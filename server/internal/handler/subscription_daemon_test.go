@@ -11,6 +11,7 @@ import (
 	"github.com/multica-ai/multica/server/internal/service"
 	"github.com/multica-ai/multica/server/internal/testutil"
 	db "github.com/multica-ai/multica/server/pkg/db/generated"
+	"github.com/multica-ai/multica/server/pkg/protocol"
 )
 
 // poolFixture: a claude pool in the test workspace spending one subscription,
@@ -254,7 +255,7 @@ func TestDaemonUsageParksTwoSubscriptionPoolUntilEarliestReset(t *testing.T) {
 }
 
 func TestTaskFailRequestDecodesQuotaReset(t *testing.T) {
-	var req TaskFailRequest
+	var req protocol.TaskFailRequest
 	if err := json.Unmarshal([]byte(`{"error":"arbitrary text","refusal_code":"agent_cap_refusal","quota_reset_at":"2026-10-20T20:30:00Z"}`), &req); err != nil {
 		t.Fatal(err)
 	}
@@ -264,7 +265,7 @@ func TestTaskFailRequestDecodesQuotaReset(t *testing.T) {
 	if req.QuotaResetAt == nil || !req.QuotaResetAt.Equal(time.Date(2026, 10, 20, 20, 30, 0, 0, time.UTC)) {
 		t.Fatalf("quota_reset_at: %v", req.QuotaResetAt)
 	}
-	req = TaskFailRequest{}
+	req = protocol.TaskFailRequest{}
 	json.Unmarshal([]byte(`{"error":"x"}`), &req)
 	if req.QuotaResetAt != nil || req.RefusalCode != "" {
 		t.Fatal("older daemons send none")

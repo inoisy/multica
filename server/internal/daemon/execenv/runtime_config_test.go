@@ -67,7 +67,7 @@ func TestSubIssueCreationSectionPresentForIssueRuns(t *testing.T) {
 				// three flags stay discoverable, MUL-3508 follow-up) plus the
 				// skill pointer; the skill side of the contract is asserted in
 				// internal/service (TestPlatformSkillCoversPlatformContracts).
-				"`--status todo` starts an agent-assigned child immediately",
+				"`--status todo` starts an agent-assigned child once nothing it waits on",
 				"`--status backlog` parks it",
 				"`--stage <N>` groups children into ordered stages",
 				"read `references/sub-issues.md` in the `multica-platform` skill",
@@ -2326,6 +2326,7 @@ func TestBriefByteIdenticalAcrossRunsForEveryKind(t *testing.T) {
 		"chat":         {ChatSessionID: "chat-1", ChatChannelType: ChannelTypeSlack, AgentID: "a-1", AgentName: "Eve"},
 		"quick-create": {QuickCreatePrompt: "make an issue", AgentID: "a-1", AgentName: "Eve"},
 		"autopilot":    {AutopilotRunID: "run-1", AutopilotID: "ap-1", AgentID: "a-1", AgentName: "Eve"},
+		"doc-comment":  {DocID: "doc-1", AgentID: "a-1", AgentName: "Eve"},
 		// WeCom is the channel a real deployment flips the file-delivery
 		// verdict on. The Slack row above catches the same leak today, but only
 		// because the brief's copy is channel-agnostic; scope that copy to
@@ -2448,7 +2449,7 @@ func TestBriefCarriesTheWhenToSplitRule(t *testing.T) {
 		}
 	}
 	rule := strings.Index(out, "Default to one issue, one PR.")
-	flags := strings.Index(out, "`--status todo` starts an agent-assigned child immediately")
+	flags := strings.Index(out, "`--status todo` starts an agent-assigned child once nothing it waits on")
 	if rule < 0 || flags < 0 || rule > flags {
 		t.Errorf("the split rule must come before the sub-issue flags it gates:\n%s", out)
 	}
@@ -2531,7 +2532,7 @@ func TestBriefIssuePointerFollowsTheInstalledSkill(t *testing.T) {
 			// The flags themselves are unconditional: they stay discoverable
 			// with or without a skill to point at.
 			for _, always := range []string{
-				"`--status todo` starts an agent-assigned child immediately",
+				"`--status todo` starts an agent-assigned child once nothing it waits on",
 				"`--stage <N>` groups children into ordered stages",
 			} {
 				if !strings.Contains(out, always) {
@@ -2678,6 +2679,24 @@ func TestEveryBriefThatTeachesJSONOutputAlsoWarnsAgainstMergingStderr(t *testing
 		}
 		if !strings.Contains(brief, wantWhy) {
 			t.Errorf("%s brief states %q without %q; a rule with no reason is the first one dropped under pressure", name, wantRule, wantWhy)
+		}
+	}
+}
+
+// A doc discussion run delivers into the discussion, not onto an issue
+// (MUL-9933): its brief must not send the agent to `multica issue comment add`.
+func TestDocCommentBriefDeliversIntoDiscussion(t *testing.T) {
+	t.Parallel()
+
+	brief := buildMetaSkillContentSlim("claude", TaskContextForEnv{DocID: "doc-1", AgentID: "a-1", AgentName: "Eve", DocsEnabled: true})
+	for _, want := range []string{"discussion on a Multica doc", "`multica doc comment add`", "## Mentions"} {
+		if !strings.Contains(brief, want) {
+			t.Fatalf("doc brief missing %q:\n%s", want, brief)
+		}
+	}
+	for _, unwanted := range []string{"Final results MUST be delivered via `multica issue comment add`", "## Sub-issue Creation", "## Comment Formatting"} {
+		if strings.Contains(brief, unwanted) {
+			t.Fatalf("doc brief must not contain %q", unwanted)
 		}
 	}
 }

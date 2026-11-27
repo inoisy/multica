@@ -297,7 +297,7 @@ func writeAvailableCommands(b *strings.Builder, ctx TaskContextForEnv) {
 	b.WriteString("- `multica issue steer <issue> [<run-id>] (--content TEXT | --content-file PATH | --content-stdin) [--client-request-id UUID] [--wait --timeout 1m] --output json` — add instructions to an exact running turn without restarting it; omitted run-id selects the only running turn. `multica issue steer retry <issue> <run-id> <comment-id>` retries delivery of the same comment. Human credentials only: agent tokens cannot steer, even on behalf of a person. Never fall back to a member credential. See the multica-platform issues reference for receipts and safe retries.\n")
 	b.WriteString("- `multica issue comment add <issue> --steer-active --content-file <path>` (or `--steer <run-id>`) — the agent path to steer: delivers the comment into the running turn of the agents it names or triggers on this issue instead of queueing a rerun. Use only to correct work in progress (wrong requirement, new constraint); new work is a normal comment. stderr says which recipients took it and which fell back to the normal trigger.\n")
 	if ctx.DocsEnabled {
-		b.WriteString("- `multica doc list|search|get|create|edit|update|move|history|restore|comment|folder` — workspace docs and folders (`doc folder list|create|update|move`); `doc search <query>` matches titles and content; people may be editing a doc live, so change part of it with `doc edit <id> --old <exact text> --new <text>` (`--old-file` / `--new-file` for multi-line text or anything with code or quotes); `doc update` rewrites the whole doc and needs `--base-revision` from `multica doc get`; `doc comment list <id>` shows the open review threads on a doc; `doc history` / `doc restore` read and roll back versions (details: `multica doc update --help`, `multica doc edit --help`).\n")
+		b.WriteString("- `multica doc list|search|get|create|edit|update|move|history|restore|comment|folder` — workspace docs and folders (`doc folder list|create|update|move`); `doc search <query>` matches titles and content; people may be editing a doc live, so change part of it with `doc edit <id> --old <exact text> --new <text>` (`--old-file` / `--new-file` for multi-line text or anything with code or quotes); `doc update` rewrites the whole doc and needs `--base-revision` from `multica doc get`; `doc comment list <id>` shows the open review threads on a doc and `doc comment add <id> --parent <comment-id>` replies in one; `doc history` / `doc restore` read and roll back versions (details: `multica doc update --help`, `multica doc edit --help`).\n")
 	}
 	b.WriteString("- `multica issue comment add <issue-id> [--content \"...\" | --content-file <path> | --content-stdin] [--parent <comment-id>] [--attachment <path>]` — post a comment. Agent-authored bodies MUST use `--content-file` with a file inside your working directory; full flags: `multica issue comment add --help`.\n")
 	b.WriteString("- `multica repo checkout <url> [--ref <branch-or-sha>] [--fresh]` — repository checkout on a dedicated branch; re-running it keeps a checkout that has uncommitted or unpushed work, or is already on this task's branch, and only fetches; a clean, fully pushed checkout on another branch starts over on a new branch. `--fresh` discards uncommitted and untracked files for a new branch; commits stay on the old branch, so push any you still need first.\n\n")
@@ -640,6 +640,17 @@ func writeWorkflowChat(b *strings.Builder) {
 	b.WriteString("- Keep responses concise and direct\n\n")
 }
 
+// writeWorkflowDocComment emits the stable rules of a doc discussion run
+// (MUL-9933). The doc, the discussion and the reply command change per turn
+// and travel in the per-turn user message.
+func writeWorkflowDocComment(b *strings.Builder) {
+	b.WriteString("**You were asked for in a discussion on a Multica doc.** There is no Multica issue for this run; the per-turn user message names the doc, the discussion and the comment to answer.\n\n")
+	b.WriteString("- Read the doc and the whole discussion before answering.\n")
+	b.WriteString("- You may change the doc when the discussion asks for it or it is clearly the best answer; every change is kept in the doc's history.\n")
+	b.WriteString("- You can only reply in the discussion that asked for you. Starting a discussion, resolving one and deleting comments are left to people.\n")
+	b.WriteString("- If the task requires code, use `multica repo checkout <url>` to get it first.\n\n")
+}
+
 // writeWorkflowQuickCreate emits the quick-create workflow's hard
 // guardrails.
 func writeWorkflowQuickCreate(b *strings.Builder) {
@@ -808,9 +819,9 @@ func writeIssueStatusRulesForStatusMap(b *strings.Builder, ctx TaskContextForEnv
 func writeSubIssueCreation(b *strings.Builder, ctx TaskContextForEnv) {
 	b.WriteString("## Sub-issue Creation\n\n")
 	b.WriteString("Default to one issue, one PR. Split only when each piece can be merged and verified on its own — another repository, separate code, or a different owner such as a human step or another agent — and slice by user-visible behavior, never by layer: a backend / frontend split of one feature loses the discussion behind it and cannot be verified end to end until every piece lands. A PR that is large to review is not a reason to split; organize it into commits and give reviewers a guide in its description.\n\n")
-	b.WriteString("`--status todo` starts an agent-assigned child immediately; `--status backlog` parks it for later promotion; `--stage <N>` groups children into ordered stages.")
+	b.WriteString("`--status todo` starts an agent-assigned child once nothing it waits on (an earlier stage, a `--blocked-by` issue) is unfinished; `--status backlog` parks it for later promotion; `--stage <N>` groups children into ordered stages.")
 	if where, ok := subIssueContractsSkill(modelVisibleSkills(ctx.AgentSkills)); ok {
-		b.WriteString(" Before creating sub-issues, read " + where + " — it covers when to split, serial chains, promotion, and stage wake semantics.")
+		b.WriteString(" Before creating sub-issues, read " + where + " — it covers when to split, ordering with stages, promotion, and stage wake semantics.")
 	}
 	b.WriteString("\n\n")
 }
@@ -936,9 +947,11 @@ func writeMentions(b *strings.Builder, docsEnabled bool) {
 	// The notify caveat is scoped to FOLLOWERS on
 	// purpose — for a human who does not follow the issue, a mention is
 	// exactly how they find out, and that escalation must stay available
-	// (Elon's review catch on #7245). The cost asymmetry line is what breaks
-	// the ambiguous middle.
-	b.WriteString("A mention pulls someone into work they are not doing yet: escalate to a human owner, hand another agent a concrete new sub-task, loop someone in because the user asked. It is not needed merely to notify — followers of the issue already see your comment, and completion notifications are platform-owned. Nor is it how a name is written — crediting a decision or citing someone's earlier point is prose about them, not work for them; the link form dispatches whoever it names, so a reference stays plain text. A thank-you / sign-off / FYI mention of another agent enqueues a paid run whose only possible reply is another courtesy; a missed mention costs one follow-up ask, a stray one costs a run. Silence ends conversations.\n\n")
+	// (Elon's review catch on #7245). It does not say "of the issue": doc
+	// discussion runs get this section too, and there the people already
+	// notified are the discussion's earlier writers (NotifyDocComment). The
+	// cost asymmetry line is what breaks the ambiguous middle.
+	b.WriteString("A mention pulls someone into work they are not doing yet: escalate to a human owner, hand another agent a concrete new sub-task, loop someone in because the user asked. It is not needed merely to notify — followers already see your comment, and completion notifications are platform-owned. Nor is it how a name is written — crediting a decision or citing someone's earlier point is prose about them, not work for them; the link form dispatches whoever it names, so a reference stays plain text. A thank-you / sign-off / FYI mention of another agent enqueues a paid run whose only possible reply is another courtesy; a missed mention costs one follow-up ask, a stray one costs a run. Silence ends conversations.\n\n")
 }
 
 // writeAttachments emits the Attachments pointer.
@@ -1004,6 +1017,10 @@ func writeOutput(b *strings.Builder, kind taskKind, ctx TaskContextForEnv) {
 	case kindQuickCreate:
 		b.WriteString("This is a quick-create task. There is NO existing issue to comment on. Your final stdout is captured automatically, and the platform turns it into the user's success or `quick_create_failed` inbox item based on whether `multica issue create` succeeded. What to print in each case is stated once, under `## Workflow`.\n\n")
 		b.WriteString("**Delivering files here:** your stdout is text-only. A file that belongs to the new issue goes on the `multica issue create` call itself via `--attachment <path>`; never put its path in the description or in your stdout line.\n")
+	case kindDocComment:
+		b.WriteString("⚠️ **Your result MUST be delivered as one reply in the doc discussion, with the `multica doc comment add` command the per-turn user message gives you.** The user does NOT see your terminal output or run logs — only the discussion.\n\n")
+		b.WriteString("Keep the reply concise and natural — state the outcome, not the process. Do NOT post progress updates.\n\n")
+		b.WriteString("**Delivering files here:** a doc reply carries no attachments. Describe what you produced in words; do not link its path.\n")
 	case kindChat:
 		b.WriteString("This is a chat session. Your reply is delivered directly to the chat window the user is reading.\n\n")
 		// Two-layer channel policy (MUL-4899). This is the DELIVERY layer, and
@@ -1054,18 +1071,18 @@ func writeOutput(b *strings.Builder, kind taskKind, ctx TaskContextForEnv) {
 // The Section × Kind matrix encoded below (skip = elide section, keep
 // = always emit, △ = data-driven inside the helper):
 //
-//	Section               | comment | assign | autopilot | quick_create | chat
-//	----------------------+---------+--------+-----------+--------------+------
-//	Available Commands    |   full  |  full  |   full    |   minimal    | full
-//	Issue Body Formatting |    ✓    |   ✓    |     ✓     |      ✓       |  ✓
-//	Comment Formatting    |    ✓    |   ✓    |     —     |      —       |  —
-//	Repositories          |    △    |   △    |     △     |      —       |  △
-//	Project Context       |    △    |   △    |     △     |      △       |  △
-//	Instruction Precedence|    —    |   ✓    |     —     |      —       |  —
-//	Sub-issue Creation    |    ✓    |   ✓    |     —     |      —       |  —
-//	Skills                |    ✓    |   ✓    |     ✓    |      ✓       |  ✓
-//	Mentions              |    ✓    |   ✓    |     —     |      —       |  —
-//	Attachments           |    ✓    |   ✓    |     —     |      —       |  —
+//	Section               | comment | assign | autopilot | quick_create | chat | doc_comment
+//	----------------------+---------+--------+-----------+--------------+------+------------
+//	Available Commands    |   full  |  full  |   full    |   minimal    | full |    full
+//	Issue Body Formatting |    ✓    |   ✓    |     ✓     |      ✓       |  ✓   |     ✓
+//	Comment Formatting    |    ✓    |   ✓    |     —     |      —       |  —   |     —
+//	Repositories          |    △    |   △    |     △     |      —       |  △   |     △
+//	Project Context       |    △    |   △    |     △     |      △       |  △   |     △
+//	Instruction Precedence|    —    |   ✓    |     —     |      —       |  —   |     —
+//	Sub-issue Creation    |    ✓    |   ✓    |     —     |      —       |  —   |     —
+//	Skills                |    ✓    |   ✓    |     ✓    |      ✓       |  ✓   |     ✓
+//	Mentions              |    ✓    |   ✓    |     —     |      —       |  —   |     ✓
+//	Attachments           |    ✓    |   ✓    |     —     |      —       |  —   |     —
 //
 // Always-on rows — Header, Background Task Safety, Agent Identity,
 // Requesting User, Workspace Context, Connected Apps,
@@ -1112,6 +1129,8 @@ func buildMetaSkillContentSlim(provider string, ctx TaskContextForEnv) string {
 	switch kind {
 	case kindChat:
 		writeWorkflowChat(&b)
+	case kindDocComment:
+		writeWorkflowDocComment(&b)
 	case kindQuickCreate:
 		writeWorkflowQuickCreate(&b)
 	case kindAutopilotRunOnly:
@@ -1132,6 +1151,9 @@ func buildMetaSkillContentSlim(provider string, ctx TaskContextForEnv) string {
 	if kind == kindIssue {
 		writeMentions(&b, ctx.DocsEnabled)
 		writeAttachments(&b)
+	}
+	if kind == kindDocComment {
+		writeMentions(&b, ctx.DocsEnabled)
 	}
 
 	writeAlwaysUseCLI(&b)

@@ -73,9 +73,7 @@ vi.mock("./provider-logo", () => ({
 
 import { RuntimeProfilesDialog } from "./runtime-profiles-dialog";
 
-const TEST_RESOURCES = {
-  en: { common: enResources.common, runtimes: enResources.runtimes },
-};
+const TEST_RESOURCES = { en: enResources };
 
 function profile(overrides: Partial<RuntimeProfile> = {}): RuntimeProfile {
   return {
