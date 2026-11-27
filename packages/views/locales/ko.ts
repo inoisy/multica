@@ -1,4 +1,13 @@
 import type { LocaleResources } from "@multica/core/i18n";
+import { withForkStrings } from "./fork";
+import forkAgents from "./ko/fork/agents.json";
+import forkCommon from "./ko/fork/common.json";
+import forkEditor from "./ko/fork/editor.json";
+import forkIssues from "./ko/fork/issues.json";
+import forkLayout from "./ko/fork/layout.json";
+import forkRuntimes from "./ko/fork/runtimes.json";
+import forkSettings from "./ko/fork/settings.json";
+import forkUsage from "./ko/fork/usage.json";
 import koDocs from "./ko/docs.json";
 import koCommon from "./ko/common.json";
 import koAuth from "./ko/auth.json";
@@ -55,4 +64,4 @@ const resources: LocaleResources = {
   billing: koBilling,
 };
 
-export default resources;
+export default withForkStrings(resources, { agents: forkAgents, common: forkCommon, editor: forkEditor, issues: forkIssues, layout: forkLayout, runtimes: forkRuntimes, settings: forkSettings, usage: forkUsage });

@@ -1,4 +1,13 @@
 import type { LocaleResources } from "@multica/core/i18n";
+import { withForkStrings } from "./fork";
+import forkAgents from "./ja/fork/agents.json";
+import forkCommon from "./ja/fork/common.json";
+import forkEditor from "./ja/fork/editor.json";
+import forkIssues from "./ja/fork/issues.json";
+import forkLayout from "./ja/fork/layout.json";
+import forkRuntimes from "./ja/fork/runtimes.json";
+import forkSettings from "./ja/fork/settings.json";
+import forkUsage from "./ja/fork/usage.json";
 import jaDocs from "./ja/docs.json";
 import jaCommon from "./ja/common.json";
 import jaAuth from "./ja/auth.json";
@@ -55,4 +64,4 @@ const resources: LocaleResources = {
   billing: jaBilling,
 };
 
-export default resources;
+export default withForkStrings(resources, { agents: forkAgents, common: forkCommon, editor: forkEditor, issues: forkIssues, layout: forkLayout, runtimes: forkRuntimes, settings: forkSettings, usage: forkUsage });

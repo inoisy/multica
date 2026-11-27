@@ -28,6 +28,14 @@ import type layout from "../locales/en/layout.json";
 import type usage from "../locales/en/usage.json";
 import type squads from "../locales/en/squads.json";
 import type billing from "../locales/en/billing.json";
+import type forkAgents from "../locales/en/fork/agents.json";
+import type forkCommon from "../locales/en/fork/common.json";
+import type forkEditor from "../locales/en/fork/editor.json";
+import type forkIssues from "../locales/en/fork/issues.json";
+import type forkLayout from "../locales/en/fork/layout.json";
+import type forkRuntimes from "../locales/en/fork/runtimes.json";
+import type forkSettings from "../locales/en/fork/settings.json";
+import type forkUsage from "../locales/en/fork/usage.json";
 
 // Module augmentation enables i18next v26 selector API across the monorepo:
 // `t($ => $.signin.title)` resolves to the value in en/auth.json.
@@ -46,12 +54,12 @@ import type billing from "../locales/en/billing.json";
 declare global {
   interface I18nResources {
     docs: typeof docs;
-    common: typeof common;
+    common: typeof common & typeof forkCommon;
     auth: typeof auth;
-    settings: typeof settings;
-    issues: typeof issues;
-    agents: typeof agents;
-    editor: typeof editor;
+    settings: typeof settings & typeof forkSettings;
+    issues: typeof issues & typeof forkIssues;
+    agents: typeof agents & typeof forkAgents;
+    editor: typeof editor & typeof forkEditor;
     onboarding: typeof onboarding;
     invite: typeof invite;
     labels: typeof labels;
@@ -65,9 +73,9 @@ declare global {
     skills: typeof skills;
     chat: typeof chat;
     modals: typeof modals;
-    runtimes: typeof runtimes;
-    layout: typeof layout;
-    usage: typeof usage;
+    runtimes: typeof runtimes & typeof forkRuntimes;
+    layout: typeof layout & typeof forkLayout;
+    usage: typeof usage & typeof forkUsage;
     squads: typeof squads;
     billing: typeof billing;
   }

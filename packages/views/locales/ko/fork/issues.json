@@ -1,0 +1,11 @@
+{
+  "workflows": {
+    "editor": {
+      "preview_error": "지시를 불러오지 못했습니다. 단계의 처리자를 확인하고 다시 시도하세요."
+    }
+  },
+  "model_profile": {
+    "label": "Model profile",
+    "assignee": "Assignee's profile"
+  }
+}

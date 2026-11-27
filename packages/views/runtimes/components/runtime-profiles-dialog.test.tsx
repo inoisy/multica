@@ -6,8 +6,7 @@ import userEvent from "@testing-library/user-event";
 import { I18nProvider } from "@multica/core/i18n/react";
 import { ApiError } from "@multica/core/api";
 import type { AgentRuntime, RuntimeProfile } from "@multica/core/types";
-import enCommon from "../../locales/en/common.json";
-import enRuntimes from "../../locales/en/runtimes.json";
+import enResources from "../../locales/en";
 
 const queryState = vi.hoisted(() => ({
   profiles: [] as RuntimeProfile[],
@@ -74,7 +73,9 @@ vi.mock("./provider-logo", () => ({
 
 import { RuntimeProfilesDialog } from "./runtime-profiles-dialog";
 
-const TEST_RESOURCES = { en: { common: enCommon, runtimes: enRuntimes } };
+const TEST_RESOURCES = {
+  en: { common: enResources.common, runtimes: enResources.runtimes },
+};
 
 function profile(overrides: Partial<RuntimeProfile> = {}): RuntimeProfile {
   return {

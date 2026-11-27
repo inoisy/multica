@@ -1,4 +1,13 @@
 import type { LocaleResources } from "@multica/core/i18n";
+import { withForkStrings } from "./fork";
+import forkAgents from "./en/fork/agents.json";
+import forkCommon from "./en/fork/common.json";
+import forkEditor from "./en/fork/editor.json";
+import forkIssues from "./en/fork/issues.json";
+import forkLayout from "./en/fork/layout.json";
+import forkRuntimes from "./en/fork/runtimes.json";
+import forkSettings from "./en/fork/settings.json";
+import forkUsage from "./en/fork/usage.json";
 import enDocs from "./en/docs.json";
 import enCommon from "./en/common.json";
 import enAuth from "./en/auth.json";
@@ -55,4 +64,4 @@ const resources: LocaleResources = {
   billing: enBilling,
 };
 
-export default resources;
+export default withForkStrings(resources, { agents: forkAgents, common: forkCommon, editor: forkEditor, issues: forkIssues, layout: forkLayout, runtimes: forkRuntimes, settings: forkSettings, usage: forkUsage });

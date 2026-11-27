@@ -1,0 +1,11 @@
+{
+  "workflows": {
+    "editor": {
+      "preview_error": "Couldn't load the brief. Check the step's handler and try again."
+    }
+  },
+  "model_profile": {
+    "label": "Model profile",
+    "assignee": "Assignee's profile"
+  }
+}

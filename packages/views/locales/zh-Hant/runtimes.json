@@ -33,18 +33,14 @@
       "other_machine_hint": "在那臺機器上執行兩條命令",
       "cloud_services": "雲服務",
       "qoder_manage_hint": "已連線 · 管理連線",
-      "cloud_runtime_hint": "建立一臺 Multica 託管的雲節點",
-      "accounts": "Through accounts",
-      "accounts_environment": "Add an environment through accounts",
-      "accounts_environment_hint": "A pool of accounts granted to workspaces. Accounts are connected on the Accounts tab"
+      "cloud_runtime_hint": "建立一臺 Multica 託管的雲節點"
     },
     "columns": {
       "name": "名稱",
       "harness": "CLI",
       "agents": "AI 代理",
       "workload": "負載",
-      "status": "狀態",
-      "runs_24h": "Runs, 24 h"
+      "status": "狀態"
     },
     "groups": {
       "machines": {
@@ -66,18 +62,12 @@
       "connect": "連線",
       "not_connected": "未連線",
       "provided_by": "由 {{vendor}} 提供",
-      "no_matches": "沒有匹配的機器或雲服務",
-      "runs_24h": "Runs in 24 h: {{count}}",
-      "runs_unavailable": "Run counts unavailable"
+      "no_matches": "沒有匹配的機器或雲服務"
     },
     "filters": {
       "all": "全部執行時",
       "online": "線上",
       "offline": "離線"
-    },
-    "tabs": {
-      "environments": "Environments",
-      "accounts": "Accounts"
     }
   },
   "mika_setup": {
@@ -473,9 +463,7 @@
       "toast_created": "自定義執行時已建立",
       "toast_updated": "自定義執行時已更新",
       "error_duplicate_name": "已存在使用此顯示名稱的執行時。",
-      "error_generic": "儲存執行時失敗。",
-      "subscriptions_hint": "Claude 和 Codex 訂閱在“訂閱”頁面中設定。",
-      "subscriptions_link": "開啟訂閱"
+      "error_generic": "儲存執行時失敗。"
     },
     "delete_dialog": {
       "title": "從工作區刪除自定義執行時？",
@@ -732,51 +720,5 @@
     "duration_minutes": "{{minutes}} 分鐘",
     "duration_hours": "{{hours}} 小時 {{minutes}} 分",
     "duration_days": "{{days}} 天 {{hours}} 小時"
-  },
-  "accounts": {
-    "pool_no_environments": "No environment spends this pool yet",
-    "pool_environments": "Environments of the pool",
-    "open_environment": "Open environment “{{name}}”"
-  },
-  "facts": {
-    "title": "Use and facts",
-    "kind": "Kind",
-    "kinds": {
-      "via_accounts": "Through accounts",
-      "own_login": "Own login",
-      "builtin": "Built-in"
-    },
-    "kind_hint": {
-      "via_accounts": "The standard claude/codex under an account of the pool; the daemon prepares the login.",
-      "own_login": "Signed in on the machine itself: the account is unknown and its quota is not counted.",
-      "builtin": "The machine's built-in CLI; model agents cannot select it."
-    },
-    "selection": "Selection",
-    "states": {
-      "active": "Used in the last 24 h",
-      "reserve": "In reserve",
-      "unused": "Not used",
-      "closed": "Closed for selection"
-    },
-    "machine": "Machine: {{status}}",
-    "runs_24h": "Runs in 24 h",
-    "runs": "Runs: {{count}}",
-    "unknown_account_runs": "Without a confirmed account: {{count}}",
-    "accounts_24h": "Accounts in 24 h",
-    "own_login_accounts": "Own login: the account is unknown and the quota is not counted.",
-    "selected_in": "Where it is selected",
-    "personal_profile": "personal profile",
-    "shared_profile": "shared profile",
-    "rows": "rows: {{rows}}",
-    "fallback": "Fallback of profile",
-    "based_on": "Base of personal profiles",
-    "hidden_profiles": "Profiles you cannot see: {{count}}",
-    "serves": "Serves agents",
-    "hidden_agents": "Agents you cannot see: {{count}}",
-    "open_issues": "Open issues: {{count}}",
-    "removal": "Removal",
-    "deletable": "Can be deleted: nothing refers to it",
-    "not_deletable": "Cannot be deleted: agents or open issues refer to it",
-    "load_failed": "Could not load"
   }
 }

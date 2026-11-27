@@ -9,6 +9,7 @@ import {
 import { I18nProvider } from "@multica/core/i18n/react";
 import type { ReactElement, ReactNode } from "react";
 import type { LocaleResources, SupportedLocale } from "@multica/core/i18n";
+import { withForkStrings } from "../locales/fork";
 
 // Load the requested locale and its English fallback synchronously so render
 // keeps Testing Library's API without importing every language into each file.
@@ -18,13 +19,20 @@ const namespaces = readdirSync(join(localesDir, "en"))
   .filter((name) => name.endsWith(".json"));
 const localeCache = new Map<SupportedLocale, LocaleResources>();
 
+function readForkStrings(locale: SupportedLocale): Record<string, Record<string, unknown>> {
+  const dir = join(localesDir, locale, "fork");
+  return Object.fromEntries(readdirSync(dir)
+    .filter((name) => name.endsWith(".json"))
+    .map((name) => [name.slice(0, -5), JSON.parse(readFileSync(join(dir, name), "utf8"))]));
+}
+
 function loadLocale(locale: SupportedLocale): LocaleResources {
   let resources = localeCache.get(locale);
   if (!resources) {
-    resources = Object.fromEntries(namespaces.map((filename) => [
+    resources = withForkStrings(Object.fromEntries(namespaces.map((filename) => [
       filename.slice(0, -5),
       JSON.parse(readFileSync(join(localesDir, locale, filename), "utf8")),
-    ]));
+    ])), readForkStrings(locale));
     localeCache.set(locale, resources);
   }
   return resources;

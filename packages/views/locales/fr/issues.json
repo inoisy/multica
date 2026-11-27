@@ -1772,7 +1772,6 @@
       "preview_brief": "Aperçu des consignes de l’agent",
       "preview_title": "Consignes de l’étape « {{status}} »",
       "preview_description": "Ce que reçoit l’exécution du responsable quand une tâche entre dans cette étape. Pas besoin d’enregistrer pour prévisualiser.",
-      "preview_error": "Impossible de charger le brief. Vérifiez le responsable de l’étape et réessayez.",
       "description_placeholder": "Ajouter une description",
       "select_step": "Sélectionnez une colonne pour choisir à qui elle transmet les tickets.",
       "unsaved": "Modifications non enregistrées",
@@ -1943,10 +1942,6 @@
   },
   "hover_card": {
     "created_updated": "a créé {{created}} · mis à jour {{updated}}"
-  },
-  "model_profile": {
-    "label": "Model profile",
-    "assignee": "Assignee's profile"
   },
   "views": {
     "builtin": {

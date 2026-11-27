@@ -1,6 +1,5 @@
 {
   "title": "Statistiques",
-  "tab_subscriptions": "Abonnements",
   "tab_usage": "Consommation",
   "header": {
     "timezone_and_updated": "{{tz}} · mis à jour {{time}}",

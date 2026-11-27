@@ -1,0 +1,72 @@
+{
+  "page": {
+    "add_menu": {
+      "accounts": "Mediante cuentas",
+      "accounts_environment": "Añadir un entorno mediante cuentas",
+      "accounts_environment_hint": "Un pool de cuentas concedido a espacios de trabajo. Las cuentas se conectan en la pestaña Cuentas"
+    },
+    "columns": {
+      "runs_24h": "Ejecuciones, 24 h"
+    },
+    "rows": {
+      "runs_24h": "Ejecuciones en 24 h: {{count}}",
+      "runs_unavailable": "Recuento de ejecuciones no disponible"
+    },
+    "tabs": {
+      "environments": "Entornos",
+      "accounts": "Cuentas"
+    }
+  },
+  "profiles": {
+    "form": {
+      "subscriptions_hint": "Las suscripciones de Claude y Codex se configuran en la página Suscripciones.",
+      "subscriptions_link": "Abrir Suscripciones"
+    }
+  },
+  "accounts": {
+    "pool_no_environments": "Ningún entorno consume este pool todavía",
+    "pool_environments": "Entornos del pool",
+    "open_environment": "Abrir el entorno “{{name}}”"
+  },
+  "facts": {
+    "title": "Uso y datos",
+    "kind": "Tipo",
+    "kinds": {
+      "via_accounts": "Mediante cuentas",
+      "own_login": "Inicio de sesión propio",
+      "builtin": "Integrado"
+    },
+    "kind_hint": {
+      "via_accounts": "El claude/codex estándar bajo una cuenta del pool; el daemon prepara el inicio de sesión.",
+      "own_login": "Con sesión iniciada en la propia máquina: la cuenta es desconocida y su cuota no se cuenta.",
+      "builtin": "La CLI integrada de la máquina; los agentes de modelos no pueden seleccionarla."
+    },
+    "selection": "Selección",
+    "states": {
+      "active": "Usado en las últimas 24 h",
+      "reserve": "En reserva",
+      "unused": "Sin usar",
+      "closed": "Cerrado para selección"
+    },
+    "machine": "Máquina: {{status}}",
+    "runs_24h": "Ejecuciones en 24 h",
+    "runs": "Ejecuciones: {{count}}",
+    "unknown_account_runs": "Sin cuenta confirmada: {{count}}",
+    "accounts_24h": "Cuentas en 24 h",
+    "own_login_accounts": "Inicio de sesión propio: la cuenta es desconocida y la cuota no se cuenta.",
+    "selected_in": "Dónde está seleccionado",
+    "personal_profile": "perfil personal",
+    "shared_profile": "perfil compartido",
+    "rows": "filas: {{rows}}",
+    "fallback": "Alternativa del perfil",
+    "based_on": "Base de perfiles personales",
+    "hidden_profiles": "Perfiles que no puedes ver: {{count}}",
+    "serves": "Atiende a agentes",
+    "hidden_agents": "Agentes que no puedes ver: {{count}}",
+    "open_issues": "Tareas abiertas: {{count}}",
+    "removal": "Eliminación",
+    "deletable": "Se puede eliminar: nada hace referencia a él",
+    "not_deletable": "No se puede eliminar: hay agentes o tareas abiertas que hacen referencia a él",
+    "load_failed": "No se ha podido cargar"
+  }
+}

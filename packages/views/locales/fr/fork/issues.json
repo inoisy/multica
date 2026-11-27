@@ -1,0 +1,11 @@
+{
+  "workflows": {
+    "editor": {
+      "preview_error": "Impossible de charger le brief. Vérifiez le responsable de l’étape et réessayez."
+    }
+  },
+  "model_profile": {
+    "label": "Model profile",
+    "assignee": "Assignee's profile"
+  }
+}
